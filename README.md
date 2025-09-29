@@ -4,6 +4,7 @@
 [![License](https://img.shields.io/badge/License-MIT-green)](LICENSE)
 
 ## Table of Contents
+- [Updates](#updates)
 - [Overview](#overview)
 - [Architecture](#architecture)
 - [Features](#features)
@@ -13,8 +14,48 @@
 - [Deployment](#deployment)
 - [Post-Deployment](#post-deployment)
 - [Security Considerations](#security-considerations)
-- [Updates](#updates)
 - [Contributing](#contributing)
+
+## Updates
+
+### 2025
+* **September 29, 2025**
+  * Removed from main repo to allow for smoother udpates
+  * De-modularized for simplicity
+  * Integrated DNS Security Policies into lab
+  * Updated AzureRm and AzAPI
+
+* **July 28, 2025**
+  * Updated DNS security policies with new blocked domain configurations
+  * Enhanced documentation with industry best practices
+  * Improved README structure and content organization
+
+* **March 17, 2025** *(Note: Date corrected from original typo)*
+  * Added additional workload spoke for enhanced workload separation
+  * Added dedicated subnet to support Azure Machine Learning injected compute scenarios
+  * Expanded Private DNS Zones collection for additional Azure services
+  * Enhanced support for AI/ML workloads with proper network isolation
+
+### 2024
+* **November 12, 2024**
+  * Modified SSH ports from 22 to 2222 for enhanced security posture
+  * Updated Network Security Group rules to reflect new SSH port configuration
+
+* **October 28, 2024**
+  * Extensive cleanup and optimization of IP address ranges for better resource utilization
+  * Added comprehensive support for multi-region deployments
+  * Improved network segmentation and routing logic
+
+* **July 22, 2024**
+  * Added dedicated subnets, route tables, and NSGs for Application Gateway deployment
+  * Added dedicated subnets, route tables, and NSGs for API Management internal mode
+  * Enhanced Azure Firewall rules to support internal API Management traffic flows
+  * Improved support for application-tier networking components
+
+* **June 7, 2024**
+  * Initial release with core hub and spoke architecture
+  * Basic Azure Firewall integration and network segmentation
+  * Foundation security and monitoring components
 
 ## Overview
 This Terraform configuration provisions an enterprise-like Azure lab environment built with a hub and spoke network architecture. Azure Firewall is used as a NVA (network virtual appliance) running in the hub virtual network. The lab environment is designed for learning, testing, and demonstrating enterprise networking patterns with Azure Firewall as the central security appliance.
@@ -247,43 +288,13 @@ To add additional workloads:
 - Private DNS resolution prevents data exfiltration
 - DNS query logging for audit and forensics
 
-## Updates
 
-### 2025
-* **September 29, 2025**
-  * Removed from main repo to allow for smoother udpates
-  * De-modularized for simplicity
-  * Integrated DNS Security Policies into lab
-  * Updated AzureRm and AzAPI
 
-* **July 28, 2025**
-  * Updated DNS security policies with new blocked domain configurations
-  * Enhanced documentation with industry best practices
-  * Improved README structure and content organization
+## Contributing
 
-* **March 17, 2025** *(Note: Date corrected from original typo)*
-  * Added additional workload spoke for enhanced workload separation
-  * Added dedicated subnet to support Azure Machine Learning injected compute scenarios
-  * Expanded Private DNS Zones collection for additional Azure services
-  * Enhanced support for AI/ML workloads with proper network isolation
-
-### 2024
-* **November 12, 2024**
-  * Modified SSH ports from 22 to 2222 for enhanced security posture
-  * Updated Network Security Group rules to reflect new SSH port configuration
-
-* **October 28, 2024**
-  * Extensive cleanup and optimization of IP address ranges for better resource utilization
-  * Added comprehensive support for multi-region deployments
-  * Improved network segmentation and routing logic
-
-* **July 22, 2024**
-  * Added dedicated subnets, route tables, and NSGs for Application Gateway deployment
-  * Added dedicated subnets, route tables, and NSGs for API Management internal mode
-  * Enhanced Azure Firewall rules to support internal API Management traffic flows
-  * Improved support for application-tier networking components
-
-* **June 7, 2024**
-  * Initial release with core hub and spoke architecture
-  * Basic Azure Firewall integration and network segmentation
-  * Foundation security and monitoring components
+* This code is licensed under the MIT license. You can certainly open issues with questions and I'll do my best to answer them when time permits. However, it's on you to determine why it doesn't work for you. Don't waste your time or my time opening issues that only say "The code doesn't work."
+* You can submit pull requests for improvements and I'll incorporate them if they make sense. Note this is coded for my chaotic brain and not yours so sometimes the way I code things will not align with your practices. That's ok!
+* Sometimes I may break the base labs or modules. I'll fix them when time allows. This could be days and sometimes may be weeks.
+* Any executable scripts you see included are typically written for zsh or bash shell. If you're running them on Windows, you'll likely need to make changes to them.
+* If you find code from here useful let me know! It's always wonderful to get feedback from peers in the field.
+* If you incorporate this code into something you develop do me a favor and link the repository in your code or documentation.
