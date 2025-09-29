@@ -41,7 +41,7 @@ All network traffic (north-south, east-west) is routed through Azure Firewall in
 - Traffic logging and monitoring
 
 ### Single Region Deployment
-![Single Region Architecture](../../assets/lab-hub-spoke-azfw-sr.svg)
+![Single Region Architecture](./images/lab-hub-spoke-azfw-sr.svg)
 
 ### Multi-Region Deployment
 When both primary and secondary environments are defined in environment details, the solution deploys across two regions with:
@@ -49,7 +49,7 @@ When both primary and secondary environments are defined in environment details,
 - Shared global Private DNS zones for cross-region resolution
 - Consistent security policies across regions
 
-![Multi-Region Architecture](../../assets/lab-hub-spoke-azfw-mr.svg)
+![Multi-Region Architecture](./images/lab-hub-spoke-azfw-mr.svg)
 
 ## Features
 
