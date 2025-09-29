@@ -1,0 +1,19 @@
+environment_details = {
+    primary = {
+        region_name   = "westus3"
+        address_space = "10.0.0.0/20"
+    }
+# Uncomment these lines for multi-region deployment
+#    secondary = {
+#        region_name   = "centralus"
+#        address_space = "10.0.16.0/20"
+#    }
+}
+address_space_cloud = "10.0.0.0/8"
+
+address_space_onpremises = "192.168.0.0/16"
+vm_admin_username = "someuser"
+vm_admin_password = "somepassword"
+key_vault_admin = "XXXXXXXX-XXXX-XXXX-XXXX-XXXXXXXXXXXX"
+trusted_ip = "55.55.55.55"
+tags = {environment = "lab", product = "foundry"}
