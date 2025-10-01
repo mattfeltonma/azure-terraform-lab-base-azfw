@@ -1,0 +1,14 @@
+foundry_encryption = "pmk"
+region = "westus3"
+region_code = "wus3"
+purpose = "lab"
+random_string = "0kz3"
+resource_group_name_dns = "rgshwus30kz"
+sub_id_dns = "XXXXXXXX-XXXX-XXXX-XXXX-XXXXXXXXXXXX"
+subnet_id_private_endpoints = "/subscriptions/XXXXXXXX-XXXX-XXXX-XXXX-XXXXXXXXXXXX/resourceGroups/rgwlwus30kz/providers/Microsoft.Network/virtualNetworks/vnetwl1wus30kz/subnets/snet-svc"
+subnet_id_agent = "/subscriptions/XXXXXXXX-XXXX-XXXX-XXXX-XXXXXXXXXXXX/resourceGroups/rgwlwus30kz/providers/Microsoft.Network/virtualNetworks/vnetwl1wus30kz/subnets/snet-app"
+user_object_id = "XXXXXXXX-XXXX-XXXX-XXXX-XXXXXXXXXXXX"
+tags = {
+  environment = "lab"
+  product     = "aifoundry"
+}

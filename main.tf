@@ -313,11 +313,31 @@ resource "azurerm_private_dns_zone_virtual_network_link" "link" {
   }
 }
 
+## Update the Azure Firewall DNS settings to point to the Private Resolver Inbound Endpoint IP address
+##
+resource "null_resource" "update_firewall_dns_policy" {
+  depends_on = [
+    azurerm_private_dns_zone_virtual_network_link.link
+  ]
+
+  for_each = var.environment_details
+  
+  # Trigger only if Azure Firewall Policy changes or if DNS resolver IP changes
+  triggers = {
+    firewall_policy_id = module.vnet_transit[each.key].policy_id
+    dns_resolver_ip    = module.vnet_shared[each.key].private_resolver_inbound_endpoint_ip
+  }
+  
+  provisioner "local-exec" {
+    command = "az network firewall policy update --ids ${module.vnet_transit[each.key].policy_id} --dns-servers ${module.vnet_shared[each.key].private_resolver_inbound_endpoint_ip}"
+  }
+}
+
 ##### Create workload virtual network
 #####
 module "vnet_workload" {
   depends_on = [
-    azurerm_private_dns_zone_virtual_network_link.link
+    null_resource.update_firewall_dns_policy
   ]
 
   for_each = { for env in local.workload_object : "${env.environment}-${env.workload_number}" => env }

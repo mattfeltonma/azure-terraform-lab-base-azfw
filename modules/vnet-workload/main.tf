@@ -175,6 +175,17 @@ resource "azurerm_subnet" "subnet_vint" {
 ## Peer the virtual network with the transit virtual network
 ##
 resource "azurerm_virtual_network_peering" "vnet_peering_to_transit" {
+  depends_on = [
+    azurerm_subnet.subnet_amlcpt,
+    azurerm_subnet.subnet_app,
+    azurerm_subnet.subnet_apim,
+    azurerm_subnet.subnet_app_gateway,
+    azurerm_subnet.subnet_data,
+    azurerm_subnet.subnet_mgmt,
+    azurerm_subnet.subnet_svc,
+    azurerm_subnet.subnet_vint
+  ]
+
   name                         = "peer-${azurerm_virtual_network.vnet_workload.name}-to-${var.vnet_name_transit}"
   resource_group_name          = var.resource_group_name
   virtual_network_name         = azurerm_virtual_network.vnet_workload.name
@@ -406,7 +417,8 @@ resource "azurerm_route_table" "route_table_vint" {
 resource "azurerm_subnet_route_table_association" "route_table_association_app_gateway" {
   depends_on = [
     azurerm_subnet.subnet_app_gateway,
-    azurerm_route_table.route_table_app_gateway
+    azurerm_route_table.route_table_app_gateway,
+    azurerm_virtual_network_peering.vnet_peering_to_spoke
   ]
 
   subnet_id      = azurerm_subnet.subnet_app_gateway.id
