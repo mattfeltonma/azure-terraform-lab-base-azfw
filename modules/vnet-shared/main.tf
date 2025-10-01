@@ -1008,7 +1008,7 @@ resource "azurerm_user_assigned_identity" "umi" {
 ## Create a public IP address to be used by the Azure virtual machine to allow access to the Internet
 ##
 resource "azurerm_public_ip" "pip_vm" {
-  name                = "pipvmnsp${var.region_code}${var.random_string}"
+  name                = "pipvm${var.region_code}${var.random_string}"
   location            = var.region
   resource_group_name = var.resource_group_name
   allocation_method   = "Static"
@@ -1039,7 +1039,7 @@ resource "azurerm_network_interface" "nic" {
 ## Create the virtual machine
 ##
 resource "azurerm_windows_virtual_machine" "vm" {
-  name                = "vmnsp${var.region_code}${var.random_string}"
+  name                = "vm${var.region_code}${var.random_string}"
   location            = var.region
   resource_group_name = var.resource_group_name
 
