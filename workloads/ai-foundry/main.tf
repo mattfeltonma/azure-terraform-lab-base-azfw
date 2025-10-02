@@ -7,8 +7,14 @@
 resource "azurerm_resource_group" "rg_aifoundry" {
   name     = "rgaif${var.region_code}${var.random_string}"
   location = var.region
+  tags     = var.tags
 
-  tags = var.tags
+  lifecycle {
+    ignore_changes = [
+      tags["created_date"],
+      tags["created_by"]
+    ]
+  }
 }
 
 ## Create a Log Analytics Workspace that all resources specific to this workload will
@@ -42,6 +48,7 @@ resource "azurerm_cosmosdb_account" "cosmosdb_aifoundry" {
   name                = "cosaif${var.region_code}${var.random_string}"
   location            = var.region
   resource_group_name = azurerm_resource_group.rg_aifoundry.name
+  tags                = var.tags
 
   # General settings
   offer_type        = "Standard"
@@ -66,6 +73,13 @@ resource "azurerm_cosmosdb_account" "cosmosdb_aifoundry" {
     location          = var.region
     failover_priority = 0
     zone_redundant    = false
+  }
+
+  lifecycle {
+    ignore_changes = [
+      tags["created_date"],
+      tags["created_by"]
+    ]
   }
 }
 
@@ -138,16 +152,16 @@ resource "azapi_resource" "ai_search_aifoundry" {
     properties = {
 
       # Search-specific properties
-      replicaCount = 1
+      replicaCount   = 1
       partitionCount = 1
-      hostingMode = "default"
+      hostingMode    = "default"
       semanticSearch = "standard"
 
       # Identity-related controls
       disableLocalAuth = false
       authOptions = {
         aadOrApiKey = {
-                aadAuthFailureMode = "http401WithBearerChallenge"
+          aadAuthFailureMode = "http401WithBearerChallenge"
         }
       }
       # Networking-related controls
@@ -163,7 +177,7 @@ resource "azapi_resource" "ai_search_aifoundry" {
     "identity.principalId",
     "properties.customSubDomainName"
   ]
-  
+
   lifecycle {
     ignore_changes = [
       tags["created_date"],
@@ -210,7 +224,7 @@ resource "azurerm_storage_account" "storage_account_aifoundry" {
     default_action = "Deny"
 
     # Configure bypass if bypass isn't an empty list
-    bypass         = ["AzureServices", "Metrics", "Logging"]
+    bypass = ["AzureServices", "Metrics", "Logging"]
   }
 
   lifecycle {
@@ -329,6 +343,13 @@ resource "azurerm_application_insights" "appins_foundry" {
   workspace_id        = azurerm_log_analytics_workspace.log_analytics_workspace_workload.id
   application_type    = "other"
   tags                = var.tags
+
+  lifecycle {
+    ignore_changes = [
+      tags["created_date"],
+      tags["created_by"]
+    ]
+  }
 }
 
 ## Create Grounding Search with Bing
@@ -355,9 +376,9 @@ resource "azapi_resource" "bing_grounding_search_foundry" {
 ## Create Private Endpoint for the AI Foundry CosmosDB account used for the standard agent configuration
 ##
 resource "azurerm_private_endpoint" "pe_cosmosdb_aifoundry" {
-  depends_on = [ 
+  depends_on = [
     azurerm_cosmosdb_account.cosmosdb_aifoundry
-   ]
+  ]
 
   name                = "pe${azurerm_cosmosdb_account.cosmosdb_aifoundry.name}cosmossql"
   location            = var.region
@@ -370,12 +391,12 @@ resource "azurerm_private_endpoint" "pe_cosmosdb_aifoundry" {
   private_service_connection {
     name                           = "peconn${azurerm_cosmosdb_account.cosmosdb_aifoundry.name}cosmossql"
     private_connection_resource_id = azurerm_cosmosdb_account.cosmosdb_aifoundry.id
-    subresource_names = ["Sql"]
+    subresource_names              = ["Sql"]
     is_manual_connection           = false
   }
 
   private_dns_zone_group {
-    name                 = "zoneconn${azurerm_cosmosdb_account.cosmosdb_aifoundry.name}cosmossql"
+    name = "zoneconn${azurerm_cosmosdb_account.cosmosdb_aifoundry.name}cosmossql"
     private_dns_zone_ids = [
       "/subscriptions/${data.azurerm_subscription.current.subscription_id}/resourceGroups/${var.resource_group_name_dns}/providers/Microsoft.Network/privateDnsZones/privatelink.documents.azure.com"
     ]
@@ -392,10 +413,10 @@ resource "azurerm_private_endpoint" "pe_cosmosdb_aifoundry" {
 ## Create Private Endpoint for the AI Foundry AI Search instance used for the standard agent configuration
 ##
 resource "azurerm_private_endpoint" "pe_aisearch_aifoundry" {
-  depends_on = [ 
+  depends_on = [
     azurerm_private_endpoint.pe_cosmosdb_aifoundry,
     azapi_resource.ai_search_aifoundry
-   ]
+  ]
 
   name                = "pe${azapi_resource.ai_search_aifoundry.name}searchservice"
   location            = var.region
@@ -408,12 +429,12 @@ resource "azurerm_private_endpoint" "pe_aisearch_aifoundry" {
   private_service_connection {
     name                           = "peconn${azapi_resource.ai_search_aifoundry.name}searchservice"
     private_connection_resource_id = azapi_resource.ai_search_aifoundry.id
-    subresource_names = ["searchService"]
+    subresource_names              = ["searchService"]
     is_manual_connection           = false
   }
 
   private_dns_zone_group {
-    name                 = "zoneconn${azapi_resource.ai_search_aifoundry.name}searchservice"
+    name = "zoneconn${azapi_resource.ai_search_aifoundry.name}searchservice"
     private_dns_zone_ids = [
       "/subscriptions/${data.azurerm_subscription.current.subscription_id}/resourceGroups/${var.resource_group_name_dns}/providers/Microsoft.Network/privateDnsZones/privatelink.search.windows.net"
     ]
@@ -430,10 +451,10 @@ resource "azurerm_private_endpoint" "pe_aisearch_aifoundry" {
 ## Create Private Endpoint for the AI Foundry storage account used for the standard agent configuration
 ##
 resource "azurerm_private_endpoint" "pe_storage_blob_aifoundry" {
-  depends_on = [ 
+  depends_on = [
     azurerm_private_endpoint.pe_aisearch_aifoundry,
     azurerm_storage_account.storage_account_aifoundry
-   ]
+  ]
 
   name                = "pe${azurerm_storage_account.storage_account_aifoundry.name}blob"
   location            = var.region
@@ -446,12 +467,12 @@ resource "azurerm_private_endpoint" "pe_storage_blob_aifoundry" {
   private_service_connection {
     name                           = "peconn${azurerm_storage_account.storage_account_aifoundry.name}blob"
     private_connection_resource_id = azurerm_storage_account.storage_account_aifoundry.id
-    subresource_names = ["blob"]
+    subresource_names              = ["blob"]
     is_manual_connection           = false
   }
 
   private_dns_zone_group {
-    name                 = "zoneconn${azurerm_storage_account.storage_account_aifoundry.name}blob"
+    name = "zoneconn${azurerm_storage_account.storage_account_aifoundry.name}blob"
     private_dns_zone_ids = [
       "/subscriptions/${data.azurerm_subscription.current.subscription_id}/resourceGroups/${var.resource_group_name_dns}/providers/Microsoft.Network/privateDnsZones/privatelink.blob.core.windows.net"
     ]
@@ -577,12 +598,14 @@ resource "azurerm_monitor_diagnostic_setting" "diag_foundry_resource" {
   }
 }
 
-# Create a deployment for OpenAI's GPT-4o
+# Create a deployment for OpenAI's GPT-4o if var.external_openai is not set
 ##
 resource "azurerm_cognitive_deployment" "deployment_gpt_4o" {
   depends_on = [
     azurerm_monitor_diagnostic_setting.diag_foundry_resource
   ]
+
+  count = var.external_openai != null ? 0 : 1
 
   name                 = "gpt-4o"
   cognitive_account_id = azapi_resource.ai_foundry_account.id
@@ -598,12 +621,14 @@ resource "azurerm_cognitive_deployment" "deployment_gpt_4o" {
   }
 }
 
-## Create a deployment for the text-embedding-3-large embededing model
+## Create a deployment for the text-embedding-3-large embededing model if var.external_openai is not set
 ##
 resource "azurerm_cognitive_deployment" "deployment_text_embedding_3_large" {
   depends_on = [
     azurerm_cognitive_deployment.deployment_gpt_4o
   ]
+
+  count = var.external_openai != null ? 0 : 1
 
   name                 = "text-embedding-3-large"
   cognitive_account_id = azapi_resource.ai_foundry_account.id
@@ -622,9 +647,9 @@ resource "azurerm_cognitive_deployment" "deployment_text_embedding_3_large" {
 ## Create Private Endpoint for AI Foundry account
 ##
 resource "azurerm_private_endpoint" "pe_aifoundry_account" {
-  depends_on = [ 
+  depends_on = [
     azurerm_cognitive_deployment.deployment_text_embedding_3_large
-   ]
+  ]
 
   name                = "pe${azapi_resource.ai_foundry_account.name}account"
   location            = var.region
@@ -637,12 +662,12 @@ resource "azurerm_private_endpoint" "pe_aifoundry_account" {
   private_service_connection {
     name                           = "peconn${azapi_resource.ai_foundry_account.name}account"
     private_connection_resource_id = azapi_resource.ai_foundry_account.id
-    subresource_names = ["account"]
+    subresource_names              = ["account"]
     is_manual_connection           = false
   }
 
   private_dns_zone_group {
-    name                 = "zoneconn${azapi_resource.ai_foundry_account.name}account"
+    name = "zoneconn${azapi_resource.ai_foundry_account.name}account"
     private_dns_zone_ids = [
       "/subscriptions/${data.azurerm_subscription.current.subscription_id}/resourceGroups/${var.resource_group_name_dns}/providers/Microsoft.Network/privateDnsZones/privatelink.services.ai.azure.com",
       "/subscriptions/${data.azurerm_subscription.current.subscription_id}/resourceGroups/${var.resource_group_name_dns}/providers/Microsoft.Network/privateDnsZones/privatelink.openai.azure.com",
@@ -665,9 +690,9 @@ resource "azurerm_private_endpoint" "pe_aifoundry_account" {
 ## Create the AI Foundry project
 ##
 resource "azapi_resource" "ai_foundry_project" {
-  depends_on = [ 
+  depends_on = [
     azurerm_private_endpoint.pe_aifoundry_account
-   ]
+  ]
 
   type                      = "Microsoft.CognitiveServices/accounts/projects@2025-04-01-preview"
   name                      = "sampleproject1"
@@ -771,7 +796,7 @@ resource "azapi_resource" "conn_storage_aifoundry" {
 ##
 resource "azapi_resource" "conn_aisearch_aifoundry" {
   depends_on = [
-    time_sleep.wait_project_identities,
+    time_sleep.wait_project_identities
   ]
 
   type                      = "Microsoft.CognitiveServices/accounts/projects/connections@2025-04-01-preview"
@@ -789,6 +814,75 @@ resource "azapi_resource" "conn_aisearch_aifoundry" {
         ApiType    = "Azure"
         ApiVersion = "2024-05-01-preview"
         ResourceId = azapi_resource.ai_search_aifoundry.id
+        location   = var.region
+      }
+    }
+  }
+
+  response_export_values = [
+    "identity.principalId"
+  ]
+}
+
+## Create the AI Foundry project connection to the Bing Grounding Search instance
+##
+resource "azapi_resource" "conn_bing_grounding_search_aifoundry" {
+  depends_on = [
+    time_sleep.wait_project_identities
+  ]
+
+  type                      = "Microsoft.CognitiveServices/accounts/projects/connections@2025-04-01-preview"
+  name                      = "conn-${azapi_resource.bing_grounding_search_foundry.name}"
+  parent_id                 = azapi_resource.ai_foundry_project.id
+  schema_validation_enabled = false
+
+  body = {
+    name = azapi_resource.bing_grounding_search_foundry.name
+    properties = {
+      category = "ApiKey"
+      target   = "https://api.bing.microsoft.com/"
+      authType = "ApiKey"
+      credentials = {
+        key = data.azapi_resource_action.bing_api_keys.output.key1
+      }
+      metadata = {
+        ApiType    = "Azure"
+        ResourceId = azapi_resource.bing_grounding_search_foundry.id
+        location   = azapi_resource.bing_grounding_search_foundry.location
+      }
+    }
+  }
+
+  response_export_values = [
+    "identity.principalId"
+  ]
+}
+  
+## Create the AI Foundry project connection to the external Azure OpenAI Service or Foundry instance if that is specified in the external_openai variable
+##
+resource "azapi_resource" "conn_external_openai_aifoundry" {
+  depends_on = [
+    time_sleep.wait_project_identities,
+  ]
+
+  count = var.external_openai != null ? 1 : 0
+  
+
+  type                      = "Microsoft.CognitiveServices/accounts/projects/connections@2025-04-01-preview"
+  name                      = "conn-${var.external_openai.name}"
+  parent_id                 = azapi_resource.ai_foundry_project.id
+  schema_validation_enabled = false
+
+  body = {
+    name = var.external_openai.name
+    properties = {
+      category = "AzureOpenAI"
+      target   = var.external_openai.endpoint
+      authType = "AAD"
+      metadata = {
+        ApiType    = "Azure"
+        ResourceId = var.external_openai.resource_id
+        # As of 10/2025 the Azure OpenAI Service must be in the same region as the AI Foundry resource
         location   = var.region
       }
     }
@@ -861,7 +955,9 @@ resource "time_sleep" "wait_rbac" {
     azurerm_role_assignment.search_service_contributor_ai_foundry_project,
     azapi_resource.conn_aisearch_aifoundry,
     azapi_resource.conn_cosmosdb_aifoundry,
-    azapi_resource.conn_storage_aifoundry
+    azapi_resource.conn_storage_aifoundry,
+    azapi_resource.conn_external_openai_aifoundry,
+    azapi_resource.conn_bing_grounding_search_aifoundry
   ]
   create_duration = "120s"
 }
@@ -879,7 +975,7 @@ resource "azapi_resource" "ai_foundry_project_capability_host" {
   type                      = "Microsoft.CognitiveServices/accounts/projects/capabilityHosts@2025-04-01-preview"
   name                      = "caphostproj"
   parent_id                 = azapi_resource.ai_foundry_project.id
-  schema_validation_enabled = true
+  schema_validation_enabled = false
 
   body = {
     properties = {
@@ -892,6 +988,11 @@ resource "azapi_resource" "ai_foundry_project_capability_host" {
       ]
       threadStorageConnections = [
         azapi_resource.conn_cosmosdb_aifoundry.name
+      ]
+
+      # If using an external OpenAI resource, add that connection to the capability host
+      aiServicesConnections = [
+        var.external_openai != null ? azapi_resource.conn_external_openai_aifoundry[0].name : null
       ]
     }
   }
@@ -950,7 +1051,7 @@ resource "azurerm_role_assignment" "storage_blob_data_owner_ai_foundry_project" 
   role_definition_name = "Storage Blob Data Owner"
   principal_id         = azapi_resource.ai_foundry_project.output.identity.principalId
   condition_version    = "2.0"
-  condition = <<-EOT
+  condition            = <<-EOT
   (
     (
       !(ActionMatches{'Microsoft.Storage/storageAccounts/blobServices/containers/blobs/tags/read'})  
@@ -971,7 +1072,7 @@ resource "azurerm_role_assignment" "storage_blob_data_owner_ai_foundry_project" 
 ## Create a role assignment granting a user the Azure AI User role which will allow the user
 ## the ability to utilize the sample AI Foundry project
 resource "azurerm_role_assignment" "ai_foundry_user" {
-  depends_on = [ 
+  depends_on = [
     azapi_resource.ai_foundry_project
   ]
 
@@ -1015,7 +1116,7 @@ resource "azurerm_role_assignment" "cognitive_services_openai_contributor_ai_sea
 ## to read files from the storage account used by the AI Foundry project
 ## This is required to support the import and vectorize feature of AI Search
 resource "azurerm_role_assignment" "storage_blob_data_contributor_ai_search_service" {
-  depends_on = [ 
+  depends_on = [
     azapi_resource.ai_foundry_account
   ]
 
@@ -1028,7 +1129,7 @@ resource "azurerm_role_assignment" "storage_blob_data_contributor_ai_search_serv
 ## Create a role assignment granting a user the Search Service Contributor role which will allow the user
 ## to create and manage indexes in the AI Search Service
 resource "azurerm_role_assignment" "aisearch_user_service_contributor" {
-  depends_on = [ 
+  depends_on = [
     azapi_resource.ai_search_aifoundry
   ]
 
