@@ -1,3 +1,14 @@
+variable "external_openai" {
+  description = "Indicate the external Azure OpenAI or Foundry instance that will host the LLMs"
+  type = object({
+    name        = string
+    endpoint    = string
+    resource_id = string
+    region      = string
+  })
+  default = null
+}
+
 variable "foundry_encryption" {
   description = "Indicate whether the AI Foundry account should be encrypted with a provider-managed key or customer-managed key. CMK will create a Key Vault, key, and necessary role assignments"
   type        = string
