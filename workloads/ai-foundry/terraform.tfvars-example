@@ -1,3 +1,10 @@
+# Uncomment the lines below to allow the use of model deployments in an existing Azure OpenAI Service instance
+#external_openai = {
+# name = "myinstance"
+# endpoint = "https://myinstance.openai.azure.com/"
+# resource_id = "/subscriptions/XXXXXXXX-XXXX-XXXX-XXXX-XXXXXXXXXXXX/resourceGroups/rgworkce540/providers/Microsoft.CognitiveServices/accounts/jogopenai"
+# region = "westus3"
+#}
 foundry_encryption = "pmk"
 region = "westus3"
 region_code = "wus3"
