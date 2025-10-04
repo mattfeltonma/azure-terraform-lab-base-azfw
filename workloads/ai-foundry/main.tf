@@ -991,9 +991,7 @@ resource "azapi_resource" "ai_foundry_project_capability_host" {
       ]
 
       # If using an external OpenAI resource, add that connection to the capability host
-      aiServicesConnections = [
-        var.external_openai != null ? azapi_resource.conn_external_openai_aifoundry[0].name : null
-      ]
+      aiServicesConnections = var.external_openai != null ? [azapi_resource.conn_external_openai_aifoundry[0].name]: []
     }
   }
 }
@@ -1076,7 +1074,7 @@ resource "azurerm_role_assignment" "ai_foundry_user" {
     azapi_resource.ai_foundry_project
   ]
 
-  name                 = uuidv5("dns", "${var.user_object_id}${azapi_resource.ai_foundry_project.name}user")
+  name                 = uuidv5("dns", "${var.user_object_id}${azapi_resource.ai_foundry_account.name}${azapi_resource.ai_foundry_project.name}user")
   scope                = azapi_resource.ai_foundry_project.id
   role_definition_name = "Azure AI User"
   principal_id         = var.user_object_id
@@ -1089,8 +1087,8 @@ resource "azurerm_role_assignment" "cognitive_services_user" {
     azapi_resource.ai_foundry_project
   ]
 
-  name                 = uuidv5("dns", "${var.user_object_id}${azapi_resource.ai_foundry_project.name}cognitiveservicesuser")
-  scope                = azapi_resource.ai_foundry_project.id
+  name                 = uuidv5("dns", "${var.user_object_id}${azapi_resource.ai_foundry_account.name}${azapi_resource.ai_foundry_project.name}cognitiveservicesuser")
+  scope                = azapi_resource.ai_foundry_account.id
   role_definition_name = "Cognitive Services User"
   principal_id         = var.user_object_id
 }

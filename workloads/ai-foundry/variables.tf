@@ -9,15 +9,16 @@ variable "external_openai" {
   default = null
 }
 
-variable "foundry_encryption" {
-  description = "Indicate whether the AI Foundry account should be encrypted with a provider-managed key or customer-managed key. CMK will create a Key Vault, key, and necessary role assignments"
-  type        = string
-  default     = "pmk"
-  validation {
-    condition     = contains(["pmk", "cmk"], var.foundry_encryption)
-    error_message = "Encryption must be either 'pmk' or 'cmk'."
-  }
-}
+# TO DO - Enable support in template for CMK
+#variable "foundry_encryption" {
+#  description = "Indicate whether the AI Foundry account should be encrypted with a provider-managed key or customer-managed key. CMK will create a Key Vault, key, and necessary role assignments"
+#  type        = string
+#  default     = "pmk"
+#  validation {
+#    condition     = contains(["pmk", "cmk"], var.foundry_encryption)
+#    error_message = "Encryption must be either 'pmk' or 'cmk'."
+#  }
+#}
 
 variable "region" {
   description = "The name of the Azure region to provision the resources to"
