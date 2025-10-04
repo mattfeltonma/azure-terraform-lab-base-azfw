@@ -91,12 +91,17 @@ locals {
   acr_private_dns_namespace_primary   = "${var.environment_details["primary"].region_name}.data.privatelink.azurecr.io"
   acr_private_dns_namespace_secondary = contains(keys(var.environment_details), "secondary") ? "${var.environment_details["secondary"].region_name}.data.privatelink.azurecr.io" : null
 
+  container_apps_namespace_primary = "privatelink.${var.environment_details["primary"].region_name}.azurecontainerapps.io"
+  container_apps_namespace_secondary = contains(keys(var.environment_details), "secondary") ? "privatelink.${var.environment_details["secondary"].region_name}.azurecontainerapps.io" : null
+
   # Add regional zones to a map
   regional_private_dns_namespaces_map = {
     aks_primary   = local.aks_private_dns_namespace_primary,
     aks_secondary = contains(keys(var.environment_details), "secondary") ? local.aks_private_dns_namespace_secondary : null,
     acr_primary   = local.acr_private_dns_namespace_primary,
-    acr_secondary = contains(keys(var.environment_details), "secondary") ? local.acr_private_dns_namespace_secondary : null
+    acr_secondary = contains(keys(var.environment_details), "secondary") ? local.acr_private_dns_namespace_secondary : null,
+    ca_primary    = local.container_apps_namespace_primary,
+    ca_secondary  = contains(keys(var.environment_details), "secondary") ? local.container_apps_namespace_secondary : null,
   }
 
   # Merge the user-specified zones with the regional zones
