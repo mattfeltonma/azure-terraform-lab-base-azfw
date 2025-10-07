@@ -133,50 +133,30 @@ resource "azurerm_monitor_diagnostic_setting" "diag_cosmosdb" {
 
 ## Create an AI Search service where vector stores can be created if using the chat with your data workload in 
 ## AI Foundry to ingest data into AI Search
-resource "azapi_resource" "ai_search_aifoundry" {
-  type                      = "Microsoft.Search/searchServices@2024-03-01-preview"
-  name                      = "aisaif${var.region_code}${var.random_string}"
-  parent_id                 = azurerm_resource_group.rg_aifoundry.id
-  location                  = var.region
-  schema_validation_enabled = true
+resource "azurerm_search_service" "ai_search_aifoundry" {
+  name                = "aisaif${var.region_code}${var.random_string}"
+  resource_group_name = azurerm_resource_group.rg_aifoundry.name
+  location            = var.region
+  tags                = var.tags
 
-  body = {
-    sku = {
-      name = "standard"
-    }
+  sku = "standard"
 
-    identity = {
-      type = "SystemAssigned"
-    }
-
-    properties = {
-
-      # Search-specific properties
-      replicaCount   = 1
-      partitionCount = 1
-      hostingMode    = "default"
-      semanticSearch = "standard"
-
-      # Identity-related controls
-      disableLocalAuth = false
-      authOptions = {
-        aadOrApiKey = {
-          aadAuthFailureMode = "http401WithBearerChallenge"
-        }
-      }
-      # Networking-related controls
-      publicNetworkAccess = "disabled"
-      networkRuleSet = {
-        bypass = "AzureServices"
-      }
-    }
-    tags = var.tags
+  identity {
+    type = "SystemAssigned"
   }
 
-  response_export_values = [
-    "identity.principalId",
-    "properties.customSubDomainName"
-  ]
+  replica_count   = 1
+  partition_count = 1
+  hosting_mode    = "default"
+  semantic_search_sku = "standard"
+
+  # Set network-related controls
+  public_network_access_enabled = false
+  network_rule_bypass_option = "AzureServices"
+
+  # Set identity-releated controls
+  local_authentication_enabled = true
+  authentication_failure_mode = "http401WithBearerChallenge"
 
   lifecycle {
     ignore_changes = [
@@ -190,11 +170,11 @@ resource "azapi_resource" "ai_search_aifoundry" {
 ##
 resource "azurerm_monitor_diagnostic_setting" "diag_ai_search" {
   depends_on = [
-    azapi_resource.ai_search_aifoundry
+    azurerm_search_service.ai_search_aifoundry
   ]
 
   name                       = "diag-base"
-  target_resource_id         = azapi_resource.ai_search_aifoundry.id
+  target_resource_id         = azurerm_search_service.ai_search_aifoundry.id
   log_analytics_workspace_id = azurerm_log_analytics_workspace.log_analytics_workspace_workload.id
 
   enabled_log {
@@ -415,26 +395,26 @@ resource "azurerm_private_endpoint" "pe_cosmosdb_aifoundry" {
 resource "azurerm_private_endpoint" "pe_aisearch_aifoundry" {
   depends_on = [
     azurerm_private_endpoint.pe_cosmosdb_aifoundry,
-    azapi_resource.ai_search_aifoundry
+    azurerm_search_service.ai_search_aifoundry
   ]
 
-  name                = "pe${azapi_resource.ai_search_aifoundry.name}searchservice"
+  name                = "pe${azurerm_search_service.ai_search_aifoundry.name}searchservice"
   location            = var.region
   resource_group_name = azurerm_resource_group.rg_aifoundry.name
   tags                = var.tags
   subnet_id           = var.subnet_id_private_endpoints
 
-  custom_network_interface_name = "nic${azapi_resource.ai_search_aifoundry.name}searchservice"
+  custom_network_interface_name = "nic${azurerm_search_service.ai_search_aifoundry.name}searchservice"
 
   private_service_connection {
-    name                           = "peconn${azapi_resource.ai_search_aifoundry.name}searchservice"
-    private_connection_resource_id = azapi_resource.ai_search_aifoundry.id
+    name                           = "peconn${azurerm_search_service.ai_search_aifoundry.name}searchservice"
+    private_connection_resource_id = azurerm_search_service.ai_search_aifoundry.id
     subresource_names              = ["searchService"]
     is_manual_connection           = false
   }
 
   private_dns_zone_group {
-    name = "zoneconn${azapi_resource.ai_search_aifoundry.name}searchservice"
+    name = "zoneconn${azurerm_search_service.ai_search_aifoundry.name}searchservice"
     private_dns_zone_ids = [
       "/subscriptions/${data.azurerm_subscription.current.subscription_id}/resourceGroups/${var.resource_group_name_dns}/providers/Microsoft.Network/privateDnsZones/privatelink.search.windows.net"
     ]
@@ -501,7 +481,7 @@ resource "time_sleep" "wait_appins" {
 
 ## Create the Azure Foundry account and configure it to use VNet injection to support BYO VNet
 ##
-resource "azapi_resource" "ai_foundry_account" {
+resource "azurerm_cognitive_account" "ai_foundry_account" {
   depends_on = [
     azapi_resource.bing_grounding_search_foundry,
     azurerm_private_endpoint.pe_aisearch_aifoundry,
@@ -510,57 +490,37 @@ resource "azapi_resource" "ai_foundry_account" {
     time_sleep.wait_appins
   ]
 
-  type                      = "Microsoft.CognitiveServices/accounts@2025-04-01-preview"
-  name                      = "aif${var.region_code}${var.random_string}"
-  parent_id                 = azurerm_resource_group.rg_aifoundry.id
-  location                  = var.region
-  tags                      = var.tags
-  schema_validation_enabled = false
+  name                = "aif${var.region_code}${var.random_string}"
+  resource_group_name = azurerm_resource_group.rg_aifoundry.name
+  location            = var.region
+  tags                = var.tags
 
-  body = {
-    kind = "AIServices",
-    sku = {
-      name = "S0"
-    }
+  # Create an AI Foundry Account to support Foundry Projects
+  kind = "AIServices"
+  sku_name = "S0"
+  project_management_enabled = true
 
-    # Assign a system-assigned managed identity to the AI Foundry account. 
-    # 9/2025 User-assigned managed identities are pretty useless because they're not yet supported for CMK access
-    identity = {
-      type = "SystemAssigned"
-    }
-
-    properties = {
-
-      # This property specifies the creation of an AI Foundry account vs an AI Services account
-      allowProjectManagement = true
-
-      # Set custom subdomain name for DNS names created for this Foundry resource
-      customSubDomainName = "aif${var.region_code}${var.random_string}"
-
-      # Network-related controls
-      # Disable public access but allow Trusted Azure Services exception
-      publicNetworkAccess = "Disabled"
-      networkAcls = {
-        bypass        = "AzureServices"
-        defaultAction = "Deny"
-      }
-
-      # Enable VNet injection for Standard Agents
-      networkInjections = [
-        {
-          scenario                   = "agent"
-          subnetArmId                = var.subnet_id_agent
-          useMicrosoftManagedNetwork = false
-        }
-      ]
-    }
+  # Assign a system-assigned managed identity to the AI Foundry account. 
+  # 9/2025 User-assigned managed identities are pretty useless because they're not yet supported for CMK access
+  identity {
+    type = "SystemAssigned"
   }
 
-  # Output the principalId of the managed identity and custom subdomain of the AI Foundry account
-  response_export_values = [
-    "identity.principalId",
-    "properties.customSubDomainName"
-  ]
+  # Set custom subdomain name for DNS names created for this Foundry resource
+  custom_subdomain_name = "aif${var.region_code}${var.random_string}"
+
+  # Network-related controls
+  public_network_access_enabled = false
+  network_acls {
+    bypass        = "AzureServices"
+    default_action = "Deny"
+  }
+
+  # Enable VNet injection for Standard Agents
+  network_injection {
+    scenario                   = "agent"
+    subnet_id                  = var.subnet_id_agent
+  }
 
   lifecycle {
     ignore_changes = [
@@ -574,11 +534,11 @@ resource "azapi_resource" "ai_foundry_account" {
 ##
 resource "azurerm_monitor_diagnostic_setting" "diag_foundry_resource" {
   depends_on = [
-    azapi_resource.ai_foundry_account
+    azurerm_cognitive_account.ai_foundry_account
   ]
 
   name                       = "diag"
-  target_resource_id         = azapi_resource.ai_foundry_account.id
+  target_resource_id         = azurerm_cognitive_account.ai_foundry_account.id
   log_analytics_workspace_id = azurerm_log_analytics_workspace.log_analytics_workspace_workload.id
 
   enabled_log {
@@ -608,7 +568,7 @@ resource "azurerm_cognitive_deployment" "deployment_gpt_4o" {
   count = var.external_openai != null ? 0 : 1
 
   name                 = "gpt-4o"
-  cognitive_account_id = azapi_resource.ai_foundry_account.id
+  cognitive_account_id = azurerm_cognitive_account.ai_foundry_account.id
 
   sku {
     name     = "DataZoneStandard"
@@ -631,7 +591,7 @@ resource "azurerm_cognitive_deployment" "deployment_text_embedding_3_large" {
   count = var.external_openai != null ? 0 : 1
 
   name                 = "text-embedding-3-large"
-  cognitive_account_id = azapi_resource.ai_foundry_account.id
+  cognitive_account_id = azurerm_cognitive_account.ai_foundry_account.id
 
   sku {
     name     = "Standard"
@@ -651,23 +611,23 @@ resource "azurerm_private_endpoint" "pe_aifoundry_account" {
     azurerm_cognitive_deployment.deployment_text_embedding_3_large
   ]
 
-  name                = "pe${azapi_resource.ai_foundry_account.name}account"
+  name                = "pe${azurerm_cognitive_account.ai_foundry_account.name}account"
   location            = var.region
   resource_group_name = azurerm_resource_group.rg_aifoundry.name
   tags                = var.tags
   subnet_id           = var.subnet_id_private_endpoints
 
-  custom_network_interface_name = "nic${azapi_resource.ai_foundry_account.name}account"
+  custom_network_interface_name = "nic${azurerm_cognitive_account.ai_foundry_account.name}account"
 
   private_service_connection {
-    name                           = "peconn${azapi_resource.ai_foundry_account.name}account"
-    private_connection_resource_id = azapi_resource.ai_foundry_account.id
+    name                           = "peconn${azurerm_cognitive_account.ai_foundry_account.name}account"
+    private_connection_resource_id = azurerm_cognitive_account.ai_foundry_account.id
     subresource_names              = ["account"]
     is_manual_connection           = false
   }
 
   private_dns_zone_group {
-    name = "zoneconn${azapi_resource.ai_foundry_account.name}account"
+    name = "zoneconn${azurerm_cognitive_account.ai_foundry_account.name}account"
     private_dns_zone_ids = [
       "/subscriptions/${data.azurerm_subscription.current.subscription_id}/resourceGroups/${var.resource_group_name_dns}/providers/Microsoft.Network/privateDnsZones/privatelink.services.ai.azure.com",
       "/subscriptions/${data.azurerm_subscription.current.subscription_id}/resourceGroups/${var.resource_group_name_dns}/providers/Microsoft.Network/privateDnsZones/privatelink.openai.azure.com",
@@ -696,7 +656,7 @@ resource "azapi_resource" "ai_foundry_project" {
 
   type                      = "Microsoft.CognitiveServices/accounts/projects@2025-04-01-preview"
   name                      = "sampleproject1"
-  parent_id                 = azapi_resource.ai_foundry_account.id
+  parent_id                 = azurerm_cognitive_account.ai_foundry_account.id
   location                  = var.region
   schema_validation_enabled = false
 
@@ -800,20 +760,20 @@ resource "azapi_resource" "conn_aisearch_aifoundry" {
   ]
 
   type                      = "Microsoft.CognitiveServices/accounts/projects/connections@2025-04-01-preview"
-  name                      = "conn-${azapi_resource.ai_search_aifoundry.name}"
+  name                      = "conn-${azurerm_search_service.ai_search_aifoundry.name}"
   parent_id                 = azapi_resource.ai_foundry_project.id
   schema_validation_enabled = false
 
   body = {
-    name = azapi_resource.ai_search_aifoundry.name
+    name = azurerm_search_service.ai_search_aifoundry.name
     properties = {
       category = "CognitiveSearch"
-      target   = "https://${azapi_resource.ai_search_aifoundry.name}.search.windows.net"
+      target   = "https://${azurerm_search_service.ai_search_aifoundry.name}.search.windows.net"
       authType = "AAD"
       metadata = {
         ApiType    = "Azure"
         ApiVersion = "2024-05-01-preview"
-        ResourceId = azapi_resource.ai_search_aifoundry.id
+        ResourceId = azurerm_search_service.ai_search_aifoundry.id
         location   = var.region
       }
     }
@@ -927,8 +887,8 @@ resource "azurerm_role_assignment" "search_index_data_contributor_ai_foundry_pro
   depends_on = [
     time_sleep.wait_project_identities
   ]
-  name                 = uuidv5("dns", "${azapi_resource.ai_search_aifoundry.name}${azapi_resource.ai_foundry_project.output.identity.principalId}${azurerm_resource_group.rg_aifoundry.name}searchindexdatacontributor")
-  scope                = azapi_resource.ai_search_aifoundry.id
+  name                 = uuidv5("dns", "${azurerm_search_service.ai_search_aifoundry.name}${azapi_resource.ai_foundry_project.output.identity.principalId}${azurerm_resource_group.rg_aifoundry.name}searchindexdatacontributor")
+  scope                = azurerm_search_service.ai_search_aifoundry.id
   role_definition_name = "Search Index Data Contributor"
   principal_id         = azapi_resource.ai_foundry_project.output.identity.principalId
 }
@@ -939,8 +899,8 @@ resource "azurerm_role_assignment" "search_service_contributor_ai_foundry_projec
   depends_on = [
     time_sleep.wait_project_identities
   ]
-  name                 = uuidv5("dns", "${azapi_resource.ai_search_aifoundry.name}${azapi_resource.ai_foundry_project.output.identity.principalId}${azurerm_resource_group.rg_aifoundry.name}searchservicecontributor")
-  scope                = azapi_resource.ai_search_aifoundry.id
+  name                 = uuidv5("dns", "${azurerm_search_service.ai_search_aifoundry.name}${azapi_resource.ai_foundry_project.output.identity.principalId}${azurerm_resource_group.rg_aifoundry.name}searchservicecontributor")
+  scope                = azurerm_search_service.ai_search_aifoundry.id
   role_definition_name = "Search Service Contributor"
   principal_id         = azapi_resource.ai_foundry_project.output.identity.principalId
 }
@@ -1074,7 +1034,7 @@ resource "azurerm_role_assignment" "ai_foundry_user" {
     azapi_resource.ai_foundry_project
   ]
 
-  name                 = uuidv5("dns", "${var.user_object_id}${azapi_resource.ai_foundry_account.name}${azapi_resource.ai_foundry_project.name}user")
+  name                 = uuidv5("dns", "${var.user_object_id}${azurerm_cognitive_account.ai_foundry_account.name}${azapi_resource.ai_foundry_project.name}user")
   scope                = azapi_resource.ai_foundry_project.id
   role_definition_name = "Azure AI User"
   principal_id         = var.user_object_id
@@ -1087,8 +1047,8 @@ resource "azurerm_role_assignment" "cognitive_services_user" {
     azapi_resource.ai_foundry_project
   ]
 
-  name                 = uuidv5("dns", "${var.user_object_id}${azapi_resource.ai_foundry_account.name}${azapi_resource.ai_foundry_project.name}cognitiveservicesuser")
-  scope                = azapi_resource.ai_foundry_account.id
+  name                 = uuidv5("dns", "${var.user_object_id}${azurerm_cognitive_account.ai_foundry_account.name}${azapi_resource.ai_foundry_project.name}cognitiveservicesuser")
+  scope                = azurerm_cognitive_account.ai_foundry_account.id
   role_definition_name = "Cognitive Services User"
   principal_id         = var.user_object_id
 }
@@ -1102,12 +1062,12 @@ resource "azurerm_role_assignment" "cognitive_services_user" {
 ##
 resource "azurerm_role_assignment" "cognitive_services_openai_contributor_ai_search_service" {
   depends_on = [
-    azapi_resource.ai_foundry_account
+    azurerm_cognitive_account.ai_foundry_account
   ]
-  name                 = uuidv5("dns", "${azapi_resource.ai_search_aifoundry.output.identity.principalId}${azapi_resource.ai_foundry_account.name}openaiuser")
-  scope                = azapi_resource.ai_foundry_account.id
+  name                 = uuidv5("dns", "${azurerm_search_service.ai_search_aifoundry.identity.0.principal_id}${azurerm_cognitive_account.ai_foundry_account.name}openaiuser")
+  scope                = azurerm_cognitive_account.ai_foundry_account.id
   role_definition_name = "Cognitive Services OpenAI Contributor"
-  principal_id         = azapi_resource.ai_search_aifoundry.output.identity.principalId
+  principal_id         = azurerm_search_service.ai_search_aifoundry.identity.0.principal_id
 }
 
 ## Create a role assignment granting the AI Search service the Storage Blob Data Contributor role which will allow the AI Search service
@@ -1115,24 +1075,24 @@ resource "azurerm_role_assignment" "cognitive_services_openai_contributor_ai_sea
 ## This is required to support the import and vectorize feature of AI Search
 resource "azurerm_role_assignment" "storage_blob_data_contributor_ai_search_service" {
   depends_on = [
-    azapi_resource.ai_foundry_account
+    azurerm_cognitive_account.ai_foundry_account
   ]
 
-  name                 = uuidv5("dns", "${azapi_resource.ai_search_aifoundry.output.identity.principalId}${azurerm_storage_account.storage_account_aifoundry.name}blobdatacontributor")
+  name                 = uuidv5("dns", "${azurerm_search_service.ai_search_aifoundry.identity.0.principal_id}${azurerm_storage_account.storage_account_aifoundry.name}blobdatacontributor")
   scope                = azurerm_storage_account.storage_account_aifoundry.id
   role_definition_name = "Storage Blob Data Contributor"
-  principal_id         = azapi_resource.ai_search_aifoundry.output.identity.principalId
+  principal_id         = azurerm_search_service.ai_search_aifoundry.identity.0.principal_id
 }
 
 ## Create a role assignment granting a user the Search Service Contributor role which will allow the user
 ## to create and manage indexes in the AI Search Service
 resource "azurerm_role_assignment" "aisearch_user_service_contributor" {
   depends_on = [
-    azapi_resource.ai_search_aifoundry
+    azurerm_cognitive_account.ai_foundry_account
   ]
 
-  name                 = uuidv5("dns", "${var.user_object_id}${azapi_resource.ai_search_aifoundry.name}servicecont")
-  scope                = azapi_resource.ai_search_aifoundry.id
+  name                 = uuidv5("dns", "${var.user_object_id}${azurerm_search_service.ai_search_aifoundry.name}servicecont")
+  scope                = azurerm_search_service.ai_search_aifoundry.id
   role_definition_name = "Search Service Contributor"
   principal_id         = var.user_object_id
 }
@@ -1143,22 +1103,8 @@ resource "azurerm_role_assignment" "aisearch_user_data_contributor" {
   depends_on = [
     azurerm_role_assignment.aisearch_user_service_contributor
   ]
-  name                 = uuidv5("dns", "${var.user_object_id}${azapi_resource.ai_search_aifoundry.name}datacont")
-  scope                = azapi_resource.ai_search_aifoundry.id
+  name                 = uuidv5("dns", "${var.user_object_id}${azurerm_search_service.ai_search_aifoundry.name}datacont")
+  scope                = azurerm_search_service.ai_search_aifoundry.id
   role_definition_name = "Search Index Data Contributor"
   principal_id         = var.user_object_id
-}
-
-########## Extra code that can help to purge the AI Foundry account during destroy. The AzApi provider doesn't
-########## support purging the AI Foundry account during destroy operations
-##########
-
-## Added AI Foundry account purger to avoid running into InUseSubnetCannotBeDeleted-lock caused by the agent subnet delegation.
-## The azapi_resource_action.purge_ai_foundry (only gets executed during destroy) purges the AI foundry account removing /subnets/snet-agent/serviceAssociationLinks/legionservicelink so the agent subnet can get properly removed.
-## Credit for this to Sebastian Graf
-resource "azapi_resource_action" "purge_ai_foundry" {
-  method      = "DELETE"
-  resource_id = "/subscriptions/${data.azurerm_client_config.current.subscription_id}/providers/Microsoft.CognitiveServices/locations/${var.region}/resourceGroups/${azurerm_resource_group.rg_aifoundry.name}/deletedAccounts/aifoundry${var.random_string}"
-  type        = "Microsoft.Resources/resourceGroups/deletedAccounts@2021-04-30"
-  when        = "destroy"
 }
