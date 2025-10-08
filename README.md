@@ -4,6 +4,7 @@
 [![License](https://img.shields.io/badge/License-MIT-green)](LICENSE)
 
 ## Table of Contents
+- [Contributing](#contributing)
 - [Updates](#updates)
 - [Overview](#overview)
 - [Architecture](#architecture)
@@ -14,7 +15,20 @@
 - [Deployment](#deployment)
 - [Post-Deployment](#post-deployment)
 - [Security Considerations](#security-considerations)
-- [Contributing](#contributing)
+
+## Contributing
+
+* If you find code from here useful let me know! It's always wonderful to get feedback from peers in the field.
+* If you incorporate this code into something you develop do me a favor and link the repository in your code or documentation.
+* This code is written for my purposes and I'm sharing it in the hopes it will help some folks out there as they muck around with the Azure stack. 
+* You may dislike the way I've done things here. That's ok. You code your way I'll code my way.
+* Don't open issues that say "The code doesn't work." It's a pointless waste of your time and my time.
+* If you open an issue, don't expect a fast response or fulfilling resolution to your issue. This is my off hours stuff that I do for fun and responding to issues is not fun.
+* Sometimes I may break the lab or pieces of the lab. It will get fixed when I have time.
+* Any executable scripts you see included are typically written for zsh or bash shell. If you're running them on Windows, you'll likely need to make changes to them.
+* You can submit pull requests and I'll incorporate them if I think it makes sense and it aligns with the way I want to use this environment.
+
+Hope any bit of this code helps save you some time or learn something new!
 
 ## Updates
 
@@ -296,11 +310,4 @@ To add additional workloads:
 
 
 
-## Contributing
 
-* This code is licensed under the MIT license. You can certainly open issues with questions and I'll do my best to answer them when time permits. However, it's on you to determine why it doesn't work for you. Don't waste your time or my time opening issues that only say "The code doesn't work."
-* You can submit pull requests for improvements and I'll incorporate them if they make sense. Note this is coded for my chaotic brain and not yours so sometimes the way I code things will not align with your practices. That's ok!
-* Sometimes I may break the base labs or modules. I'll fix them when time allows. This could be days and sometimes may be weeks.
-* Any executable scripts you see included are typically written for zsh or bash shell. If you're running them on Windows, you'll likely need to make changes to them.
-* If you find code from here useful let me know! It's always wonderful to get feedback from peers in the field.
-* If you incorporate this code into something you develop do me a favor and link the repository in your code or documentation.
