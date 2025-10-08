@@ -19,6 +19,12 @@
 ## Updates
 
 ### 2025
+* **October 8, 2025**
+  * Added AI Foundry workload
+    * Added support for CMK
+    * Added support for Bing Grounding
+    * Added support for external AOAI
+
 * **September 29, 2025**
   * Removed from main repo to allow for smoother udpates
   * De-modularized for simplicity
