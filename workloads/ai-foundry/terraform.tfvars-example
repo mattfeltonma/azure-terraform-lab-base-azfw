@@ -19,3 +19,4 @@ tags = {
   environment = "lab"
   product     = "aifoundry"
 }
+trusted_ip = "55.55.55.55"

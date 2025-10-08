@@ -9,16 +9,15 @@ variable "external_openai" {
   default = null
 }
 
-# TO DO - Enable support in template for CMK
-#variable "foundry_encryption" {
-#  description = "Indicate whether the AI Foundry account should be encrypted with a provider-managed key or customer-managed key. CMK will create a Key Vault, key, and necessary role assignments"
-#  type        = string
-#  default     = "pmk"
-#  validation {
-#    condition     = contains(["pmk", "cmk"], var.foundry_encryption)
-#    error_message = "Encryption must be either 'pmk' or 'cmk'."
-#  }
-#}
+variable "foundry_encryption" {
+  description = "Indicate whether the AI Foundry account should be encrypted with a provider-managed key or customer-managed key. CMK will create a Key Vault, key, and necessary role assignments"
+  type        = string
+  default     = "cmk"
+  validation {
+    condition     = contains(["pmk", "cmk"], var.foundry_encryption)
+    error_message = "Encryption must be either 'pmk' or 'cmk'."
+  }
+}
 
 variable "region" {
   description = "The name of the Azure region to provision the resources to"
@@ -64,6 +63,11 @@ variable "subnet_id_private_endpoints" {
 variable "tags" {
   description = "The tags to apply to the resource"
   type        = map(string)
+}
+
+variable "trusted_ip" {
+  description = "The trusted IP address of the Terraform deployment server. This is only used for this lab and is not required for a production deployment"
+  type        = string
 }
 
 variable "user_object_id" {
