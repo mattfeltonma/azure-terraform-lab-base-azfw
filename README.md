@@ -33,6 +33,10 @@ Hope any bit of this code helps save you some time or learn something new!
 ## Updates
 
 ### 2025
+* **October 17, 2025**
+  * Added AML Hub workload
+  * Added AML with VNet injection
+
 * **October 8, 2025**
   * Added AI Foundry workload
     * Added support for CMK
