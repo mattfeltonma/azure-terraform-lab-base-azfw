@@ -3,6 +3,7 @@
 
 # Ignore tools
 get_creds.sh
+validate-aml.ipynb
 
 # Ignore implementation-specific Terraform files
 providers/
@@ -14,6 +15,7 @@ terraform.tfstate.backup
 remote.conf
 .terraform
 versions-local.tf
+
 
 
 

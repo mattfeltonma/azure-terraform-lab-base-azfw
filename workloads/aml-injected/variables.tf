@@ -1,10 +1,10 @@
-variable "hub_identity" {
-  description = "The identity name to use for the AML Hub. This should be smi (system-assigned managed identity) or umi (user-managed identity)"
+variable "workspace_identity" {
+  description = "The identity name to use for the AML Workspace. This should be smi (system-assigned managed identity) or umi (user-managed identity)"
   type        = string
   default     = "smi"
   validation {
-    condition     = contains(["smi", "umi"], var.hub_identity)
-    error_message = "Hub identity must be either 'smi' or 'umi'."
+    condition     = contains(["smi", "umi"], var.workspace_identity)
+    error_message = "Workspace identity must be either 'smi' or 'umi'."
   }
 }
 
@@ -39,6 +39,11 @@ variable "sub_id_dns" {
   type        = string
 }
 
+variable "subnet_id_amlcompute" {
+  description = "The subnet id to deploy the AML Compute Cluster to"
+  type        = string
+}
+
 variable "subnet_id_private_endpoints" {
   description = "The subnet id to deploy the private endpoints to"
   type        = string
@@ -56,5 +61,10 @@ variable "trusted_ip" {
 
 variable "user_object_id" {
   description = "The object id of the Entra ID user who will use the AML Project"
+  type        = string
+}
+
+variable "vm_size" {
+  description = "The size of the VM to use for the build compute cluster and compute instance"
   type        = string
 }

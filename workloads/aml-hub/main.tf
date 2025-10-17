@@ -214,7 +214,9 @@ resource "azurerm_key_vault" "key_vault_aml_hub" {
     default_action             = "Deny"
     bypass                     = "AzureServices"
     virtual_network_subnet_ids = []
-    ip_rules                   = []
+    ip_rules                   = [
+      var.trusted_ip
+    ]
   }
 
   lifecycle {
@@ -282,7 +284,7 @@ resource "azurerm_container_registry" "acr_aml_hub" {
 
 ## Configure diagnostic settings for Container Registry to send logs to Log Analytics Workspace
 ##
-resource "azurerm_monitor_diagnostic_setting" "diag_aml_hub" {
+resource "azurerm_monitor_diagnostic_setting" "diag_acr_aml_hub" {
   depends_on = [
     azurerm_container_registry.acr_aml_hub
   ]
@@ -299,8 +301,8 @@ resource "azurerm_monitor_diagnostic_setting" "diag_aml_hub" {
   }
 }
 
-########## Create optional resources to demonstrate capabilities
-##########
+########## Create optional storage account that can be used to store project-specific data
+########## This is not required
 ##########
 
 ## Create Azure Storage account which will hold data that will be processed by Azure Machine Learning
@@ -487,7 +489,7 @@ resource "azurerm_role_assignment" "umi_aml_rg_aiadministrator" {
     time_sleep.wait_aml_hub_identity,
   ]
 
-  count = var.hub_identity == "user_assigned" ? 1 : 0
+  count = var.hub_identity == "umi" ? 1 : 0
 
   name                 = uuidv5("dns", "${azurerm_resource_group.rg_aml_hub.name}${azurerm_user_assigned_identity.umi_aml_hub[0].name}aiadmin")
   scope                = azurerm_resource_group.rg_aml_hub.id
@@ -557,7 +559,7 @@ resource "time_sleep" "wait_umi_hub_role_assignments_main" {
   create_duration = "120s"
 }
 
-########## Create the AML Hub and its child resources
+########## Create the AML Hub and its diagnostic settings
 ##########
 ##########
 
@@ -570,8 +572,8 @@ resource "azapi_resource" "aml_hub" {
     azurerm_container_registry.acr_aml_hub,
     azurerm_storage_account.storage_account_aml_hub,
     azurerm_key_vault.key_vault_aml_hub,
-    azurerm_storage_account.storage_account_data,
-    time_sleep.wait_umi_hub_role_assignments_main
+    time_sleep.wait_umi_hub_role_assignments_main,
+    azurerm_storage_account.storage_account_data
   ]
 
   type                      = "Microsoft.MachineLearningServices/workspaces@2025-09-01"
@@ -583,7 +585,12 @@ resource "azapi_resource" "aml_hub" {
   body = {
 
     # Set the hub to use a user-assigned managed identity if specified, otherwise use a system-assigned managed identity
-    identity = {
+    identity = var.hub_identity == "umi" ? {
+      type = "UserAssigned"
+      userAssignedIdentities = {
+        "${azurerm_user_assigned_identity.umi_aml_hub[0].id}" = {}
+      }
+      } : {
       type = "SystemAssigned"
     }
     tags = var.tags
@@ -591,7 +598,7 @@ resource "azapi_resource" "aml_hub" {
     # Create an AML hub workspace
     kind = "Hub"
 
-    properties = {
+    properties = merge({
       friendlyName = "Sample-AML-Hub"
       description  = "This is a sample AML Hub"
 
@@ -599,10 +606,12 @@ resource "azapi_resource" "aml_hub" {
       keyVault            = azurerm_key_vault.key_vault_aml_hub.id
       storageAccount      = azurerm_storage_account.storage_account_aml_hub.id
       containerRegistry   = azurerm_container_registry.acr_aml_hub.id
-
+      # Block access to the AML Workspace over the public endpoint
       publicNetworkAccess = "disabled"
       managedNetwork = {
+        # Managed virtual network will block all outbound traffic unless explicitly allowed
         isolationMode = "AllowOnlyApprovedOutbound"
+        # Use Azure Firewall Standard SKU to support FQDN-based rules
         firewallSku   = "Standard"
         outboundRules = {
           # Create the managed private endpoint for the Azure Storage Account blob and file endpoints of the data storage account
@@ -647,6 +656,40 @@ resource "azapi_resource" "aml_hub" {
           AllowAnacondaOrgWildcard = {
             type        = "FQDN"
             destination = "*.anaconda.org"
+            category    = "UserDefined"
+          }
+
+          # (OPTIONAL) Create fqdn rules to allow for pulling Docker images like Python, Jupyter, and other images
+          AllowDockerIo = {
+            type    = "FQDN"
+            destination = "docker.io"
+            category    = "UserDefined"
+          }
+          AllowDockerIoWildcard = {
+            type    = "FQDN"
+            destination = "*.docker.io"
+            category    = "UserDefined"
+          }
+          AllowDockerComWildcard = {
+            type    = "FQDN"
+            destination = "*.docker.com"
+            category    = "UserDefined"
+          }
+          AllowDockerCloudFlareProduction = {
+            type    = "FQDN"
+            destination = "production.cloudflare.docker.com"
+            category    = "UserDefined"
+          }
+
+          # (OPTIONAL) Create fqdn rules to allow for using models from HuggingFace
+          AllowCdnAuth0Com = {
+            type    = "FQDN"
+            destination = "cdn.auth0.com"
+            category    = "UserDefined"
+          }
+          AllowCdnHuggingFaceCo = {
+            type    = "FQDN"
+            destination = "cdn-lfs.huggingface.co"
             category    = "UserDefined"
           }
 
@@ -727,8 +770,19 @@ resource "azapi_resource" "aml_hub" {
       workspaceHubConfig = {
         defaultWorkspaceResourceGroup = azurerm_resource_group.rg_aml_hub.id
       }
-    }
+    },
+    # If a user-assigned managed identity is being used, set the user-assigned managed identity ID
+    var.hub_identity == "umi" ? {
+      primaryUserAssignedIdentity = azurerm_user_assigned_identity.umi_aml_hub[0].id
+    } : {}
+    )
   }
+
+  response_export_values = [
+    "identity.principalId",
+    "properties.workspaceId"
+  ]
+
   # Ignore updates to these tags on additional Terraform deployments
   lifecycle {
     ignore_changes = [
@@ -740,7 +794,7 @@ resource "azapi_resource" "aml_hub" {
 
 ## Create diagnostic settings to capture resource logs and metrics for AML Hub and place them in the Log Analytics Workspace
 ##
-resource "azurerm_monitor_diagnostic_setting" "aml_hub_diag_base" {
+resource "azurerm_monitor_diagnostic_setting" "diag_aml_hub" {
   depends_on = [
     azapi_resource.aml_hub,
     azurerm_log_analytics_workspace.log_analytics_workspace_workload
@@ -785,7 +839,7 @@ resource "azurerm_role_assignment" "umi_aml_st_blob_data_contributor" {
       AND  !(ActionMatches{'Microsoft.Storage/storageAccounts/blobServices/containers/blobs/add/action'})
     ) 
     OR 
-    (@Resource[Microsoft.Storage/storageAccounts/blobServices/containers:name] StringStartsWithIgnoreCase '${azapi_resource.aml_hub.output.workspaceId}-') 
+    (@Resource[Microsoft.Storage/storageAccounts/blobServices/containers:name] StringStartsWithIgnoreCase '${azapi_resource.aml_hub.output.properties.workspaceId}-') 
   )
   EOT
 }
@@ -799,113 +853,6 @@ resource "time_sleep" "wait_umi_hub_role_assignments_additional" {
     azurerm_role_assignment.umi_aml_st_blob_data_contributor
   ]
   create_duration = "120s"
-}
-
-## Create an AML Hub project workspace
-##
-resource "azapi_resource" "aml_project" {
-  depends_on = [
-    azapi_resource.aml_hub,
-    time_sleep.wait_umi_hub_role_assignments_additional
-  ]
-
-  type                      = "Microsoft.MachineLearningServices/workspaces@2025-09-01"
-  name                      = "amlws${var.region_code}${var.random_string}"
-  parent_id                 = azurerm_resource_group.rg_aml_hub.id
-  location                  = var.region
-  schema_validation_enabled = false
-
-  body = {
-    identity = {
-      type = "SystemAssigned"
-    }
-    tags = var.tags
-
-    # Create an AML project workspace
-    kind = "Project"
-
-    # Only SKU right now
-    sku = {
-      tier = "Basic"
-      name = "Basic"
-    }
-
-    properties = {
-      friendlyName = "Sample-Aml-Project-1"
-      description  = "This is sample AML Project 1"
-
-      # Associate the workspace to the AML Hub
-      hubResourceId = azapi_resource.aml_hub.id
-
-      # Do not apply any permissions on the resource group
-      allowRoleAssignmentOnRg = false
-
-      # Probably unnecessary due to hub configuration but can't hurt
-      systemDatastoresAuthMode = "identity"
-
-      # This it the resource group where the AML Hub has been deployed
-      workspaceHubConfig = {
-        defaultWorkspaceResourceGroup = azurerm_resource_group.rg_aml_hub.id
-      }
-    }
-  }
-  # Export system-assigned managed identity principal ID for the project
-  response_export_values = [
-    "identity.principalId"
-  ]
-
-  # Ignore updates to these tags on additional Terraform deployments
-  lifecycle {
-    ignore_changes = [
-      tags["created_date"],
-      tags["created_by"]
-    ]
-  }
-}
-
-## Pause for 10 seconds to allow the project identity to be replicated through Entra ID
-##
-resource "time_sleep" "wait_project_identities" {
-  depends_on = [
-    azapi_resource.aml_project
-  ]
-
-  count           = var.hub_identity == "smi" ? 1 : 0
-  create_duration = "10s"
-}
-
-## Create a connection from the project workspace to a storage account that will be used to demonstrate data storage
-##
-resource "azapi_resource" "project_storage_data_datastore" {
-  depends_on = [
-    azapi_resource.aml_project,
-    azurerm_storage_account.storage_account_data,
-    azurerm_storage_container.blob_data
-  ]
-
-  type                      = "Microsoft.MachineLearningServices/workspaces/datastores@2025-01-01-preview"
-  name                      = substr("conn${azurerm_storage_account.storage_account_data.name}", 0, 24)
-  parent_id                 = azapi_resource.aml_project.id
-  schema_validation_enabled = true
-
-  body = {
-    properties = {
-      description   = "Data storage account for AI Foundry Project"
-      datastoreType = "AzureBlob"
-      accountName   = azurerm_storage_account.storage_account_data.name
-      endpoint      = "core.windows.net"
-      protocol      = "https"
-      containerName = "data"
-
-      # Set the authentication to use the user's Entra ID identity
-      credentials = {
-        credentialsType = "None"
-      }
-      serviceDataAccessAuthIdentity = "None"
-
-      tags = var.tags
-    }
-  }
 }
 
 ########## Create Private Endpoints for AML Hub and required resources
@@ -950,60 +897,11 @@ resource "azurerm_private_endpoint" "pe_aml_hub" {
   }
 }
 
-## Create the A record for the AML Workspace compute instances only if it doesn't already exist
-## Using null_resource with Azure CLI to avoid count dependency issues
-##
-resource "null_resource" "aml_workspace_compute_instance_dns" {
-  depends_on = [
-    azurerm_private_endpoint.pe_aml_hub
-  ]
-
-  provisioner "local-exec" {
-    command = <<-EOT
-      # Check if the DNS A record already exists
-      if ! az network private-dns record-set a show \
-        --resource-group "${var.resource_group_name_dns}" \
-        --zone-name "instances.azureml.ms" \
-        --name "*.${var.region}" \
-        --subscription "${var.sub_id_dns}" >/dev/null 2>&1; then
-        
-        # Create the DNS A record if it doesn't exist
-        az network private-dns record-set a create \
-          --resource-group "${var.resource_group_name_dns}" \
-          --zone-name "instances.azureml.ms" \
-          --name "*.${var.region}" \
-          --subscription "${var.sub_id_dns}"
-        
-        # Add the private endpoint IP to the record set
-        az network private-dns record-set a add-record \
-          --resource-group "${var.resource_group_name_dns}" \
-          --zone-name "instances.azureml.ms" \
-          --record-set-name "*.${var.region}" \
-          --ipv4-address "${azurerm_private_endpoint.pe_aml_hub.private_service_connection.0.private_ip_address}" \
-          --subscription "${var.sub_id_dns}"
-
-        echo "DNS A record created for *.${var.region} in instances.azureml.ms"
-      else
-        echo "DNS A record for *.${var.region} already exists in instances.azureml.ms"
-      fi
-    EOT
-  }
-
-  # Trigger when the private endpoint IP changes
-  triggers = {
-    private_endpoint_ip = azurerm_private_endpoint.pe_aml_hub.private_service_connection.0.private_ip_address
-    location            = var.region
-    resource_group      = var.resource_group_name_dns
-    subscription        = var.sub_id_dns
-  }
-}
-
 ## Create a Private Endpoint for AML Hub storage account blob endpoint
 ##
 resource "azurerm_private_endpoint" "pe_storage_account_aml_hub_blob" {
   depends_on = [
-    azurerm_storage_account.storage_account_aml_hub,
-    null_resource.aml_workspace_compute_instance_dns
+    azurerm_storage_account.storage_account_aml_hub
   ]
 
   name                = "pe${azurerm_storage_account.storage_account_aml_hub.name}blob"
@@ -1306,191 +1204,59 @@ resource "azurerm_private_endpoint" "pe_storage_account_data_dfs" {
   }
 }
 
-########## Create an Azure Machine Learnning Compute Instance to perform container builds
-########## This is required because the Azure Container Registry has public access disabled
+########## Create DNS record required for split-brain DNS of instances.azureml.ms which is required zone
+########## to support access to compute instances from Visual Studio Code
 ##########
 
-## Create a user-assigned managed identity for the compute instance
+## Create auth A record in the instances.azureml.ms private DNS zone for the AML Hub workspace
 ##
-resource "azurerm_user_assigned_identity" "umi_compute_instance" {
+resource "azurerm_private_dns_a_record" "aml_compute_instance_dns_record_auth" {
   depends_on = [
-    azurerm_resource_group.rg_aml_hub,
-    azapi_resource.aml_project
+    azurerm_private_endpoint.pe_aml_hub
   ]
-  name                = "umi${local.build_compute_instance_name}"
-  location            = var.region
-  resource_group_name = azurerm_resource_group.rg_aml_hub.name
-  tags                = var.tags
 
-  lifecycle {
-    ignore_changes = [
-      tags["created_date"],
-      tags["created_by"]
-    ]
-  }
+  name                = "auth.${var.region}"
+  zone_name           = "instances.azureml.ms"
+  resource_group_name = var.resource_group_name_dns
+  ttl                 = 10
+  records             = [
+    azurerm_private_endpoint.pe_aml_hub.private_service_connection.0.private_ip_address
+  ]
 }
 
-## Pause for 10 seconds to allow the compute instance managed identity to be replicated through Entra ID
+## Create AML project and all supporting resources using module
 ##
-resource "time_sleep" "wait_aml_compute_instance_identity" {
+module "aml_project" {
   depends_on = [
-    azurerm_user_assigned_identity.umi_compute_instance
-  ]
-  create_duration = "10s"
-}
-
-## Create Azure RBAC Role Assignment granting the Storage Blob Data Contributor role on the
-## AML Hub storage account to the compute instance user-assigned managed identity
-resource "azurerm_role_assignment" "umi_compute_instance_st_blob_data_contributor" {
-  depends_on = [
-    time_sleep.wait_aml_compute_instance_identity
+    time_sleep.wait_umi_hub_role_assignments_additional,
+    azurerm_private_endpoint.pe_aml_hub,
+    azurerm_private_endpoint.pe_storage_account_aml_hub_blob,
+    azurerm_private_endpoint.pe_storage_account_aml_hub_file,
+    azurerm_private_endpoint.pe_key_vault_aml_hub,
+    azurerm_private_endpoint.pe_container_registry_aml_hub
   ]
 
-  name                 = uuidv5("dns", "${azurerm_storage_account.storage_account_aml_hub.name}${azurerm_user_assigned_identity.umi_compute_instance.principal_id}storageblobdatacontributor")
-  scope                = azurerm_storage_account.storage_account_aml_hub.id
-  role_definition_name = "Storage Blob Data Contributor"
-  principal_id         = azurerm_user_assigned_identity.umi_compute_instance.principal_id
-}
+  source = "./modules/project"
 
-## Create Azure RBAC Role Assignment granting the Storage File Data Privileged Contributor role on the
-## AML Hub storage account to the compute instance user-assigned managed identity
-resource "azurerm_role_assignment" "umi_compute_instance_st_file_data_privileged_contributor" {
-  depends_on = [
-    time_sleep.wait_aml_compute_instance_identity
-  ]
-
-  name                 = uuidv5("dns", "${azurerm_storage_account.storage_account_aml_hub.name}${azurerm_user_assigned_identity.umi_compute_instance.principal_id}storagefiledataprivilegedcontributor")
-  scope                = azurerm_storage_account.storage_account_aml_hub.id
-  role_definition_name = "Storage File Data Privileged Contributor"
-  principal_id         = azurerm_user_assigned_identity.umi_compute_instance.principal_id
-}
-
-## Create Azure RBAC Role Assignment granting the AcrPush role on the Azure Container Registry 
-## to the compute instance user-assigned managed identity
-resource "azurerm_role_assignment" "umi_compute_instance_acr_push" {
-  depends_on = [
-    time_sleep.wait_aml_compute_instance_identity
-  ]
-
-  name                 = uuidv5("dns", "${azurerm_container_registry.acr_aml_hub.name}${azurerm_user_assigned_identity.umi_compute_instance.principal_id}acrpush")
-  scope                = azurerm_container_registry.acr_aml_hub.id
-  role_definition_name = "AcrPush"
-  principal_id         = azurerm_user_assigned_identity.umi_compute_instance.principal_id
-}
-
-## Create Azure RBAC Role Assignment granting the AcrPull role on the Azure Container Registry
-## to the compute instance user-assigned managed identity
-resource "azurerm_role_assignment" "umi_compute_instance_acr_pull" {
-  depends_on = [
-    time_sleep.wait_aml_compute_instance_identity
-  ]
-
-  name                 = uuidv5("dns", "${azurerm_container_registry.acr_aml_hub.name}${azurerm_user_assigned_identity.umi_compute_instance.principal_id}acrpull")
-  scope                = azurerm_container_registry.acr_aml_hub.id
-  role_definition_name = "AcrPull"
-  principal_id         = azurerm_user_assigned_identity.umi_compute_instance.principal_id
-}
-
-## Pause for 120 seconds to allow the role assignments to propagate through Azure
-##
-resource "time_sleep" "wait_aml_compute_instance_role_assignments" {
-  depends_on = [
-    azurerm_role_assignment.umi_compute_instance_st_blob_data_contributor,
-    azurerm_role_assignment.umi_compute_instance_st_file_data_privileged_contributor,
-    azurerm_role_assignment.umi_compute_instance_acr_push,
-    azurerm_role_assignment.umi_compute_instance_acr_pull
-  ]
-  create_duration = "120s"
-}
-
-## Create the AML Compute Instance for the AML Project workspace
-##
-resource "azurerm_machine_learning_compute_instance" "aml_compute_instance_build" {
-  depends_on = [
-    azapi_resource.aml_project,
-    azurerm_user_assigned_identity.umi_compute_instance,
-    time_sleep.wait_aml_compute_instance_role_assignments
-  ]
-
-  name = local.build_compute_instance_name
+  region = var.region
+  region_code = var.region_code
+  random_string = var.random_string
   tags = var.tags
 
-  # Place the compute instance in the AML project workspace
-  machine_learning_workspace_id = azapi_resource.aml_project.id
+  resource_group_name_dns = var.resource_group_name_dns
+  resource_group_name_workload = azurerm_resource_group.rg_aml_hub.name
+  resource_group_id_workload = azurerm_resource_group.rg_aml_hub.id
 
-  # Configure the VM SKU size to use
-  virtual_machine_size = "Standard_D2s_v3"
+  hub_aml_workspace_resource_id = azapi_resource.aml_hub.id
+  hub_container_registry_id = azurerm_container_registry.acr_aml_hub.id
+  hub_storage_account_id = azurerm_storage_account.storage_account_aml_hub.id
+  project_storage_account_name = azurerm_storage_account.storage_account_aml_hub.name
+  pe_ip_address_aml_hub = azurerm_private_endpoint.pe_aml_hub.private_service_connection.0.private_ip_address
+  subnet_id_private_endpoints = var.subnet_id_private_endpoints
 
-  # Disable local authentication to the compute instance since it will be used as build only
-  local_auth_enabled = false
+  law_resource_id = azurerm_log_analytics_workspace.log_analytics_workspace_workload.id
 
-  # Disable public IP on the compute instance
-  node_public_ip_enabled = false
-
-  # Assign to the machine learning engineer
-  assign_to_user {
-    object_id = var.user_object_id
-    tenant_id = data.azurerm_client_config.current.tenant_id
-  }
-
-  # Configure the compute instance to use a user-assigned managed identity
-  identity {
-    type = "UserAssigned"
-    identity_ids = [
-      azurerm_user_assigned_identity.umi_compute_instance.id
-    ]
-  }
-}
-
-## Patch the AML Project workspace to use the compute instance as the build compute
-##
-#resource "azapi_resource" "aml_project_patch" {
-#  depends_on = [
-#    azurerm_machine_learning_compute_instance.aml_compute_instance_build
-#  ]
-#
-#  type                      = "Microsoft.MachineLearningServices/workspaces@2025-09-01"
-# name                      = azapi_resource.aml_project.name
-#  parent_id                 = azapi_resource.aml_project.parent_id
-#  schema_validation_enabled = false
-
-#  body = {
-#    properties = {
-#      # Set the build compute to the compute instance
-#      imageBuildCompute = azurerm_machine_learning_compute_instance.aml_compute_instance_build.name
-#    }
-#  }
-
-  # Do not run again if the build compute changes
-#  lifecycle {
-#    ignore_changes = [
-#      body["properties"]["imageBuildCompute"]
-#    ]
-#  }
-#}
-
-## Patch the Azure Machine Learning Hub workspace
-##
-resource "azapi_update_resource" "aml_hub_patch" {
-  depends_on = [
-    azurerm_machine_learning_compute_instance.aml_compute_instance_build
-  ]
-
-  type      = "Microsoft.MachineLearningServices/workspaces@2025-09-01"
-  resource_id = azapi_resource.aml_hub.id
-  body = {
-    properties = {
-      # Set the build compute to the compute instance
-      imageBuildCompute = azurerm_machine_learning_compute_instance.aml_compute_instance_build.name
-    }
-  }
-
-  # Do not run again if the build compute changes
-  lifecycle {
-    ignore_changes = [
-      body["properties"]["imageBuildCompute"]
-    ]
-  }
+  user_object_id = var.user_object_id
 }
 
 ########## Create the non-human role assignments
@@ -1508,38 +1274,8 @@ resource "azurerm_role_assignment" "hub_perm_azure_ai_enterprise_network_connect
 
   count = var.hub_identity == "smi" ? 1 : 0
 
-  name                 = uuidv5("dns", "${azurerm_resource_group.rg_aml_hub.name}${azapi_resource.aml_hub.output.identity.principalId}${azapi_resource.aml_project.name}networkconnectionapprover")
+  name                 = uuidv5("dns", "${azurerm_resource_group.rg_aml_hub.name}${azapi_resource.aml_hub.output.identity.principalId}networkconnectionapprover")
   scope                = azurerm_resource_group.rg_aml_hub.id
   role_definition_name = "Azure AI Enterprise Network Connection Approver"
   principal_id         = azapi_resource.aml_hub.output.identity.principalId
-}
-
-########## Create the human role assignments
-##########
-##########
-
-## Create Azure RBAC Role Assignment granting the Azure Machine Learning Compute Operator role to the user.
-## This allows the user to perform all actions on compute resources within the workspace.
-##
-resource "azurerm_role_assignment" "wk_perm_compute_operator" {
-  depends_on = [
-    azapi_resource.aml_project
-  ]
-  name                 = uuidv5("dns", "${azurerm_resource_group.rg_aml_hub.name}${var.user_object_id}${azapi_resource.aml_project.name}computeoperator")
-  scope                = azapi_resource.aml_project.id
-  role_definition_name = "AzureML Compute Operator"
-  principal_id         = var.user_object_id
-}
-
-## Create Azure RBAC Role Assignment granting the Azure Machine Learning Data Scientist role to the user.
-## This allows the user to perform all actions except for creating compute resources.
-##
-resource "azurerm_role_assignment" "wk_perm_data_scientist" {
-  depends_on = [
-    azapi_resource.aml_project
-  ]
-  name                 = uuidv5("dns", "${azurerm_resource_group.rg_aml_hub.name}${var.user_object_id}${azapi_resource.aml_project.name}datascientist")
-  scope                = azapi_resource.aml_project.id
-  role_definition_name = "AzureML Data Scientist"
-  principal_id         = var.user_object_id
 }

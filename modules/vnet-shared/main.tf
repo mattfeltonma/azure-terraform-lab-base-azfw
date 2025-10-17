@@ -1039,7 +1039,7 @@ resource "azurerm_network_interface" "nic" {
 ## Create the virtual machine
 ##
 resource "azurerm_windows_virtual_machine" "vm" {
-  name                = "vm${var.region_code}${var.random_string}"
+  name                = "vmtool${var.region_code}${var.random_string}"
   location            = var.region
   resource_group_name = var.resource_group_name
 
