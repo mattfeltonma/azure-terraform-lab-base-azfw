@@ -144,18 +144,18 @@ module "vnet_transit" {
 
   # Pass the CIDR blocks for APIM and AML compute subnets, which are used in Azure Firewall rules
   address_space_apim = each.key == "primary" ? [
-    cidrsubnet(local.vnet_cidr_wl1_pri, 3, 4),
-    cidrsubnet(local.vnet_cidr_wl2_pri, 3, 4)
+    cidrsubnet(local.vnet_cidr_wl1_pri, 3, 2),
+    cidrsubnet(local.vnet_cidr_wl2_pri, 3, 2)
     ] : [
-    cidrsubnet(local.vnet_cidr_wl1_sec, 3, 4),
-    cidrsubnet(local.vnet_cidr_wl2_sec, 3, 4)
+    cidrsubnet(local.vnet_cidr_wl1_sec, 3, 2),
+    cidrsubnet(local.vnet_cidr_wl2_sec, 3, 2)
   ]
   address_space_amlcpt = each.key == "primary" ? [
-    cidrsubnet(local.vnet_cidr_wl1_pri, 3, 5),
-    cidrsubnet(local.vnet_cidr_wl2_pri, 3, 5)
+    cidrsubnet(local.vnet_cidr_wl1_pri, 3, 1),
+    cidrsubnet(local.vnet_cidr_wl2_pri, 3, 1)
     ] : [
-    cidrsubnet(local.vnet_cidr_wl1_sec, 3, 5),
-    cidrsubnet(local.vnet_cidr_wl2_sec, 3, 5)
+    cidrsubnet(local.vnet_cidr_wl1_sec, 3, 1),
+    cidrsubnet(local.vnet_cidr_wl2_sec, 3, 1)
   ]
 
   # Pass the CIDR blocks that will be used for the shared services and workload virtual networks. These are used in UDRs in the GatewaySubnet and Azure Firewall rules
