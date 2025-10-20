@@ -18,6 +18,11 @@ variable "project_storage_account_name" {
   type = string
 }
 
+variable "project_storage_account_id" {
+  description = "The resource id of the storage account to use for the project data storage"
+  type = string
+}
+
 variable "law_resource_id" {
   description = "The resource id of the Log Analytics Workspace"
   type = string

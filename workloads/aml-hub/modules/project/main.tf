@@ -421,3 +421,29 @@ resource "azurerm_role_assignment" "wk_pr_perm_st_blob_data_contributor" {
   )
   EOT
 }
+
+## Create Azure RBAC Role assignment granting the Storage File Data Privileged Contributor role on the
+## project data storage account to the user
+##
+resource "azurerm_role_assignment" "wk_pr_perm_project_st_file_data_privileged_contributor" {
+  depends_on = [
+    azapi_resource.project_storage_data_datastore
+  ]
+  name                 = uuidv5("dns", "${var.project_storage_account_name}${var.user_object_id}storagefiledataprivilegedcontributor")
+  scope                = var.project_storage_account_id
+  role_definition_name = "Storage File Data Privileged Contributor"
+  principal_id         = var.user_object_id
+}
+
+## Create Azure RBAC Role assignment granting the Storage Blob Data Contributor role on the
+## project data storage account to the user
+##
+resource "azurerm_role_assignment" "wk_pr_perm_project_st_blob_data_privileged_contributor" {
+  depends_on = [
+    azapi_resource.project_storage_data_datastore
+  ]
+  name                 = uuidv5("dns", "${var.project_storage_account_name}${var.user_object_id}storageblobdataprivilegedcontributor")
+  scope                = var.project_storage_account_id
+  role_definition_name = "Storage Blob Data Privileged Contributor"
+  principal_id         = var.user_object_id
+}

@@ -1250,7 +1250,8 @@ module "aml_project" {
   hub_aml_workspace_resource_id = azapi_resource.aml_hub.id
   hub_container_registry_id = azurerm_container_registry.acr_aml_hub.id
   hub_storage_account_id = azurerm_storage_account.storage_account_aml_hub.id
-  project_storage_account_name = azurerm_storage_account.storage_account_aml_hub.name
+  project_storage_account_id = azurerm_storage_account.storage_account_data.id
+  project_storage_account_name = azurerm_storage_account.storage_account_data.name
   pe_ip_address_aml_hub = azurerm_private_endpoint.pe_aml_hub.private_service_connection.0.private_ip_address
   subnet_id_private_endpoints = var.subnet_id_private_endpoints
 
