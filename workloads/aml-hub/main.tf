@@ -1705,3 +1705,32 @@ resource "azurerm_role_assignment" "hub_perm_azure_ai_enterprise_network_connect
   role_definition_name = "Azure AI Enterprise Network Connection Approver"
   principal_id         = azapi_resource.aml_hub.output.identity.principalId
 }
+
+########## Create the human role assignments that are not project-specific
+##########
+##########
+
+## Create Azure RBAC Role Assignment granting the Azure ML Registry User role to the user
+## over the production AML Registry
+resource "azurerm_role_assignment" "user_aml_registry_production_user" {
+  depends_on = [
+    azapi_resource.aml_registry_production
+  ]
+
+  name                 = uuidv5("dns", "${azapi_resource.aml_registry_production.name}${var.user_object_id}amlregistryuser")
+  scope                = azapi_resource.aml_registry_production.id
+  role_definition_name = "Azure ML Registry User"
+  principal_id         = var.user_object_id
+}
+
+## Create Azure RBAC Role Assignment granting the Azure ML Registry User role to the user
+## over the non-production AML Registry
+resource "azurerm_role_assignment" "user_aml_registry_non_production_user" {
+  depends_on = [
+    azapi_resource.aml_registry_non_production
+  ]
+  name                 = uuidv5("dns", "${azapi_resource.aml_registry_non_production.name}${var.user_object_id}amlregistryuser")  
+  scope                = azapi_resource.aml_registry_non_production.id
+  role_definition_name = "Azure ML Registry User"
+  principal_id         = var.user_object_id
+}
