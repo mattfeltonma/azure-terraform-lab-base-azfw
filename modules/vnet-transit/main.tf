@@ -902,7 +902,7 @@ resource "azurerm_firewall_policy_rule_collection_group" "rule_collection_group_
 resource "azurerm_firewall_policy_rule_collection_group" "rule_collection_group_workload_aml_compute" {
   depends_on = [
     azurerm_firewall_policy.firewall_policy,
-    azurerm_firewall_policy_rule_collection_group.rule_collection_ggroup_workload_apim
+    azurerm_firewall_policy_rule_collection_group.rule_collection_group_workload_apim
   ]
   name               = "MyWorkloadAmlComputeRuleCollectionGroup"
   firewall_policy_id = azurerm_firewall_policy.firewall_policy.id

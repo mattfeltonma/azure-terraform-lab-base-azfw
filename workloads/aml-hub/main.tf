@@ -301,8 +301,8 @@ resource "azurerm_monitor_diagnostic_setting" "diag_acr_aml_hub" {
   }
 }
 
-########## Create optional storage account that can be used to store project-specific data
-########## This is not required
+########## Create optional storage account that can be used to store project-specific data or demonstrate AML Registries
+########## This is not required for a real production deployment
 ##########
 
 ## Create Azure Storage account which will hold data that will be processed by Azure Machine Learning
@@ -441,6 +441,357 @@ resource "azurerm_storage_container" "blob_data" {
   name                  = "data"
   storage_account_id    = azurerm_storage_account.storage_account_data.id
   container_access_type = "private"
+}
+
+## Create an AML Registry for production
+##
+resource "azapi_resource" "aml_registry_production" {
+  depends_on = [
+    azurerm_resource_group.rg_aml_hub
+  ]
+
+  type                      = "Microsoft.MachineLearningServices/registries@2025-06-01"
+  name                      = "amlrp${var.region_code}${var.random_string}"
+  parent_id                 = azurerm_resource_group.rg_aml_hub.id
+  location                  = var.region
+  schema_validation_enabled = true
+ 
+  body = {
+    # Set the identity for the AML Registry to use
+    identity = {
+      type = "SystemAssigned"
+    }
+    properties = {
+      regionDetails = [
+        {
+          location = var.region
+          storageAccountDetails = [
+            {
+              systemCreatedStorageAccount = {
+                storageAccountType       = "Standard_LRS"
+                storageAccountHnsEnabled = false
+              }
+            }
+          ]
+          acrDetails = [
+            {
+              systemCreatedAcrAccount = {
+                acrAccountSku = "Premium"
+              }
+            }
+          ]
+        }
+      ]
+      # You can uncomment and use this section if you want to assign an identity the AI Administrator role over the managed
+      # resource gorup and exempt from the denyAssignemnts. This is primarily used when a pipeline doesn't have subscription
+      # wide permissions
+      #managedResourceGroupSettings = {
+      #  assignedIdentities = [
+      #    {
+      #      principalId = var.object_id
+      #    }
+      #  ]
+      #}
+      publicNetworkAccess = "Disabled"
+    }
+
+    tags = var.tags
+  }
+
+  response_export_values = [
+    "identity.principalId",
+    "properties.regionDetails",
+    "properties"
+  ]
+
+  lifecycle {
+    ignore_changes = [
+      tags["created_date"],
+      tags["created_by"]
+    ]
+  }
+}
+
+## Create diagnostic settings for AML Registry storage account and container registry
+##
+resource "azurerm_monitor_diagnostic_setting" "diag_aml_registry_production_storage_blob" {
+  depends_on = [
+    azapi_resource.aml_registry_production
+  ]
+
+  name                       = "diag-blob"
+  target_resource_id         = "${azapi_resource.aml_registry_production.output.properties.regionDetails[0].storageAccountDetails[0].systemCreatedStorageAccount.armResourceId.resourceId}/blobServices/default"
+  log_analytics_workspace_id = azurerm_log_analytics_workspace.log_analytics_workspace_workload.id
+
+  enabled_log {
+    category = "StorageRead"
+  }
+
+  enabled_log {
+    category = "StorageWrite"
+  }
+
+  enabled_log {
+    category = "StorageDelete"
+  }
+}
+
+resource "azurerm_monitor_diagnostic_setting" "diag_aml_registry_production_storage_file" {
+  depends_on = [
+    azapi_resource.aml_registry_production,
+    azurerm_monitor_diagnostic_setting.diag_aml_registry_production_storage_blob
+  ]
+
+  name                       = "diag-file"
+  target_resource_id         = "${azapi_resource.aml_registry_production.output.properties.regionDetails[0].storageAccountDetails[0].systemCreatedStorageAccount.armResourceId.resourceId}/fileServices/default"
+  log_analytics_workspace_id = azurerm_log_analytics_workspace.log_analytics_workspace_workload.id
+
+  enabled_log {
+    category = "StorageRead"
+  }
+
+  enabled_log {
+    category = "StorageWrite"
+  }
+
+  enabled_log {
+    category = "StorageDelete"
+  }
+}
+
+resource "azurerm_monitor_diagnostic_setting" "diag_aml_registry_production_storage_queue" {
+  depends_on = [
+    azapi_resource.aml_registry_production,
+    azurerm_monitor_diagnostic_setting.diag_aml_registry_production_storage_file
+  ]
+
+  name                       = "diag-default"
+  target_resource_id         = "${azapi_resource.aml_registry_production.output.properties.regionDetails[0].storageAccountDetails[0].systemCreatedStorageAccount.armResourceId.resourceId}/queueServices/default"
+  log_analytics_workspace_id = azurerm_log_analytics_workspace.log_analytics_workspace_workload.id
+
+  enabled_log {
+    category = "StorageRead"
+  }
+
+  enabled_log {
+    category = "StorageWrite"
+  }
+
+  enabled_log {
+    category = "StorageDelete"
+  }
+}
+
+resource "azurerm_monitor_diagnostic_setting" "diag_aml_registry_production_storage_table" {
+
+  depends_on = [
+    azapi_resource.aml_registry_production,
+    azurerm_monitor_diagnostic_setting.diag_aml_registry_production_storage_queue
+  ]
+
+  name                       = "diag-table"
+  target_resource_id         = "${azapi_resource.aml_registry_production.output.properties.regionDetails[0].storageAccountDetails[0].systemCreatedStorageAccount.armResourceId.resourceId}/tableServices/default"
+  log_analytics_workspace_id = azurerm_log_analytics_workspace.log_analytics_workspace_workload.id
+
+  enabled_log {
+    category = "StorageRead"
+  }
+
+  enabled_log {
+    category = "StorageWrite"
+  }
+
+  enabled_log {
+    category = "StorageDelete"
+  }
+}
+
+resource "azurerm_monitor_diagnostic_setting" "diag_aml_registry_production_acr" {
+  name                       = "diag-base"
+  target_resource_id         = azapi_resource.aml_registry_production.output.properties.regionDetails[0].acrDetails[0].systemCreatedAcrAccount.armResourceId.resourceId
+  log_analytics_workspace_id = azurerm_log_analytics_workspace.log_analytics_workspace_workload.id
+
+  enabled_log {
+    category = "ContainerRegistryRepositoryEvents"
+  }
+  enabled_log {
+    category = "ContainerRegistryLoginEvents"
+  }
+}
+
+## Create an AML Registry for non-production
+##
+resource "azapi_resource" "aml_registry_non_production" {
+  depends_on = [
+    azurerm_resource_group.rg_aml_hub
+  ]
+
+  type                      = "Microsoft.MachineLearningServices/registries@2025-06-01"
+  name                      = "amlrnp${var.region_code}${var.random_string}"
+  parent_id                 = azurerm_resource_group.rg_aml_hub.id
+  location                  = var.region
+  schema_validation_enabled = true
+ 
+  body = {
+    # Set the identity for the AML Registry to use
+    identity = {
+      type = "SystemAssigned"
+    }
+    properties = {
+      regionDetails = [
+        {
+          location = var.region
+          storageAccountDetails = [
+            {
+              systemCreatedStorageAccount = {
+                storageAccountType       = "Standard_LRS"
+                storageAccountHnsEnabled = false
+              }
+            }
+          ]
+          acrDetails = [
+            {
+              systemCreatedAcrAccount = {
+                acrAccountSku = "Premium"
+              }
+            }
+          ]
+        }
+      ]
+      # You can uncomment and use this section if you want to assign an identity the AI Administrator role over the managed
+      # resource gorup and exempt from the denyAssignemnts. This is primarily used when a pipeline doesn't have subscription
+      # wide permissions
+      #managedResourceGroupSettings = {
+      #  assignedIdentities = [
+      #    {
+      #      principalId = var.object_id
+      #    }
+      #  ]
+      #}
+      publicNetworkAccess = "Disabled"
+    }
+
+    tags = var.tags
+  }
+
+  response_export_values = [
+    "identity.principalId",
+    "properties.regionDetails",
+    "properties"
+  ]
+
+  lifecycle {
+    ignore_changes = [
+      tags["created_date"],
+      tags["created_by"]
+    ]
+  }
+}
+
+## Create diagnostic settings for AML Registry storage account and container registry
+##
+resource "azurerm_monitor_diagnostic_setting" "diag_aml_registry_non_production_storage_blob" {
+  depends_on = [
+    azapi_resource.aml_registry_non_production
+  ]
+
+  name                       = "diag-blob"
+  target_resource_id         = "${azapi_resource.aml_registry_non_production.output.properties.regionDetails[0].storageAccountDetails[0].systemCreatedStorageAccount.armResourceId.resourceId}/blobServices/default"
+  log_analytics_workspace_id = azurerm_log_analytics_workspace.log_analytics_workspace_workload.id
+
+  enabled_log {
+    category = "StorageRead"
+  }
+
+  enabled_log {
+    category = "StorageWrite"
+  }
+
+  enabled_log {
+    category = "StorageDelete"
+  }
+}
+
+resource "azurerm_monitor_diagnostic_setting" "diag_aml_registry_non_production_storage_file" {
+  depends_on = [
+    azapi_resource.aml_registry_non_production,
+    azurerm_monitor_diagnostic_setting.diag_aml_registry_non_production_storage_blob
+  ]
+
+  name                       = "diag-file"
+  target_resource_id         = "${azapi_resource.aml_registry_non_production.output.properties.regionDetails[0].storageAccountDetails[0].systemCreatedStorageAccount.armResourceId.resourceId}/fileServices/default"
+  log_analytics_workspace_id = azurerm_log_analytics_workspace.log_analytics_workspace_workload.id
+
+  enabled_log {
+    category = "StorageRead"
+  }
+
+  enabled_log {
+    category = "StorageWrite"
+  }
+
+  enabled_log {
+    category = "StorageDelete"
+  }
+}
+
+resource "azurerm_monitor_diagnostic_setting" "diag_aml_registry_non_production_storage_queue" {
+  depends_on = [
+    azapi_resource.aml_registry_non_production,
+    azurerm_monitor_diagnostic_setting.diag_aml_registry_non_production_storage_file
+  ]
+
+  name                       = "diag-default"
+  target_resource_id         = "${azapi_resource.aml_registry_non_production.output.properties.regionDetails[0].storageAccountDetails[0].systemCreatedStorageAccount.armResourceId.resourceId}/queueServices/default"
+  log_analytics_workspace_id = azurerm_log_analytics_workspace.log_analytics_workspace_workload.id
+
+  enabled_log {
+    category = "StorageRead"
+  }
+
+  enabled_log {
+    category = "StorageWrite"
+  }
+
+  enabled_log {
+    category = "StorageDelete"
+  }
+}
+
+resource "azurerm_monitor_diagnostic_setting" "diag_aml_registry_non_production_storage_table" {
+  depends_on = [
+    azapi_resource.aml_registry_non_production,
+    azurerm_monitor_diagnostic_setting.diag_aml_registry_non_production_storage_queue
+  ]
+
+  name                       = "diag-table"
+  target_resource_id         = "${azapi_resource.aml_registry_non_production.output.properties.regionDetails[0].storageAccountDetails[0].systemCreatedStorageAccount.armResourceId.resourceId}/tableServices/default"
+  log_analytics_workspace_id = azurerm_log_analytics_workspace.log_analytics_workspace_workload.id
+
+  enabled_log {
+    category = "StorageRead"
+  }
+
+  enabled_log {
+    category = "StorageWrite"
+  }
+
+  enabled_log {
+    category = "StorageDelete"
+  }
+}
+
+resource "azurerm_monitor_diagnostic_setting" "diag_aml_registry_non_production_acr" {
+  name                       = "diag-base"
+  target_resource_id         = azapi_resource.aml_registry_non_production.output.properties.regionDetails[0].acrDetails[0].systemCreatedAcrAccount.armResourceId.resourceId
+  log_analytics_workspace_id = azurerm_log_analytics_workspace.log_analytics_workspace_workload.id
+
+  enabled_log {
+    category = "ContainerRegistryRepositoryEvents"
+  }
+  enabled_log {
+    category = "ContainerRegistryLoginEvents"
+  }
 }
 
 ########## Create the user-assigned managed identity that will be associated with the AML Hub and required role assignments
@@ -1196,6 +1547,80 @@ resource "azurerm_private_endpoint" "pe_storage_account_data_dfs" {
     ]
   }
 
+  lifecycle {
+    ignore_changes = [
+      tags["created_date"],
+      tags["created_by"]
+    ]
+  }
+}
+
+## Create a Private Endpoint for the production AML Registry
+##
+resource "azurerm_private_endpoint" "pe_aml_registry_production" {
+  depends_on = [
+    azapi_resource.aml_registry_production,
+    azurerm_private_endpoint.pe_storage_account_data_dfs
+  ]
+
+  name                = "pe${azapi_resource.aml_registry_production.name}registry"
+  location            = var.region
+  resource_group_name = azurerm_resource_group.rg_aml_hub.name
+  tags                = var.tags
+  subnet_id           = var.subnet_id_private_endpoints
+
+  custom_network_interface_name = "nic${azapi_resource.aml_registry_production.name}registry"
+
+  private_service_connection {
+    name                           = "peconn${azapi_resource.aml_registry_production.name}registry"
+    private_connection_resource_id = azapi_resource.aml_registry_production.id
+    subresource_names              = ["amlregistry"]
+    is_manual_connection           = false
+  }
+
+  private_dns_zone_group {
+    name = "zoneconn${azapi_resource.aml_registry_production.name}registry"
+    private_dns_zone_ids = [
+      "/subscriptions/${data.azurerm_subscription.current.subscription_id}/resourceGroups/${var.resource_group_name_dns}/providers/Microsoft.Network/privateDnsZones/privatelink.api.azureml.ms"
+    ]
+  }
+  lifecycle {
+    ignore_changes = [
+      tags["created_date"],
+      tags["created_by"]
+    ]
+  }
+}
+
+## Create a Private Endpoint for the non-production AML Registry
+##
+resource "azurerm_private_endpoint" "pe_aml_registry_non_production" {
+  depends_on = [
+    azapi_resource.aml_registry_non_production,
+    azurerm_private_endpoint.pe_aml_registry_production
+  ]
+
+  name                = "pe${azapi_resource.aml_registry_non_production.name}registry"
+  location            = var.region
+  resource_group_name = azurerm_resource_group.rg_aml_hub.name
+  tags                = var.tags
+  subnet_id           = var.subnet_id_private_endpoints
+
+  custom_network_interface_name = "nic${azapi_resource.aml_registry_non_production.name}registry"
+
+  private_service_connection {
+    name                           = "peconn${azapi_resource.aml_registry_non_production.name}registry"
+    private_connection_resource_id = azapi_resource.aml_registry_non_production.id
+    subresource_names              = ["amlregistry"]
+    is_manual_connection           = false
+  }
+
+  private_dns_zone_group {
+    name = "zoneconn${azapi_resource.aml_registry_non_production.name}registry"
+    private_dns_zone_ids = [
+      "/subscriptions/${data.azurerm_subscription.current.subscription_id}/resourceGroups/${var.resource_group_name_dns}/providers/Microsoft.Network/privateDnsZones/privatelink.api.azureml.ms"
+    ]
+  }
   lifecycle {
     ignore_changes = [
       tags["created_date"],

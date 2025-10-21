@@ -364,6 +364,88 @@ resource "azapi_resource" "project_storage_data_datastore" {
   }
 }
 
+########## Create a user-assigned managed identity for serverless compute that will be used to build environment images
+##########
+##########
+
+## Create a user-assigned managed identity for serverless compute image building
+##
+resource "azurerm_user_assigned_identity" "umi_serverless_compute_image_builder" {
+  name                = "umiamlbuild${azapi_resource.aml_project.name}"
+  location            = var.region
+  resource_group_name = var.resource_group_name_workload
+  tags                = var.tags
+
+  lifecycle {
+    ignore_changes = [
+      tags["created_date"],
+      tags["created_by"]
+    ]
+  }
+}
+
+## Pause for 10 seconds to allow the development compute instance managed identity to be replicated through Entra ID
+##
+resource "time_sleep" "wait_aml_serverless_compute_identity_dev" {
+  depends_on = [
+    azurerm_user_assigned_identity.umi_serverless_compute_image_builder
+  ]
+  create_duration = "10s"
+}
+
+## Create Azure RBAC Role Assignment granting the Storage Blob Data Contributor role on the
+## AML Hub storage account to the development compute instance user-assigned managed identity
+resource "azurerm_role_assignment" "umi_serverless_compute_image_builder_st_blob_data_contributor" {
+  depends_on = [
+    time_sleep.wait_aml_serverless_compute_identity_dev
+  ]
+
+  name                 = uuidv5("dns", "${local.hub_storage_account_name}${azurerm_user_assigned_identity.umi_serverless_compute_image_builder.principal_id}storageblobdatacontributor")
+  scope                = var.hub_storage_account_id
+  role_definition_name = "Storage Blob Data Contributor"
+  principal_id         = azurerm_user_assigned_identity.umi_serverless_compute_image_builder.principal_id
+}
+
+## Create Azure RBAC Role Assignment granting the Storage File Data Privileged Contributor role on the
+## AML Hub storage account to the development compute instance user-assigned managed identity
+resource "azurerm_role_assignment" "umi_serverless_compute_image_builder_st_file_data_privileged_contributor" {
+  depends_on = [
+    azurerm_role_assignment.umi_serverless_compute_image_builder_st_blob_data_contributor,
+    time_sleep.wait_aml_serverless_compute_identity_dev
+  ]
+
+  name                 = uuidv5("dns", "${local.hub_storage_account_name}${azurerm_user_assigned_identity.umi_serverless_compute_image_builder.principal_id}storagefiledataprivilegedcontributor")
+  scope                = var.hub_storage_account_id
+  role_definition_name = "Storage File Data Privileged Contributor"
+  principal_id         = azurerm_user_assigned_identity.umi_serverless_compute_image_builder.principal_id
+}
+
+## Create Azure RBAC Role Assignment granting the AcrPush role on the Azure Container Registry 
+## to the development compute instance user-assigned managed identity
+resource "azurerm_role_assignment" "umi_serverless_compute_image_builder_acr_push" {
+  depends_on = [
+    time_sleep.wait_aml_serverless_compute_identity_dev
+  ]
+
+  name                 = uuidv5("dns", "${local.hub_container_registry_name}${azurerm_user_assigned_identity.umi_serverless_compute_image_builder.principal_id}acrpush")
+  scope                = var.hub_container_registry_id
+  role_definition_name = "AcrPush"
+  principal_id         = azurerm_user_assigned_identity.umi_serverless_compute_image_builder.principal_id
+}
+
+## Create Azure RBAC Role Assignment granting the AcrPull role on the Azure Container Registry
+## to the development compute instance user-assigned managed identity
+resource "azurerm_role_assignment" "umi_serverless_compute_image_builder_acr_pull" {
+  depends_on = [
+    time_sleep.wait_aml_serverless_compute_identity_dev
+  ]
+
+  name                 = uuidv5("dns", "${local.hub_container_registry_name}${azurerm_user_assigned_identity.umi_serverless_compute_image_builder.principal_id}acrpull")
+  scope                = var.hub_container_registry_id
+  role_definition_name = "AcrPull"
+  principal_id         = azurerm_user_assigned_identity.umi_serverless_compute_image_builder.principal_id
+}
+
 ########## Create the human role assignments
 ##########
 ##########
@@ -445,5 +527,18 @@ resource "azurerm_role_assignment" "wk_pr_perm_project_st_blob_data_privileged_c
   name                 = uuidv5("dns", "${var.project_storage_account_name}${var.user_object_id}storageblobdataprivilegedcontributor")
   scope                = var.project_storage_account_id
   role_definition_name = "Storage Blob Data Privileged Contributor"
+  principal_id         = var.user_object_id
+}
+
+## Create Azure RBAC Role assignment granting the Managed Identity Operator role on the
+## serverless managed identity to allow the user to assign the managed identity to serverless compute
+##
+resource "azurerm_role_assignment" "wk_pr_perm_serverless_compute_identity_operator" {
+  depends_on = [
+    azurerm_user_assigned_identity.umi_serverless_compute_image_builder
+  ]
+  name                 = uuidv5("dns", "${azurerm_user_assigned_identity.umi_serverless_compute_image_builder.id}${var.user_object_id}managedidentityoperator")
+  scope                = azurerm_user_assigned_identity.umi_serverless_compute_image_builder.id
+  role_definition_name = "Managed Identity Operator"
   principal_id         = var.user_object_id
 }

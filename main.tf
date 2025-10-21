@@ -197,11 +197,6 @@ module "vnet_shared" {
   # Assign the appropriate CIDR blocks depending on whether the environment is primary or secondary
   address_space_vnet   = each.key == "primary" ? local.vnet_cidr_ss_pri : local.vnet_cidr_ss_sec
 
-  # Set the DNS servers to be used in the virtual network
-  dns_servers = [
-    module.vnet_transit[each.key].azfw_private_ip
-  ]
-
   # Set the IP address of the Azure Firewall to be as the next hop for route tables
   firewall_private_ip = module.vnet_transit[each.key].azfw_private_ip
 
@@ -333,6 +328,19 @@ resource "null_resource" "update_firewall_dns_policy" {
   }
 }
 
+## Update the transit virtual network to use the Private DNS Resolver inbound endpoint IP as the DNS server
+##
+resource "azurerm_virtual_network_dns_servers" "update_dns_servers_transit" {
+  depends_on = [
+    null_resource.update_firewall_dns_policy
+  ]
+
+  for_each = var.environment_details
+
+  virtual_network_id = module.vnet_transit[each.key].vnet_transit_id
+  dns_servers        = [module.vnet_shared["primary"].private_resolver_inbound_endpoint_ip]
+}
+
 ##### Create workload virtual network
 #####
 module "vnet_workload" {
@@ -356,7 +364,7 @@ module "vnet_workload" {
 
   # Set the DNS servers to be used in the virtual network
   dns_servers = [
-    module.vnet_transit[each.value.environment].azfw_private_ip
+    module.vnet_shared[each.value.environment].private_resolver_inbound_endpoint_ip
   ]
 
   # Set the firewall IP address that route tables will point to for egress
