@@ -1,0 +1,27 @@
+law_resource_id               = "/subscriptions/XXXXXXXX-XXXX-XXXX-XXXX-XXXXXXXXXXXX/resourceGroups/rgamlwswus326z10/providers/Microsoft.OperationalInsights/workspaces/lawamlwswus326z10"
+region                        = "westus3"
+region_code                   = "wus3"
+random_string                 = "326z10"
+resource_group_name_dns       = "rgshwus326z"
+subnet_id_private_endpoints   = "/subscriptions/XXXXXXXX-XXXX-XXXX-XXXX-XXXXXXXXXXXX/resourceGroups/rgwlwus326z/providers/Microsoft.Network/virtualNetworks/vnetwl1wus326z/subnets/snet-svc"
+tags = {
+  environment = "lab"
+  product     = "amlws"
+}
+
+# These managed identities will be granted the AML Registry User role on the AML Registries
+managed_identity_principal_ids = [ 
+]
+
+# Set subscription ids
+subscription_id_infrastructure = "XXXXXXXX-XXXX-XXXX-XXXX-XXXXXXXXXXXX"
+subscription_id_workload_production = "XXXXXXXX-XXXX-XXXX-XXXX-XXXXXXXXXXXX"
+subscription_id_workload_non_production = "XXXXXXXX-XXXX-XXXX-XXXX-XXXXXXXXXXXX"
+
+# These users will be granted the AML Registry User role on the AML Registries
+user_object_ids = [
+  "XXXXXXXX-XXXX-XXXX-XXXX-XXXXXXXXXXXX",
+  "XXXXXXXX-XXXX-XXXX-XXXX-XXXXXXXXXXXX"
+]
+
+workspace_managed_identity_principal_id = "XXXXXXXX-XXXX-XXXX-XXXX-XXXXXXXXXXXX"

@@ -1,0 +1,24 @@
+random_string = "26z4"
+resource_group_name_dns = "rgshwus326z"
+region = "westus3"
+region_code = "wus3"
+subnet_id_private_endpoints = "/subscriptions/XXXXXXXX-XXXX-XXXX-XXXX-XXXXXXXXXXXX/resourceGroups/rgwlwus326z/providers/Microsoft.Network/virtualNetworks/vnetwl1wus326z/subnets/snet-svc"
+tags = {
+  environment = "lab"
+  product     = "amlhub"
+}
+trusted_ip = "55.55.55.55"
+user_defined_outbound_rules_private_endpoint_resources = {
+  managed-pe-project1-storage-blob = {
+    serviceResourceId = "/subscriptions/XXXXXXXX-XXXX-XXXX-XXXX-XXXXXXXXXXXX/resourceGroups/rgamlproject1wus326z4/providers/Microsoft.Storage/storageAccounts/stamlp1wus326z4"
+    subresourceTarget = "blob"
+  }
+  managed-pe-aml-registry-prod = {
+    serviceResourceId = "/subscriptions/XXXXXXXX-XXXX-XXXX-XXXX-XXXXXXXXXXXX/resourceGroups/rgamlregistrywus326z4/providers/Microsoft.MachineLearningServices/registries/amlrpwus326z4"
+    subresourceTarget = "amlregistry"
+  }
+  managed-pe-aml-registry-nonprod = {
+    serviceResourceId = "/subscriptions/XXXXXXXX-XXXX-XXXX-XXXX-XXXXXXXXXXXX/resourceGroups/rgamlregistrywus326z4/providers/Microsoft.MachineLearningServices/registries/amlrnpwus326z4"
+    subresourceTarget = "amlregistry"
+  }
+}

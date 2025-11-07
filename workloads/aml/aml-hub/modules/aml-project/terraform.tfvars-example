@@ -1,0 +1,17 @@
+hub_aml_workspace_resource_id = "/subscriptions/XXXXXXXX-XXXX-XXXX-XXXX-XXXXXXXXXXXX/resourceGroups/rgamlhubwus326z4/providers/Microsoft.MachineLearningServices/workspaces/amlhubwus326z4"
+hub_managed_identity_principal_id = "a98512ca-1b2c-4aff-98aa-7d6ab970bf7c"
+hub_container_registry_id     = "/subscriptions/XXXXXXXX-XXXX-XXXX-XXXX-XXXXXXXXXXXX/resourceGroups/rgamlhubwus326z4/providers/Microsoft.ContainerRegistry/registries/acramlhubwus326z4"
+hub_storage_account_id        = "/subscriptions/XXXXXXXX-XXXX-XXXX-XXXX-XXXXXXXXXXXX/resourceGroups/rgamlhubwus326z4/providers/Microsoft.Storage/storageAccounts/stamlhubwus326z4"
+law_resource_id               = "/subscriptions/XXXXXXXX-XXXX-XXXX-XXXX-XXXXXXXXXXXX/resourceGroups/rgamlhubwus326z4/providers/Microsoft.OperationalInsights/workspaces/lawamlhubwus326z4"
+pe_ip_address_aml_hub         = "10.0.11.15"
+project_number                = 1
+region                        = "westus3"
+region_code                   = "wus3"
+random_string                 = "26z4"
+resource_group_name_dns       = "rgshwus326z"
+subnet_id_private_endpoints   = "/subscriptions/XXXXXXXX-XXXX-XXXX-XXXX-XXXXXXXXXXXX/resourceGroups/rgwlwus326z/providers/Microsoft.Network/virtualNetworks/vnetwl1wus326z/subnets/snet-svc"
+tags = {
+  environment = "lab"
+  product     = "amlhub"
+}
+user_object_id = "2e69d9f2-b5b3-482b-9c15-faeca086b632"

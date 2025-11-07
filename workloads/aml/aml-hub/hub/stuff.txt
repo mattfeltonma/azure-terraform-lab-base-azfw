@@ -1,0 +1,123 @@
+[0m[1mdata.azurerm_client_config.identity_config: Reading...[0m[0m
+[0m[1mdata.azurerm_subscription.current: Reading...[0m[0m
+[0m[1mdata.azurerm_client_config.current: Reading...[0m[0m
+[0m[1mazurerm_resource_group.rg_aml_hub: Refreshing state... [id=/subscriptions/97515654-3331-440d-8cdf-c1bdf2c0a2bf/resourceGroups/rgamlhubwus326z4][0m
+[0m[1mdata.azurerm_client_config.current: Read complete after 0s [id=Y2xpZW50Q29uZmlncy9jbGllbnRJZD1kMzRkNTFiMi0zNGI0LTQ1ZDktYjZhOC1jYzU0MjJlYjQwMGE7b2JqZWN0SWQ9M2FhYjQ3MTctZmFmNi00NjZmLTgwNjUtOGZhOGMwMDBmNDBjO3N1YnNjcmlwdGlvbklkPTk3NTE1NjU0LTMzMzEtNDQwZC04Y2RmLWMxYmRmMmMwYTJiZjt0ZW5hbnRJZD02YzgwZGUzMS1kNWU0LTQwMjktOTNlNC01YTJiM2MwZTEyOTk=][0m
+[0m[1mdata.azurerm_client_config.identity_config: Read complete after 0s [id=Y2xpZW50Q29uZmlncy9jbGllbnRJZD1kMzRkNTFiMi0zNGI0LTQ1ZDktYjZhOC1jYzU0MjJlYjQwMGE7b2JqZWN0SWQ9M2FhYjQ3MTctZmFmNi00NjZmLTgwNjUtOGZhOGMwMDBmNDBjO3N1YnNjcmlwdGlvbklkPTk3NTE1NjU0LTMzMzEtNDQwZC04Y2RmLWMxYmRmMmMwYTJiZjt0ZW5hbnRJZD02YzgwZGUzMS1kNWU0LTQwMjktOTNlNC01YTJiM2MwZTEyOTk=][0m
+[0m[1mdata.azurerm_subscription.current: Read complete after 0s [id=/subscriptions/97515654-3331-440d-8cdf-c1bdf2c0a2bf][0m
+[0m[1mazurerm_log_analytics_workspace.log_analytics_workspace_workload: Refreshing state... [id=/subscriptions/97515654-3331-440d-8cdf-c1bdf2c0a2bf/resourceGroups/rgamlhubwus326z4/providers/Microsoft.OperationalInsights/workspaces/lawamlhubwus326z4][0m
+[0m[1mazurerm_key_vault.key_vault_aml_hub: Refreshing state... [id=/subscriptions/97515654-3331-440d-8cdf-c1bdf2c0a2bf/resourceGroups/rgamlhubwus326z4/providers/Microsoft.KeyVault/vaults/kvamlhubwus326z4][0m
+[0m[1mazurerm_container_registry.acr_aml_hub: Refreshing state... [id=/subscriptions/97515654-3331-440d-8cdf-c1bdf2c0a2bf/resourceGroups/rgamlhubwus326z4/providers/Microsoft.ContainerRegistry/registries/acramlhubwus326z4][0m
+[0m[1mazurerm_key_vault.key_vault_aml_hub_cmk: Refreshing state... [id=/subscriptions/97515654-3331-440d-8cdf-c1bdf2c0a2bf/resourceGroups/rgamlhubwus326z4/providers/Microsoft.KeyVault/vaults/kvcmkamlhubwus326z4][0m
+[0m[1mtime_sleep.wait_log_analytics_workspace: Refreshing state... [id=2025-10-26T20:41:34Z][0m
+[0m[1mazurerm_storage_account.storage_account_aml_hub: Refreshing state... [id=/subscriptions/97515654-3331-440d-8cdf-c1bdf2c0a2bf/resourceGroups/rgamlhubwus326z4/providers/Microsoft.Storage/storageAccounts/stamlhubwus326z4][0m
+[0m[1mazurerm_application_insights.appins_aml_hub: Refreshing state... [id=/subscriptions/97515654-3331-440d-8cdf-c1bdf2c0a2bf/resourceGroups/rgamlhubwus326z4/providers/Microsoft.Insights/components/appinsamlhubwus326z4][0m
+[0m[1mazurerm_monitor_diagnostic_setting.diag_acr_aml_hub: Refreshing state... [id=/subscriptions/97515654-3331-440d-8cdf-c1bdf2c0a2bf/resourceGroups/rgamlhubwus326z4/providers/Microsoft.ContainerRegistry/registries/acramlhubwus326z4|diag-base][0m
+[0m[1mazurerm_key_vault_access_policy.access_policy_terraform_aml_hub_key_permissions: Refreshing state... [id=/subscriptions/97515654-3331-440d-8cdf-c1bdf2c0a2bf/resourceGroups/rgamlhubwus326z4/providers/Microsoft.KeyVault/vaults/kvcmkamlhubwus326z4/objectId/3aab4717-faf6-466f-8065-8fa8c000f40c][0m
+[0m[1mazurerm_monitor_diagnostic_setting.diag_key_vault_aml_hub_cmk: Refreshing state... [id=/subscriptions/97515654-3331-440d-8cdf-c1bdf2c0a2bf/resourceGroups/rgamlhubwus326z4/providers/Microsoft.KeyVault/vaults/kvcmkamlhubwus326z4|diag][0m
+[0m[1mazurerm_monitor_diagnostic_setting.diag_key_vault_aml_hub: Refreshing state... [id=/subscriptions/97515654-3331-440d-8cdf-c1bdf2c0a2bf/resourceGroups/rgamlhubwus326z4/providers/Microsoft.KeyVault/vaults/kvamlhubwus326z4|diag][0m
+[0m[1mazurerm_key_vault_key.key_aml_hub_cmk: Refreshing state... [id=https://kvcmkamlhubwus326z4.vault.azure.net/keys/cmkamlhub/714f96ea48384780b7ffa310933d1414][0m
+[0m[1mazurerm_private_endpoint.pe_storage_account_aml_hub_blob: Refreshing state... [id=/subscriptions/97515654-3331-440d-8cdf-c1bdf2c0a2bf/resourceGroups/rgamlhubwus326z4/providers/Microsoft.Network/privateEndpoints/pestamlhubwus326z4blob][0m
+[0m[1mazurerm_monitor_diagnostic_setting.diag_storage_aml_hub_blob: Refreshing state... [id=/subscriptions/97515654-3331-440d-8cdf-c1bdf2c0a2bf/resourceGroups/rgamlhubwus326z4/providers/Microsoft.Storage/storageAccounts/stamlhubwus326z4/blobServices/default|diag-base][0m
+[0m[1mazapi_resource.aml_hub: Refreshing state... [id=/subscriptions/97515654-3331-440d-8cdf-c1bdf2c0a2bf/resourceGroups/rgamlhubwus326z4/providers/Microsoft.MachineLearningServices/workspaces/amlhubwus326z4][0m
+[0m[1mazurerm_monitor_diagnostic_setting.diag_storage_aml_hub_file: Refreshing state... [id=/subscriptions/97515654-3331-440d-8cdf-c1bdf2c0a2bf/resourceGroups/rgamlhubwus326z4/providers/Microsoft.Storage/storageAccounts/stamlhubwus326z4/fileServices/default|diag-base][0m
+[0m[1mazurerm_monitor_diagnostic_setting.diag_storage_aml_hub_queue: Refreshing state... [id=/subscriptions/97515654-3331-440d-8cdf-c1bdf2c0a2bf/resourceGroups/rgamlhubwus326z4/providers/Microsoft.Storage/storageAccounts/stamlhubwus326z4/queueServices/default|diag-base][0m
+[0m[1mazurerm_monitor_diagnostic_setting.diag_storage_aml_hub_table: Refreshing state... [id=/subscriptions/97515654-3331-440d-8cdf-c1bdf2c0a2bf/resourceGroups/rgamlhubwus326z4/providers/Microsoft.Storage/storageAccounts/stamlhubwus326z4/tableServices/default|diag-base][0m
+[0m[1mtime_sleep.wait_aml_hub_system_identity: Refreshing state... [id=2025-10-26T21:05:09Z][0m
+[0m[1mazurerm_monitor_diagnostic_setting.diag_aml_hub: Refreshing state... [id=/subscriptions/97515654-3331-440d-8cdf-c1bdf2c0a2bf/resourceGroups/rgamlhubwus326z4/providers/Microsoft.MachineLearningServices/workspaces/amlhubwus326z4|diag-base][0m
+[0m[1mazurerm_private_endpoint.pe_aml_hub: Refreshing state... [id=/subscriptions/97515654-3331-440d-8cdf-c1bdf2c0a2bf/resourceGroups/rgamlhubwus326z4/providers/Microsoft.Network/privateEndpoints/peamlhubwus326z4workspace][0m
+[0m[1mazurerm_role_assignment.smi_aml_rg_azure_ai_net_conn_app: Refreshing state... [id=/subscriptions/97515654-3331-440d-8cdf-c1bdf2c0a2bf/resourceGroups/rgamlhubwus326z4/providers/Microsoft.Authorization/roleAssignments/1521babd-082a-51fc-87b8-a7b1a5c022ca][0m
+[0m[1mtime_sleep.wait_aml_hub_role_assignments_smi: Refreshing state... [id=2025-10-26T21:07:37Z][0m
+[0m[1mazurerm_private_endpoint.pe_storage_account_aml_hub_file: Refreshing state... [id=/subscriptions/97515654-3331-440d-8cdf-c1bdf2c0a2bf/resourceGroups/rgamlhubwus326z4/providers/Microsoft.Network/privateEndpoints/pestamlhubwus326z4file][0m
+[0m[1mazurerm_private_dns_a_record.aml_compute_instance_dns_record_auth: Refreshing state... [id=/subscriptions/97515654-3331-440d-8cdf-c1bdf2c0a2bf/resourceGroups/rgshwus326z/providers/Microsoft.Network/privateDnsZones/instances.azureml.ms/A/auth.westus3][0m
+[0m[1mazurerm_private_endpoint.pe_key_vault_aml_hub: Refreshing state... [id=/subscriptions/97515654-3331-440d-8cdf-c1bdf2c0a2bf/resourceGroups/rgamlhubwus326z4/providers/Microsoft.Network/privateEndpoints/pekvamlhubwus326z4vault][0m
+[0m[1mazurerm_private_endpoint.pe_container_registry_aml_hub: Refreshing state... [id=/subscriptions/97515654-3331-440d-8cdf-c1bdf2c0a2bf/resourceGroups/rgamlhubwus326z4/providers/Microsoft.Network/privateEndpoints/peacramlhubwus326z4registry][0m
+
+Terraform used the selected providers to generate the following execution
+plan. Resource actions are indicated with the following symbols:
+  [33m~[0m update in-place[0m
+[31m-[0m/[32m+[0m destroy and then create replacement[0m
+
+Terraform will perform the following actions:
+
+[1m  # azapi_resource.aml_hub[0m will be updated in-place
+[0m  [33m~[0m[0m resource "azapi_resource" "aml_hub" {
+      [33m~[0m[0m body                      = {
+          [33m~[0m[0m properties = {
+              [33m~[0m[0m managedNetwork                 = {
+                  [33m~[0m[0m outboundRules = {
+                      [32m+[0m[0m managed-pe-aml-registry-nonprod  = {
+                          [32m+[0m[0m category    = "UserDefined"
+                          [32m+[0m[0m destination = {
+                              [32m+[0m[0m serviceResourceId = "/subscriptions/97515654-3331-440d-8cdf-c1bdf2c0a2bf/resourceGroups/rgamlregistrywus326z4/providers/Microsoft.MachineLearningServices/registries/amlrnpwus326z4"
+                              [32m+[0m[0m subresourceTarget = "amlregistry"
+                            }
+                          [32m+[0m[0m type        = "PrivateEndpoint"
+                        }
+                      [32m+[0m[0m managed-pe-aml-registry-prod     = {
+                          [32m+[0m[0m category    = "UserDefined"
+                          [32m+[0m[0m destination = {
+                              [32m+[0m[0m serviceResourceId = "/subscriptions/97515654-3331-440d-8cdf-c1bdf2c0a2bf/resourceGroups/rgamlregistrywus326z4/providers/Microsoft.MachineLearningServices/registries/amlrpwus326z4"
+                              [32m+[0m[0m subresourceTarget = "amlregistry"
+                            }
+                          [32m+[0m[0m type        = "PrivateEndpoint"
+                        }
+                      [32m+[0m[0m managed-pe-project1-storage-blob = {
+                          [32m+[0m[0m category    = "UserDefined"
+                          [32m+[0m[0m destination = {
+                              [32m+[0m[0m serviceResourceId = "/subscriptions/97515654-3331-440d-8cdf-c1bdf2c0a2bf/resourceGroups/rgamlproject1wus326z4/providers/Microsoft.Storage/storageAccounts/stamlp1wus326z4"
+                              [32m+[0m[0m subresourceTarget = "blob"
+                            }
+                          [32m+[0m[0m type        = "PrivateEndpoint"
+                        }
+                        [90m# (24 unchanged attributes hidden)[0m[0m
+                    }
+                    [90m# (2 unchanged attributes hidden)[0m[0m
+                }
+                [90m# (12 unchanged attributes hidden)[0m[0m
+            }
+            tags       = {
+                environment = "lab"
+                product     = "amlhub"
+            }
+            [90m# (2 unchanged attributes hidden)[0m[0m
+        }
+        id                        = "/subscriptions/97515654-3331-440d-8cdf-c1bdf2c0a2bf/resourceGroups/rgamlhubwus326z4/providers/Microsoft.MachineLearningServices/workspaces/amlhubwus326z4"
+        name                      = "amlhubwus326z4"
+      [33m~[0m[0m output                    = {
+          [31m-[0m[0m identity   = {
+              [31m-[0m[0m principalId = "a98512ca-1b2c-4aff-98aa-7d6ab970bf7c"
+            }
+          [31m-[0m[0m properties = {
+              [31m-[0m[0m workspaceId = "fb672f84-33be-41d7-a6c2-5a5f2def0fd2"
+            }
+        } -> (known after apply)
+        tags                      = {
+            "environment" = "lab"
+            "product"     = "amlhub"
+        }
+        [90m# (9 unchanged attributes hidden)[0m[0m
+    }
+
+[1m  # azurerm_role_assignment.smi_aml_rg_azure_ai_net_conn_app[0m must be [1m[31mreplaced[0m
+[0m[31m-[0m/[32m+[0m[0m resource "azurerm_role_assignment" "smi_aml_rg_azure_ai_net_conn_app" {
+      [32m+[0m[0m condition_version                      = (known after apply)
+      [33m~[0m[0m id                                     = "/subscriptions/97515654-3331-440d-8cdf-c1bdf2c0a2bf/resourceGroups/rgamlhubwus326z4/providers/Microsoft.Authorization/roleAssignments/1521babd-082a-51fc-87b8-a7b1a5c022ca" -> (known after apply)
+      [33m~[0m[0m name                                   = "1521babd-082a-51fc-87b8-a7b1a5c022ca" -> (known after apply) [31m# forces replacement[0m[0m
+      [33m~[0m[0m principal_id                           = "a98512ca-1b2c-4aff-98aa-7d6ab970bf7c" -> (known after apply) [31m# forces replacement[0m[0m
+      [33m~[0m[0m principal_type                         = "ServicePrincipal" -> (known after apply)
+      [33m~[0m[0m role_definition_id                     = "/subscriptions/97515654-3331-440d-8cdf-c1bdf2c0a2bf/providers/Microsoft.Authorization/roleDefinitions/b556d68e-0be0-4f35-a333-ad7ee1ce17ea" -> (known after apply)
+      [32m+[0m[0m skip_service_principal_aad_check       = (known after apply)
+        [90m# (5 unchanged attributes hidden)[0m[0m
+    }
+
+[1mPlan:[0m 1 to add, 1 to change, 1 to destroy.
+[0m
+Changes to Outputs:
+  [33m~[0m[0m hub_workspace_aml_workspace_id                      = "fb672f84-33be-41d7-a6c2-5a5f2def0fd2" -> (known after apply)
+  [33m~[0m[0m hub_workspace_system_assigned_identity_principal_id = "a98512ca-1b2c-4aff-98aa-7d6ab970bf7c" -> (known after apply)
+[90m
+─────────────────────────────────────────────────────────────────────────────[0m
+
+Note: You didn't use the -out option to save this plan, so Terraform can't
+guarantee to take exactly these actions if you run "terraform apply" now.

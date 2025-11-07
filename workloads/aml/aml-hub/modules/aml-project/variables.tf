@@ -13,14 +13,15 @@ variable "hub_storage_account_id" {
   type = string
 }
 
-variable "project_storage_account_name" {
-  description = "The name of the storage account to use for the project data storage"
-  type = string
+variable "hub_managed_identity_principal_id" {
+  description = "The principal id of the AML Hub managed identity"
+  type        = string
 }
 
-variable "project_storage_account_id" {
-  description = "The resource id of the storage account to use for the project data storage"
-  type = string
+variable "project_number" {
+  description = "The number to add to project resources for unique naming"
+  type        = number
+  default     = 1
 }
 
 variable "law_resource_id" {
@@ -45,16 +46,6 @@ variable "region_code" {
 
 variable "random_string" {
   description = "The random string to append to the resource name"
-  type = string
-}
-
-variable "resource_group_id_workload" {
-  description = "The id of the resource group to deploy the project and its resources to"
-  type = string
-}
-
-variable "resource_group_name_workload" {
-  description = "The name of the resource group to deploy the project and its resources to"
   type = string
 }
 

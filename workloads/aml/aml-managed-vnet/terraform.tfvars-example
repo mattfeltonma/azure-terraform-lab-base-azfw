@@ -1,0 +1,23 @@
+random_string = "26z10"
+resource_group_name_dns = "rgshwus326z"
+region = "westus3"
+region_code = "wus3"
+subnet_id_private_endpoints = "/subscriptions/XXXXXXXX-XXXX-XXXX-XXXX-XXXXXXXXXXXX/resourceGroups/rgwlwus326z/providers/Microsoft.Network/virtualNetworks/vnetwl1wus326z/subnets/snet-svc"
+subscription_id_infrastructure = "XXXXXXXX-XXXX-XXXX-XXXX-XXXXXXXXXXXX"
+subscription_id_workload = "XXXXXXXX-XXXX-XXXX-XXXX-XXXXXXXXXXXX"
+tags = {
+  environment = "lab"
+  product     = "amlws"
+}
+trusted_ip = "55.55.55.55"
+user_object_id = "XXXXXXXX-XXXX-XXXX-XXXX-XXXXXXXXXXXX"
+user_defined_outbound_rules_private_endpoint_resources = {
+  "managed-pe-prod-registry" = {
+    serviceResourceId  = "/subscriptions/XXXXXXXX-XXXX-XXXX-XXXX-XXXXXXXXXXXX/resourceGroups/rgamlregistrypwus3326z10/providers/Microsoft.MachineLearningServices/registries/amlrpwus3326z10"
+    subresourceTarget  = "amlregistry"
+  }
+  "managed-pe-nonprod-registry" = {
+    serviceResourceId  = "/subscriptions/XXXXXXXX-XXXX-XXXX-XXXX-XXXXXXXXXXXX/resourceGroups/rgamlregistrynpwus3326z10/providers/Microsoft.MachineLearningServices/registries/amlrnpwus3326z10"
+    subresourceTarget  = "amlregistry"
+  }
+}

@@ -199,8 +199,11 @@ resource "azurerm_key_vault" "key_vault_aml_workspace" {
   tenant_id           = data.azurerm_client_config.current.tenant_id
   tags                = var.tags
 
-
   sku_name = "standard"
+
+  # Enabled for RBAC authorization
+  rbac_authorization_enabled = true
+  
   # Turn off purge protection so that Vault can be immediately purged
   purge_protection_enabled   = false
   soft_delete_retention_days = 7
