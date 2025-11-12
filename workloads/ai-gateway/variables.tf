@@ -1,5 +1,5 @@
 variable "ai_foundry_instances" {
-  description = "The list of AI Foundry instances to create backends for"
+  description = "The list of AI Foundry instances to create backends for. This should be the Foundry resources names"
   type = list(string)
 } 
 
