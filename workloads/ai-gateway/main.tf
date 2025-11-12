@@ -5,8 +5,6 @@
 ## Create resource group where resources in this template will be deployed to
 ##
 resource "azurerm_resource_group" "rg_ai_gateway" {
-  provider = azurerm.subscription_workload_production
-
   name     = "rgaigateway${var.region_code}${var.random_string}"
   location = var.region
   tags     = var.tags
@@ -54,14 +52,39 @@ resource "time_sleep" "sleep_law_creation" {
 
 ## Create a Private DNS Zone that be the namespace for the API Management instance
 ##
-resource "azurerm_private_dns_zone" "zone" {
+resource "azurerm_private_dns_zone" "private_dns_zone_apim" {
+  provider = azurerm.subscription_infrastructure
+
   depends_on = [
-    rg_ai_gateway
+    azurerm_resource_group.rg_ai_gateway
   ]
 
   name                = var.apim_private_dns_zone_name
-  resource_group_name = rg_ai_gateway.name
+  resource_group_name = var.resource_group_dns
   tags                = var.tags
+
+  lifecycle {
+    ignore_changes = [
+      tags["created_date"],
+      tags["created_by"]
+    ]
+  }
+}
+
+## Create the Private DNS Zone virtual network link to the shared services virtual network
+##
+resource "azurerm_private_dns_zone_virtual_network_link" "dns_vnet_link_apim" {
+  provider = azurerm.subscription_infrastructure
+
+  depends_on = [
+    azurerm_private_dns_zone.private_dns_zone_apim
+  ]
+
+  name                  = azurerm_private_dns_zone.private_dns_zone_apim.name
+  resource_group_name   = var.resource_group_dns
+  private_dns_zone_name = azurerm_private_dns_zone.private_dns_zone_apim.name
+  virtual_network_id    = var.virtual_network_id_shared_services
+  registration_enabled  = false
 
   lifecycle {
     ignore_changes = [
@@ -140,7 +163,7 @@ resource "azurerm_public_ip" "pip_apim_additional_regions" {
 }
 
 ## Create an Azure API Management service instance
-##
+## This resource creation takes about 40 minutes
 resource "azurerm_api_management" "apim" {
   depends_on = [
     azurerm_log_analytics_workspace.log_analytics_workspace_workload,
@@ -249,7 +272,7 @@ resource "azurerm_monitor_diagnostic_setting" "diag_apim" {
 }
 
 ## Create a custom domain names for the API Management instance
-##
+## This resource creation takes about 20 minutes
 resource "azurerm_api_management_custom_domain" "apim_custom_domains" {
   depends_on = [
     time_sleep.sleep_apim_rbac
@@ -258,22 +281,23 @@ resource "azurerm_api_management_custom_domain" "apim_custom_domains" {
   api_management_id = azurerm_api_management.apim.id
 
   gateway {
-    host_name                = "apim${var.random_string}.${var.apim_private_dns_zone_name}"
+    host_name                = "apim-example.${var.apim_private_dns_zone_name}"
     key_vault_certificate_id = var.key_vault_secret_id_versionless
+    default_ssl_binding      = true
   }
 
   management {
-    host_name                = "apim${var.random_string}.management.${var.apim_private_dns_zone_name}"
+    host_name                = "apim-example.management.${var.apim_private_dns_zone_name}"
     key_vault_certificate_id = var.key_vault_secret_id_versionless
   }
 
   scm {
-    host_name                = "apim${var.random_string}.scm.${var.apim_private_dns_zone_name}"
+    host_name                = "apim-example.scm.${var.apim_private_dns_zone_name}"
     key_vault_certificate_id = var.key_vault_secret_id_versionless
   }
 
   developer_portal {
-    host_name                = "apim${var.random_string}.developer.${var.apim_private_dns_zone_name}"
+    host_name                = "apim-example.developer.${var.apim_private_dns_zone_name}"
     key_vault_certificate_id = var.key_vault_secret_id_versionless
   }
 }
@@ -292,13 +316,14 @@ module "backend_circuit_breaker_aifoundry_instance" {
   for_each = {
     for foundry_name in var.ai_foundry_instances :
     foundry_name => {
-      name = "foundry-backend-${foundry_name}"
+      backend_name = "foundry-backend-${foundry_name}"
+      name         = "${foundry_name}"
     }
   }
 
   source       = "./modules/backend-circuit-breaker"
   apim_id      = azurerm_api_management.apim.id
-  backend_name = each.value.name
+  backend_name = each.value.backend_name
   url          = "https://${each.value.name}.openai.azure.com/openai"
 }
 
@@ -322,14 +347,32 @@ module "backend_pool_aifoundry_instances" {
   ]
 }
 
+########### Create API Management loggers
+###########
+###########
+
+## Create an API Management logger for Application Insights
+##
+resource "azurerm_api_management_logger" "apim_logger_appinsights" {
+  name                = "logger-appinsights"
+  api_management_name = azurerm_api_management.apim.name
+  resource_group_name = azurerm_resource_group.rg_ai_gateway.name
+  resource_id         = azurerm_application_insights.appins_api_management.id
+
+  application_insights {
+    instrumentation_key = azurerm_application_insights.appins_api_management.instrumentation_key
+  }
+}
+
 ########### Create an APIs in the API Management instance to expose the AI Foundry backends
 ###########
 ###########
 
 ## Create an API for the 2024-10-21 OpenAI Inferencing API
 ##
-resource "azurerm_api_management_api" "example" {
+resource "azurerm_api_management_api" "openai_original" {
   depends_on = [
+    azurerm_api_management_custom_domain.apim_custom_domains,
     module.backend_pool_aifoundry_instances
   ]
 
@@ -339,9 +382,409 @@ resource "azurerm_api_management_api" "example" {
   revision            = "1"
   display_name        = "Azure OpenAI Inferencing and Authoring API"
   path                = "openai"
+  api_type            = "http"
   protocols           = ["https"]
+  subscription_required = false
   import {
-    content_format = "swagger-link-json"
-    content_value  = "https://raw.githubusercontent.com/hashicorp/terraform-provider-azurerm/refs/heads/main/internal/services/apimanagement/testdata/api_management_api_schema_swagger.json"
+    content_format = "openapi+json"
+    content_value  = file("${path.module}/api-specs/2024-10-21-openai-inference.json")
   }
+}
+
+## Create diagnostic setting for the OpenAI original API for Application Insights
+##
+resource "azurerm_api_management_api_diagnostic" "diag_openai_original_api_appinsights" {
+  depends_on = [
+    azurerm_api_management_api.openai_original
+  ]
+
+  identifier               = "applicationinsights"
+  resource_group_name      = azurerm_resource_group.rg_ai_gateway.name
+  api_management_name      = azurerm_api_management.apim.name
+  api_name                 = azurerm_api_management_api.openai_original.name
+  api_management_logger_id = azurerm_api_management_logger.apim_logger_appinsights.id
+
+  sampling_percentage = 100
+  always_log_errors   = true
+  log_client_ip       = true
+  verbosity           = "information"
+  http_correlation_protocol = "W3C"
+}
+
+## Create diagnostic setting for the OpenAI original API for Azure Monitor
+##
+resource "azapi_resource" "diag_openai_original_api_monitor" {
+  depends_on = [
+    azurerm_api_management_api.openai_original
+  ]
+
+  type                      = "Microsoft.ApiManagement/service/apis/diagnostics@2024-05-01"
+  name                      = "azuremonitor"
+  parent_id                 = azurerm_api_management_api.openai_original.id
+  schema_validation_enabled = false
+  body = {
+    properties = {
+      loggerId = "${azurerm_api_management.apim.id}/loggers/azuremonitor"
+      alwaysLog = "allErrors"
+      verbosity = "information"
+      logClientIp = true
+      sampling = {
+        percentage = 100.0
+        samplingType = "fixed"
+      }
+      largeLanguageModel = {
+        logs = "enabled"
+        requests = {
+          maxSizeInBytes = 262144
+          messages = "all"
+        }
+        responses = {
+          maxSizeInBytes = 262144
+          messages = "all"
+        }
+      }
+    }
+  }
+}
+
+## Create an API for the v1 OpenAI API
+##
+resource "azurerm_api_management_api" "openai_v1" {
+  depends_on = [
+    azurerm_api_management_api.openai_original
+  ]
+
+  name                = "azure-openai-v1"
+  resource_group_name = azurerm_resource_group.rg_ai_gateway.name
+  api_management_name = azurerm_api_management.apim.name
+  revision            = "1"
+  display_name        = "Azure OpenAI v1 API"
+  path                = "openai-v1"
+  api_type            = "http"
+  protocols           = ["https"]
+  subscription_required = false
+  import {
+    content_format = "openapi+json"
+    content_value  = file("${path.module}/api-specs/v1-azure-openai.json")
+  }
+}
+
+## Create diagnostic setting for the OpenAI v1 API for Application Insights
+##
+resource "azurerm_api_management_api_diagnostic" "diag_openai_v1_api_appinsights" {
+  depends_on = [
+    azurerm_api_management_api.openai_v1
+  ]
+
+  identifier               = "applicationinsights"
+  resource_group_name      = azurerm_resource_group.rg_ai_gateway.name
+  api_management_name      = azurerm_api_management.apim.name
+  api_name                 = azurerm_api_management_api.openai_v1.name
+  api_management_logger_id = azurerm_api_management_logger.apim_logger_appinsights.id
+
+  sampling_percentage = 100
+  always_log_errors   = true
+  log_client_ip       = true
+  verbosity           = "information"
+  http_correlation_protocol = "W3C"
+}
+
+## Create diagnostic setting for the OpenAI v1 API for Azure Monitor
+##
+resource "azapi_resource" "diag_openai_v1_api_monitor" {
+  depends_on = [
+    azurerm_api_management_api.openai_v1
+  ]
+
+  type                      = "Microsoft.ApiManagement/service/apis/diagnostics@2024-05-01"
+  name                      = "azuremonitor"
+  parent_id                 = azurerm_api_management_api.openai_v1.id
+  schema_validation_enabled = false
+  body = {
+    properties = {
+      loggerId = "${azurerm_api_management.apim.id}/loggers/azuremonitor"
+      alwaysLog = "allErrors"
+      verbosity = "information"
+      logClientIp = true
+      sampling = {
+        percentage = 100.0
+        samplingType = "fixed"
+      }
+      largeLanguageModel = {
+        logs = "enabled"
+        requests = {
+          maxSizeInBytes = 262144
+          messages = "all"
+        }
+        responses = {
+          maxSizeInBytes = 262144
+          messages = "all"
+        }
+      }
+    }
+  }
+}
+
+########### Create an API Management Policies
+###########
+###########
+
+## Create an API Management policy for the OpenAI original API
+## 
+resource "azurerm_api_management_api_policy" "apim_policy_openai_original" {
+  depends_on = [
+    azurerm_api_management_api.openai_original
+  ]
+
+  api_name            = azurerm_api_management_api.openai_original.name
+  api_management_name = azurerm_api_management.apim.name
+  resource_group_name = azurerm_resource_group.rg_ai_gateway.name
+
+  xml_content = <<XML
+    <policies>
+      <inbound>
+          <base />
+          <!-- Evaluate the JWT and ensure it was issued by the right Entra ID tenant -->
+          <validate-jwt header-name="Authorization" failed-validation-httpcode="403" failed-validation-error-message="Forbidden">
+              <openid-config url="https://login.microsoftonline.com/${var.entra_id_tenant_id}/v2.0/.well-known/openid-configuration" />
+              <issuers>
+                  <issuer>https://sts.windows.net/${var.entra_id_tenant_id}/</issuer>
+              </issuers>
+          </validate-jwt>
+          <!-- Extract the Entra ID application id from the JWT -->
+          <set-variable name="appId" value="@(context.Request.Headers.GetValueOrDefault("Authorization",string.Empty).Split(' ').Last().AsJwt().Claims.GetValueOrDefault("appid", "00000000-0000-0000-0000-000000000000"))" />
+          <!-- Extract the deployment name from the uri path -->
+          <set-variable name="uriPath" value="@(context.Request.OriginalUrl.Path)" />
+          <set-variable name="deploymentName" value="@(System.Text.RegularExpressions.Regex.Match((string)context.Variables["uriPath"], "/deployments/([^/]+)").Groups[1].Value)" />
+          <!-- Set the X-Entra-App-ID header to the Entra ID application ID from the JWT -->
+          <set-header name="X-Entra-App-ID" exists-action="override">
+              <value>@(context.Variables.GetValueOrDefault<string>("appId"))</value>
+          </set-header>
+          <!-- If the request is a ChatCompletion request validate that it contains UserSecurityContext. If it doesn't reject it with status code 400 -->
+          <choose>
+            <when condition="@(context.Operation.Id.ToLower() == "chatcompletions_create" &&
+        (
+          context.Request.Body?.As<JObject>(true)?["user_security_context"] == null ||
+          context.Request.Body?.As<JObject>(true)?["user_security_context"]["end_user_id"] == null
+        )
+      )">
+                  <return-response>
+                      <set-status code="400" reason="Bad Request" />
+                      <set-body>@("UserSecurityContext property is required for this operation.")</set-body>
+                  </return-response>
+              </when>
+          </choose>
+          <!-- Throttle token usage based on the appid -->
+          <llm-token-limit counter-key="@(context.Variables.GetValueOrDefault<string>("appId","00000000-0000-0000-0000-000000000000"))" estimate-prompt-tokens="true" tokens-per-minute="10000" remaining-tokens-header-name="x-apim-remaining-token" tokens-consumed-header-name="x-apim-tokens-consumed" />
+          <!-- Emit token metrics to Application Insights -->
+          <llm-emit-token-metric namespace="openai-metrics">
+              <dimension name="model" value="@(context.Variables.GetValueOrDefault<string>("deploymentName","None"))" />
+              <dimension name="client_ip" value="@(context.Request.IpAddress)" />
+              <dimension name="appId" value="@(context.Variables.GetValueOrDefault<string>("appId","00000000-0000-0000-0000-000000000000"))" />
+          </llm-emit-token-metric>
+          <set-backend-service backend-id="${module.backend_pool_aifoundry_instances.name}" />
+      </inbound>
+      <backend>
+          <forward-request />
+      </backend>
+      <outbound>
+          <base />
+      </outbound>
+      <!-- Handle exceptions and customize error responses  -->
+      <on-error>
+          <base />
+          <set-header name="X-OperationName" exists-action="override">
+              <value>@( context.Operation.Name )</value>
+          </set-header>
+          <set-header name="X-OperationMethod" exists-action="override">
+              <value>@( context.Operation.Method )</value>
+          </set-header>
+          <set-header name="X-OperationUrl" exists-action="override">
+              <value>@( context.Operation.UrlTemplate )</value>
+          </set-header>
+          <set-header name="X-ApiName" exists-action="override">
+              <value>@( context.Api.Name )</value>
+          </set-header>
+          <set-header name="X-ApiPath" exists-action="override">
+              <value>@( context.Api.Path )</value>
+          </set-header>
+          <set-header name="X-LastErrorMessage" exists-action="override">
+              <value>@( context.LastError.Message )</value>
+          </set-header>
+          <set-header name="X-Entra-Id" exists-action="override">
+              <value>@( context.Variables.GetValueOrDefault<string>("appId") )</value>
+          </set-header>
+      </on-error>
+  </policies>
+XML
+}
+
+## Create an API Management policy for the OpenAI v1 API
+##
+resource "azurerm_api_management_api_policy" "apim_policy_openai_v1" {
+  api_name            = azurerm_api_management_api.openai_v1.name
+  api_management_name = azurerm_api_management.apim.name
+  resource_group_name = azurerm_resource_group.rg_ai_gateway.name
+
+  xml_content = <<XML
+    <policies>
+      <inbound>
+          <base />
+          <!-- Evaluate the JWT and ensure it was issued by the right Entra ID tenant -->
+          <validate-jwt header-name="Authorization" failed-validation-httpcode="403" failed-validation-error-message="Forbidden">
+              <openid-config url="https://login.microsoftonline.com/${var.entra_id_tenant_id}/v2.0/.well-known/openid-configuration" />
+              <issuers>
+                  <issuer>https://sts.windows.net/${var.entra_id_tenant_id}/</issuer>
+              </issuers>
+          </validate-jwt>
+          <!-- Extract the Entra ID application id from the JWT -->
+          <set-variable name="appId" value="@(context.Request.Headers.GetValueOrDefault("Authorization",string.Empty).Split(' ').Last().AsJwt().Claims.GetValueOrDefault("appid", "00000000-0000-0000-0000-000000000000"))" />
+          <!-- Extract the deployment name from the uri path -->
+          <set-variable name="uriPath" value="@(context.Request.OriginalUrl.Path)" />
+          <set-variable name="deploymentName" value="@(System.Text.RegularExpressions.Regex.Match((string)context.Variables["uriPath"], "/deployments/([^/]+)").Groups[1].Value)" />
+          <!-- Set the X-Entra-App-ID header to the Entra ID application ID from the JWT -->
+          <set-header name="X-Entra-App-ID" exists-action="override">
+              <value>@(context.Variables.GetValueOrDefault<string>("appId"))</value>
+          </set-header>
+          <!-- If the request is a ChatCompletion request validate that it contains UserSecurityContext. If it doesn't reject it with status code 400 -->
+          <choose>
+              <when condition="@(context.Operation.Id.ToLower() == "createChatCompletion" &&
+        (
+          context.Request.Body?.As<JObject>(true)?["user_security_context"] == null ||
+          context.Request.Body?.As<JObject>(true)?["user_security_context"]["end_user_id"] == null
+        )
+      )">
+                  <return-response>
+                      <set-status code="400" reason="Bad Request" />
+                      <set-body>@("UserSecurityContext property is required for this operation.")</set-body>
+                  </return-response>
+              </when>
+          </choose>
+          <!-- Throttle token usage based on the appid -->
+          <llm-token-limit counter-key="@(context.Variables.GetValueOrDefault<string>("appId","00000000-0000-0000-0000-000000000000"))" estimate-prompt-tokens="true" tokens-per-minute="10000" remaining-tokens-header-name="x-apim-remaining-token" tokens-consumed-header-name="x-apim-tokens-consumed" />
+          <!-- Emit token metrics to Application Insights -->
+          <llm-emit-token-metric namespace="openai-metrics">
+              <dimension name="model" value="@(context.Variables.GetValueOrDefault<string>("deploymentName","None"))" />
+              <dimension name="client_ip" value="@(context.Request.IpAddress)" />
+              <dimension name="appId" value="@(context.Variables.GetValueOrDefault<string>("appId","00000000-0000-0000-0000-000000000000"))" />
+          </llm-emit-token-metric>
+          <set-backend-service backend-id="${module.backend_pool_aifoundry_instances.name}" />
+      </inbound>
+      <backend>
+          <forward-request />
+      </backend>
+      <outbound>
+          <base />
+      </outbound>
+      <!-- Handle exceptions and customize error responses  -->
+      <on-error>
+          <base />
+          <set-header name="X-OperationName" exists-action="override">
+              <value>@( context.Operation.Name )</value>
+          </set-header>
+          <set-header name="X-OperationMethod" exists-action="override">
+              <value>@( context.Operation.Method )</value>
+          </set-header>
+          <set-header name="X-OperationUrl" exists-action="override">
+              <value>@( context.Operation.UrlTemplate )</value>
+          </set-header>
+          <set-header name="X-ApiName" exists-action="override">
+              <value>@( context.Api.Name )</value>
+          </set-header>
+          <set-header name="X-ApiPath" exists-action="override">
+              <value>@( context.Api.Path )</value>
+          </set-header>
+          <set-header name="X-LastErrorMessage" exists-action="override">
+              <value>@( context.LastError.Message )</value>
+          </set-header>
+          <set-header name="X-Entra-Id" exists-action="override">
+              <value>@( context.Variables.GetValueOrDefault<string>("appId") )</value>
+          </set-header>
+      </on-error>
+  </policies>
+XML
+}
+
+########### Create A records for the API Management instance in the Private DNS Zone
+###########
+###########
+
+## Create A record for the API Management gateway custom domain in the Private DNS Zone
+##
+resource "azurerm_private_dns_a_record" "dns_a_record_apim_gateway" {
+  provider = azurerm.subscription_infrastructure
+
+  depends_on = [
+    azurerm_api_management_custom_domain.apim_custom_domains,
+    azurerm_private_dns_zone_virtual_network_link.dns_vnet_link_apim
+  ]
+
+  name                = "apim-example"
+  zone_name           = azurerm_private_dns_zone.private_dns_zone_apim.name
+  resource_group_name = var.resource_group_dns
+  ttl                 = 10
+
+  records = [
+    azurerm_api_management.apim.private_ip_addresses[0]
+  ]
+}
+
+## Create A record for the API Management management custom domain in the Private DNS Zone
+##
+resource "azurerm_private_dns_a_record" "dns_a_record_apim_management" {
+  provider = azurerm.subscription_infrastructure
+
+  depends_on = [
+    azurerm_api_management_custom_domain.apim_custom_domains,
+    azurerm_private_dns_zone_virtual_network_link.dns_vnet_link_apim
+  ]
+
+  name                = "apim-example.management"
+  zone_name           = azurerm_private_dns_zone.private_dns_zone_apim.name
+  resource_group_name = var.resource_group_dns
+  ttl                 = 10
+
+  records = [
+    azurerm_api_management.apim.private_ip_addresses[0]
+  ]
+}
+
+## Create A record for the API Management developer portal custom domain in the Private DNS Zone
+##
+resource "azurerm_private_dns_a_record" "dns_a_record_apim_developer_portal" {
+  provider = azurerm.subscription_infrastructure
+
+  depends_on = [
+    azurerm_api_management_custom_domain.apim_custom_domains,
+    azurerm_private_dns_zone_virtual_network_link.dns_vnet_link_apim
+  ]
+
+  name                = "apim-example.developer"
+  zone_name           = azurerm_private_dns_zone.private_dns_zone_apim.name
+  resource_group_name = var.resource_group_dns
+  ttl                 = 10
+
+  records = [
+    azurerm_api_management.apim.private_ip_addresses[0]
+  ]
+}
+
+## Create A record for the API Management source control manager custom domain in the Private DNS Zone
+##
+resource "azurerm_private_dns_a_record" "dns_a_record_apim_source_control_manager" {
+  provider = azurerm.subscription_infrastructure
+
+  depends_on = [
+    azurerm_api_management_custom_domain.apim_custom_domains,
+    azurerm_private_dns_zone_virtual_network_link.dns_vnet_link_apim
+  ]
+
+  name                = "apim-example.scm"
+  zone_name           = azurerm_private_dns_zone.private_dns_zone_apim.name
+  resource_group_name = var.resource_group_dns
+  ttl                 = 10
+
+  records = [
+    azurerm_api_management.apim.private_ip_addresses[0]
+  ]
 }

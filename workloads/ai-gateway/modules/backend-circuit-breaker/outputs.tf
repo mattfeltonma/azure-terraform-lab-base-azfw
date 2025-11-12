@@ -7,3 +7,8 @@ output "name" {
   value       = azapi_resource.backend.name
   description = "The name of the API Management backend with circuit breaker"
 }
+
+output "url" {
+  value       = var.url
+  description = "The URL of the API Management backend with circuit breaker"
+}

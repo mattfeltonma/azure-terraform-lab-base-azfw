@@ -14,6 +14,11 @@ variable "customer_managed_public_ip" {
   default     = false
 }
 
+variable "entra_id_tenant_id" {
+  description = "The Entra ID tenant id where the API Management instance will be created"
+  type        = string
+}
+
 variable "key_vault_id" {
   description = "The Key Vault resource id the API Management instance will have access to"
   type        = string
@@ -24,11 +29,6 @@ variable "key_vault_secret_id_versionless" {
   type        = string
 }
 
-variable "law_resource_id" {
-  description = "The resource id of the Log Analytics Workspace to send diagnostic logs to"
-  type        = string
-}
-
 variable "publisher_name" {
   description = "The name of the publisher to display in the Azure API Management instance"
   type        = string
@@ -36,11 +36,6 @@ variable "publisher_name" {
 
 variable "publisher_email" {
   description = "The email address of the publisher to display in the Azure API Management instance"
-  type        = string
-}
-
-variable "purpose" {
-  description = "The three character purpose of the resource"
   type        = string
 }
 
@@ -69,16 +64,9 @@ variable "regions_additional" {
   default = []
 }
 
-variable "secondary_location" {
-  description = "The secondary location to deploy an API Gateway in the multi-region configuration"
+variable "resource_group_dns" {
+  description = "The resource group name where the Private DNS Zones should be deployed"
   type        = string
-  default     = null
-}
-
-variable "secondary_location_code" {
-  description = "The location code of the secondary region to append to the resource name"
-  type        = string
-  default     = null
 }
 
 variable "sku" {
@@ -92,12 +80,6 @@ variable "subnet_id" {
   type        = string
 }
 
-variable "subnet_id_secondary" {
-  description = "The subnet id to deploy the primary API Gateway to"
-  type        = string
-  default     = null
-}
-
 variable "subscription_id_infrastructure" {
   description = "The subscription id where the shared infrastructure resources are deployed"
   type        = string
@@ -106,4 +88,9 @@ variable "subscription_id_infrastructure" {
 variable "tags" {
   description = "The tags to apply to the resource"
   type        = map(string)
+}
+
+variable "virtual_network_id_shared_services" {
+  description = "The shared services virtual network id"
+  type        = string
 }
