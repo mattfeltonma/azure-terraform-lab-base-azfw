@@ -136,4 +136,4 @@ terraform apply
 
 ## Post-Deployment
 
-Once fully deployed you can use the [Jupyter notebook code sample](./sample-code/notebook.ipynb) provided in this repository.
+Once fully deployed you can use the [Jupyter notebook code sample](./sample-code/notebook.ipynb) provided in this repository. You need to manually import the authoring API for now. When I get around to it, I'll merge the two API specs.
