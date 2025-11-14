@@ -116,6 +116,145 @@ resource "azurerm_application_insights" "appins_api_management" {
   }
 }
 
+########### Create the AI Foundry Accounts and deploy the gpt4-o model
+###########
+###########
+
+## Create AI Foundry accounts to act as the backends for the API Management instance
+##
+resource "azurerm_cognitive_account" "ai_foundry_accounts" {
+  depends_on = [
+    azurerm_resource_group.rg_ai_gateway,
+    azurerm_log_analytics_workspace.log_analytics_workspace_workload
+  ]
+
+  for_each = local.ai_foundry_regions
+
+  name                = "aif${each.value.region_code}${var.random_string}"
+  location            = each.value.region
+  resource_group_name = azurerm_resource_group.rg_ai_gateway.name
+  tags = var.tags
+
+  # Create an AI Foundry Account to support Foundry Projects
+  kind = "AIServices"
+  sku_name = "S0"
+  project_management_enabled = true
+
+  # Set custom subdomain name for DNS names created for this Foundry resource
+  custom_subdomain_name = "aif${each.value.region_code}${var.random_string}"
+
+  # Block public network access to the Foundry account
+  public_network_access_enabled = false
+
+  identity {
+    type = "SystemAssigned"
+  }
+
+  lifecycle {
+    ignore_changes = [
+      tags["created_date"],
+      tags["created_by"]
+    ]
+  }
+}
+
+## Deploy GPT 4.1 model to the Foundry accounts
+##
+resource "azurerm_cognitive_deployment" "gpt4o_chat_model_deployments" {
+  depends_on = [
+    azurerm_cognitive_account.ai_foundry_accounts
+  ]
+
+  for_each = azurerm_cognitive_account.ai_foundry_accounts
+
+  name                 = "gpt-4o"
+  cognitive_account_id = each.value.id
+
+  sku {
+    name     = "GlobalStandard"
+    capacity = 100
+  }
+
+  model {
+    format = "OpenAI"
+    name   = "gpt-4o"
+  }
+}
+
+## Create a diagnostic setting for the AI Foundry accounts to send logs to the Log Analytics Workspace
+##
+resource "azurerm_monitor_diagnostic_setting" "diag_aifoundry_accounts" {
+  depends_on = [
+    azurerm_cognitive_account.ai_foundry_accounts
+  ]
+
+  for_each = azurerm_cognitive_account.ai_foundry_accounts
+
+  name                       = "diag-base"
+  target_resource_id         = each.value.id
+  log_analytics_workspace_id = azurerm_log_analytics_workspace.log_analytics_workspace_workload.id
+
+  enabled_log {
+    category = "Audit"
+  }
+
+  enabled_log {
+    category = "AzureOpenAIRequestUsage"
+  }
+
+  enabled_log {
+    category = "RequestResponse"
+  }
+
+  enabled_log {
+    category = "Trace"
+  }
+}
+
+## Create Private Endpoint for AI Foundry account
+##
+resource "azurerm_private_endpoint" "pe_aifoundry_accounts" {
+  provider = azurerm.subscription_infrastructure
+
+  depends_on = [
+    azurerm_cognitive_account.ai_foundry_accounts,
+    azurerm_cognitive_deployment.gpt4o_chat_model_deployments
+  ]
+
+  for_each = azurerm_cognitive_account.ai_foundry_accounts
+
+  name                = "pe${each.value.name}account"
+  location            = var.region
+  resource_group_name = azurerm_resource_group.rg_ai_gateway.name
+  tags                = var.tags
+  subnet_id           = var.subnet_id_private_endpoints
+
+  custom_network_interface_name = "nic${each.value.name}account"
+
+  private_service_connection {
+    name                           = "peconn${each.value.name}account"
+    private_connection_resource_id = each.value.id
+    subresource_names              = ["account"]
+    is_manual_connection           = false
+  }
+
+  private_dns_zone_group {
+    name = "zoneconn${each.value.name}account"
+    private_dns_zone_ids = [
+      "/subscriptions/${var.subscription_id_infrastructure}/resourceGroups/${var.resource_group_dns}/providers/Microsoft.Network/privateDnsZones/privatelink.services.ai.azure.com",
+      "/subscriptions/${var.subscription_id_infrastructure}/resourceGroups/${var.resource_group_dns}/providers/Microsoft.Network/privateDnsZones/privatelink.openai.azure.com",
+      "/subscriptions/${var.subscription_id_infrastructure}/resourceGroups/${var.resource_group_dns}/providers/Microsoft.Network/privateDnsZones/privatelink.cognitiveservices.azure.com"
+    ]
+  }
+
+  lifecycle {
+    ignore_changes = [
+      tags["created_date"],
+      tags["created_by"]
+    ]
+  }
+}
+
 ########### Create the API Management instance and its dependent resources
 ###########
 ###########
@@ -310,20 +449,15 @@ resource "azurerm_api_management_custom_domain" "apim_custom_domains" {
 ##
 module "backend_circuit_breaker_aifoundry_instance" {
   depends_on = [
-    azurerm_api_management.apim
+    azurerm_api_management.apim,
+    azurerm_cognitive_account.ai_foundry_accounts
   ]
 
-  for_each = {
-    for foundry_name in var.ai_foundry_instances :
-    foundry_name => {
-      backend_name = "foundry-backend-${foundry_name}"
-      name         = "${foundry_name}"
-    }
-  }
+  for_each = azurerm_cognitive_account.ai_foundry_accounts
 
   source       = "./modules/backend-circuit-breaker"
   apim_id      = azurerm_api_management.apim.id
-  backend_name = each.value.backend_name
+  backend_name = each.value.name
   url          = "https://${each.value.name}.openai.azure.com/openai"
 }
 
@@ -788,3 +922,61 @@ resource "azurerm_private_dns_a_record" "dns_a_record_apim_source_control_manage
     azurerm_api_management.apim.private_ip_addresses[0]
   ]
 }
+
+########### Create non-human role assignments
+###########
+###########
+
+## Create Azure RBAC Role assignment granting the API Management managed identity
+## the Azure OpenAI User role on the AI Foundry accounts. This can be used to demonstrate
+## authentication offloading at the API Management layer.
+resource "azurerm_role_assignment" "apim_perm_aifoundry_accounts_openai_user" {
+  depends_on = [
+    azurerm_api_management.apim,
+    azurerm_cognitive_account.ai_foundry_accounts
+  ]
+
+  for_each = azurerm_cognitive_account.ai_foundry_accounts
+
+  name                 = uuidv5("dns", "${azurerm_api_management.apim.identity[0].principal_id}${each.value.name}openaiuser")
+  scope                = each.value.id
+  role_definition_name = "Cognitive Services OpenAI User"
+  principal_id         = azurerm_api_management.apim.identity[0].principal_id
+}
+
+## Create Azure RBAC Role assignment granting the user provided service principal
+## the Azure OpenAI User role on the AI Foundry accounts. This can be used to demonstrate
+## the OAuth client credentials flow
+resource "azurerm_role_assignment" "sp_perm_aifoundry_accounts_openai_user" {
+  depends_on = [
+    azurerm_api_management.apim,
+    azurerm_cognitive_account.ai_foundry_accounts
+  ]
+
+  for_each = azurerm_cognitive_account.ai_foundry_accounts
+
+  name                 = uuidv5("dns", "${var.service_principal_object_id}${each.value.name}openaiuser")
+  scope                = each.value.id
+  role_definition_name = "Cognitive Services OpenAI User"
+  principal_id         = var.service_principal_object_id
+}
+
+########### Create human role-assignments
+###########
+###########
+
+## Create Azure RBAC Role assignment graintg the user the Azure OpenAI User role
+## on the AI Foundry accounts. This can be used to demonstrate the OAuth On-Behalf-Of flow
+resource "azurerm_role_assignment" "user_perm_aifoundry_accounts_openai_user" {
+    depends_on = [
+      azurerm_api_management.apim,
+      azurerm_cognitive_account.ai_foundry_accounts
+    ]
+  
+    for_each = azurerm_cognitive_account.ai_foundry_accounts
+  
+    name                 = uuidv5("dns", "${var.user_object_id}${each.value.name}openaiuser")
+    scope                = each.value.id
+    role_definition_name = "Cognitive Services OpenAI User"
+    principal_id         = var.user_object_id
+  }

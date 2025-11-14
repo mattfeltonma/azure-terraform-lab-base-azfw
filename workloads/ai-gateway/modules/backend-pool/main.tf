@@ -6,7 +6,7 @@ resource "azapi_resource" "backend" {
   body = {
     properties = {
       description = "This is a load balanced pool for ${var.pool_name}"
-      type        = "pool"
+      type        = "Pool"
       pool = {
         services = var.backends
       }

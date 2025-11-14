@@ -1,21 +1,19 @@
-ai_foundry_instances = [ 
-    "myopenai_instance1",
-    "myopenai_instance2"
-]
-
-apim_private_dns_zone_name = "apim.jogcloud.com"
+apim_private_dns_zone_name = "apim.mycustomapimdomain.com"
 customer_managed_public_ip = false
-entra_id_tenant_id = "XXXXXXXX-XXXX-XXXX-XXXX-XXXXXXXXXXXXXXXX"
-key_vault_id = "/subscriptions/XXXXXXXX-XXXX-XXXX-XXXX-XXXXXXXXXXXXXXXX/resourceGroups/rg-centralcredentials/providers/Microsoft.KeyVault/vaults/kvcentraljog"
-key_vault_secret_id_versionless = "https://kvcentraljog.vault.azure.net/secrets/apim"
-publisher_name = "jogcloud"
-publisher_email = "webguy@thewebsiteisdown.com"
+entra_id_tenant_id = "XXXXXXXX-XXXX-XXXX-XXXX-XXXXXXXXXXXX"
+key_vault_id = "/subscriptions/XXXXXXXX-XXXX-XXXX-XXXX-XXXXXXXXXXXX/resourceGroups/rg-centralcredentials/providers/Microsoft.KeyVault/vaults/kvcentraljog"
+key_vault_secret_id_versionless = "https://mykeyvault.vault.azure.net/secrets/apim"
+publisher_name = "mypublisher"
+publisher_email = "someguy@somedomain.com"
 random_string = "26z"
 region = "westus3"
 region_code = "wus3"
 resource_group_dns = "rgshwus326z"
+service_principal_object_id = "XXXXXXXX-XXXX-XXXX-XXXX-XXXXXXXXXXXX"
 sku = "Developer_1"
-subnet_id = "/subscriptions/XXXXXXXX-XXXX-XXXX-XXXX-XXXXXXXXXXXXXXXX/resourceGroups/rgwlwus326z/providers/Microsoft.Network/virtualNetworks/vnetwl1wus326z/subnets/snet-apim"
-subscription_id_infrastructure = "XXXXXXXX-XXXX-XXXX-XXXX-XXXXXXXXXXXXXXXX"
+subnet_id = "/subscriptions/XXXXXXXX-XXXX-XXXX-XXXX-XXXXXXXXXXXX/resourceGroups/rgwlwus326z/providers/Microsoft.Network/virtualNetworks/vnetwl1wus326z/subnets/snet-apim"
+subnet_id_private_endpoints = "/subscriptions/XXXXXXXX-XXXX-XXXX-XXXX-XXXXXXXXXXXX/resourceGroups/rgwlwus326z/providers/Microsoft.Network/virtualNetworks/vnetwl1wus326z/subnets/snet-svc"
+subscription_id_infrastructure = "XXXXXXXX-XXXX-XXXX-XXXX-XXXXXXXXXXXX"
 tags = {environment = "lab", product = "apim"}
-virtual_network_id_shared_services = "/subscriptions/XXXXXXXX-XXXX-XXXX-XXXX-XXXXXXXXXXXXXXXX/resourceGroups/rgshwus326z/providers/Microsoft.Network/virtualNetworks/vnetsswus326z"
+user_object_id = "XXXXXXXX-XXXX-XXXX-XXXX-XXXXXXXXXXXX"
+virtual_network_id_shared_services = "/subscriptions/XXXXXXXX-XXXX-XXXX-XXXX-XXXXXXXXXXXX/resourceGroups/rgshwus326z/providers/Microsoft.Network/virtualNetworks/vnetsswus326z"

@@ -1,8 +1,3 @@
-variable "ai_foundry_instances" {
-  description = "The list of AI Foundry instances to create backends for. This should be the Foundry resources names"
-  type = list(string)
-} 
-
 variable "apim_private_dns_zone_name" {
   description = "The name of the Private DNS Zone to create for the API Management instance"
   type        = string
@@ -20,12 +15,12 @@ variable "entra_id_tenant_id" {
 }
 
 variable "key_vault_id" {
-  description = "The Key Vault resource id the API Management instance will have access to"
+  description = "The Key Vault resource id of the workload Key Vault."
   type        = string
 }
 
 variable "key_vault_secret_id_versionless" {
-  description = "The versionless Key Vault secret id for the TLS certificate to use for the API Management instance custom domain"
+  description = "The versionless Key Vault secret id for the TLS certificate to use for the API Management instance custom domain. This must exist in the workload Key Vault"
   type        = string
 }
 
@@ -54,6 +49,7 @@ variable "region_code" {
   type        = string
 }
 
+# Not used in this one but keeping it here so I remember what the syntax looks like
 variable "regions_additional" {
   description = "Additional regions to deploy API Management Gateways to and the corresponding subnets the gateway should be deployed to"
   type = list(object({
@@ -75,8 +71,18 @@ variable "sku" {
   default     = "Developer_1"
 }
 
+variable "service_principal_object_id" {
+  description = "The object id of the service principal that will be granted permission to the AI Foundry instances. This is used when using a service principal in the code"
+  type        = string
+}
+
 variable "subnet_id" {
   description = "The subnet id to deploy the primary API Gateway to"
+  type        = string
+}
+
+variable "subnet_id_private_endpoints" {
+  description = "The subnet id to deploy the Private Endpoints to"
   type        = string
 }
 
@@ -88,6 +94,11 @@ variable "subscription_id_infrastructure" {
 variable "tags" {
   description = "The tags to apply to the resource"
   type        = map(string)
+}
+
+variable "user_object_id" {
+  description = "The object id of the user that will be granted permission to the AI Foundry instances. This is used when not using a service principal in the code"
+  type        = string
 }
 
 variable "virtual_network_id_shared_services" {

@@ -31,7 +31,7 @@ resource "azapi_resource" "backend" {
           }
         ]
       }
-      description = "This is an API Management backend pool for resource ${var.backend_name}"
+      description = "This is an API Management backend for resource ${var.backend_name}"
       type        = "single"
       protocol = "http"
       url         = var.url
