@@ -33,6 +33,9 @@ Hope any bit of this code helps save you some time or learn something new!
 ## Updates
 
 ### 2025
+* **November 14, 2025**
+  * Added [AI Gateway workload](/workloads/ai-gateway/) plugin
+
 * **October 17, 2025**
   * Added AML Hub workload
   * Added AML with VNet injection
