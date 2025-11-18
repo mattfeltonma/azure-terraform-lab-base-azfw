@@ -4,71 +4,71 @@ locals {
 
   # AML managed virtual network outbound rules to allow for VS Code SSH connectivity to Compute Instances
   vscode_ssh_outbound_fqdn_rules = {
-          AllowVsCodeDevWildcard = {
-            type        = "FQDN"
-            destination = "*.vscode.dev"
-            category    = "UserDefined"
-          }
-          AllowVsCodeBlob = {
-            type        = "FQDN"
-            destination = "vscode.blob.core.windows.net"
-            category    = "UserDefined"
-          }
-          AllowGalleryCdnWildcard = {
-            type        = "FQDN"
-            destination = "*.gallerycdn.vsassets.io"
-            category    = "UserDefined"
-          }
-          AllowRawGithub = {
-            type        = "FQDN"
-            destination = "raw.githubusercontent.com"
-            category    = "UserDefined"
-          }
-          AllowVsCodeUnpkWildcard = {
-            type        = "FQDN"
-            destination = "*.vscode-unpkg.net"
-            category    = "UserDefined"
-          }
-          AllowVsCodeCndWildcard = {
-            type        = "FQDN"
-            destination = "*.vscode-cdn.net"
-            category    = "UserDefined"
-          }
-          AllowVsCodeExperimentsWildcard = {
-            type        = "FQDN"
-            destination = "*.vscodeexperiments.azureedge.net"
-            category    = "UserDefined"
-          }
-          AllowDefaultExpTas = {
-            type        = "FQDN"
-            destination = "default.exp-tas.com"
-            category    = "UserDefined"
-          }
-          AllowCodeVisualStudio = {
-            type        = "FQDN"
-            destination = "code.visualstudio.com"
-            category    = "UserDefined"
-          }
-          AllowUpdateCodeVisualStudio = {
-            type        = "FQDN"
-            destination = "update.code.visualstudio.com"
-            category    = "UserDefined"
-          }
-          AllowVsMsecndNet = {
-            type        = "FQDN"
-            destination = "*.vo.msecnd.net"
-            category    = "UserDefined"
-          }
-          AllowMarketplaceVisualStudio = {
-            type        = "FQDN"
-            destination = "marketplace.visualstudio.com"
-            category    = "UserDefined"
-          }
-          AllowVsCodeDownload = {
-            type        = "FQDN"
-            destination = "vscode.download.prss.microsoft.com"
-            category    = "UserDefined"
-          }
+    AllowVsCodeDevWildcard = {
+      type        = "FQDN"
+      destination = "*.vscode.dev"
+      category    = "UserDefined"
+    }
+    AllowVsCodeBlob = {
+      type        = "FQDN"
+      destination = "vscode.blob.core.windows.net"
+      category    = "UserDefined"
+    }
+    AllowGalleryCdnWildcard = {
+      type        = "FQDN"
+      destination = "*.gallerycdn.vsassets.io"
+      category    = "UserDefined"
+    }
+    AllowRawGithub = {
+      type        = "FQDN"
+      destination = "raw.githubusercontent.com"
+      category    = "UserDefined"
+    }
+    AllowVsCodeUnpkWildcard = {
+      type        = "FQDN"
+      destination = "*.vscode-unpkg.net"
+      category    = "UserDefined"
+    }
+    AllowVsCodeCndWildcard = {
+      type        = "FQDN"
+      destination = "*.vscode-cdn.net"
+      category    = "UserDefined"
+    }
+    AllowVsCodeExperimentsWildcard = {
+      type        = "FQDN"
+      destination = "*.vscodeexperiments.azureedge.net"
+      category    = "UserDefined"
+    }
+    AllowDefaultExpTas = {
+      type        = "FQDN"
+      destination = "default.exp-tas.com"
+      category    = "UserDefined"
+    }
+    AllowCodeVisualStudio = {
+      type        = "FQDN"
+      destination = "code.visualstudio.com"
+      category    = "UserDefined"
+    }
+    AllowUpdateCodeVisualStudio = {
+      type        = "FQDN"
+      destination = "update.code.visualstudio.com"
+      category    = "UserDefined"
+    }
+    AllowVsMsecndNet = {
+      type        = "FQDN"
+      destination = "*.vo.msecnd.net"
+      category    = "UserDefined"
+    }
+    AllowMarketplaceVisualStudio = {
+      type        = "FQDN"
+      destination = "marketplace.visualstudio.com"
+      category    = "UserDefined"
+    }
+    AllowVsCodeDownload = {
+      type        = "FQDN"
+      destination = "vscode.download.prss.microsoft.com"
+      category    = "UserDefined"
+    }
   }
 
   # AML managed virtual network outbound rules to allow access to Python package index
@@ -153,18 +153,19 @@ locals {
 
   # AML managed virtual network outbound rules defined in variable for the template
   user_defined_outbound_pe_rules = {
-    for k, v in var.user_defined_outbound_rules_private_endpoint_resources : 
+    for k, v in var.user_defined_outbound_rules_private_endpoint_resources :
     k => {
       category = "UserDefined"
       type     = "PrivateEndpoint"
       destination = {
-        serviceResourceId  = v.serviceResourceId
-        subresourceTarget  = v.subresourceTarget
+        serviceResourceId = v.serviceResourceId
+        subresourceTarget = v.subresourceTarget
       }
     }
   }
 
   ##### Create other local values
-  compute_instance_name   = "vmci${var.region_code}${var.random_string}"
-  compute_cluster_name    = "vmccb${var.region_code}${var.random_string}"
+  workspace_name        = "amlws${var.region_code}${var.random_string}"
+  compute_instance_name = "vmci${var.region_code}${var.random_string}"
+  compute_cluster_name  = "vmccb${var.region_code}${var.random_string}"
 }

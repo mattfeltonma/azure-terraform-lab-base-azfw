@@ -9,8 +9,13 @@ output "aml_workspace_resource_id" {
 }
 
 output "aml_workspace_system_assigned_identity_principal_id" {
-  value       = azapi_resource.aml_workspace.output.identity.principalId
+  value       = var.workspace_umi ? null : azapi_resource.aml_workspace.output.identity.principalId
   description = "The principal id of the AML Workspace system assigned identity"
+}
+
+output "aml_workspace_user_assigned_identity_principal_id" {
+  value       = var.workspace_umi ? azurerm_user_assigned_identity.umi_aml_workspace[0].principal_id : null
+  description = "The principal id of the AML Workspace user assigned identity"
 }
 
 output "aml_workspace_aml_workspace_id" {

@@ -390,7 +390,7 @@ resource "azurerm_key_vault" "key_vault_aml_workspace_cmk" {
   sku_name = "standard"
 
   # Disable RBAC authorization and use local access policies because this is required for Service-Side Encryption with CMK for AML Workspaces
-  rbac_authorization_enabled = false
+  rbac_authorization_enabled = true
 
   # Turn on purge protection because it is required for CMK usage
   purge_protection_enabled   = true
@@ -405,6 +405,8 @@ resource "azurerm_key_vault" "key_vault_aml_workspace_cmk" {
     default_action             = "Deny"
     bypass                     = "AzureServices"
     virtual_network_subnet_ids = []
+
+    # This is only for my lab
     ip_rules = [
       var.trusted_ip
     ]
@@ -440,41 +442,13 @@ resource "azurerm_monitor_diagnostic_setting" "diag_key_vault_aml_workspace_cmk"
   }
 }
 
-## Required only for this lab to ensure service principal from Terraform can access data plane of the Key Vault for re-applies
-##
-resource "azurerm_key_vault_access_policy" "access_policy_terraform_aml_workspace_key_permissions" {
-  depends_on = [
-    azurerm_key_vault.key_vault_aml_workspace_cmk
-  ]
-
-  key_vault_id = azurerm_key_vault.key_vault_aml_workspace_cmk.id
-  tenant_id    = data.azurerm_client_config.current.tenant_id
-  object_id    = data.azurerm_client_config.current.object_id
-
-  key_permissions = [
-    "Get",
-    "Create",
-    "Delete",
-    "List",
-    "Update",
-    "Import",
-    "Recover",
-    "Backup",
-    "Restore",
-    "GetRotationPolicy",
-    "SetRotationPolicy",
-    "Rotate"
-  ]
-}
-
 ## Create the CMK that will be used to encrypt the AML Workspace
 ##
 resource "azurerm_key_vault_key" "key_aml_workspace_cmk" {
   provider = azurerm.subscription_workload
 
   depends_on = [
-    azurerm_key_vault.key_vault_aml_workspace_cmk,
-    azurerm_key_vault_access_policy.access_policy_terraform_aml_workspace_key_permissions
+    azurerm_key_vault.key_vault_aml_workspace_cmk
   ]
 
   name         = "cmkamlws"
@@ -496,6 +470,169 @@ resource "azurerm_key_vault_key" "key_aml_workspace_cmk" {
   }
 }
 
+########## Create user-assigned managed identity for AML Workspace
+##########
+##########
+
+## Create a user-assigned managed identity for the AML Workspace
+##
+resource "azurerm_user_assigned_identity" "umi_aml_workspace" {
+  provider = azurerm.subscription_workload
+
+  depends_on = [
+    azurerm_resource_group.rg_aml_workspace,
+    azurerm_storage_account.storage_account_aml_workspace,
+    azurerm_key_vault.key_vault_aml_workspace,
+    azurerm_key_vault.key_vault_aml_workspace_cmk
+  ]
+
+  count = var.workspace_umi ? 1 : 0
+
+  name                = "umi${local.workspace_name}"
+  location            = var.region
+  resource_group_name = azurerm_resource_group.rg_aml_workspace.name
+  tags                = var.tags
+
+  lifecycle {
+    ignore_changes = [
+      tags["created_date"],
+      tags["created_by"]
+    ]
+  }
+}
+
+## Pause for 10 seconds to allow the AML Workspace managed identity to be replicated through Entra ID
+##
+resource "time_sleep" "wait_umi_aml_workspace_identity" {
+  depends_on = [
+    azurerm_user_assigned_identity.umi_aml_workspace
+  ]
+
+  count = var.workspace_umi ? 1 : 0
+
+  create_duration = "10s"
+}
+
+## Create Azure RBAC Role Assignment granting the Azure AI Administrator role on the
+## resource group to the AML Workspace user-assigned managed identity
+resource "azurerm_role_assignment" "umi_aml_workspace_azure_ai_administrator" {
+  provider = azurerm.subscription_workload
+
+  depends_on = [
+    time_sleep.wait_umi_aml_workspace_identity
+  ]
+
+  count = var.workspace_umi ? 1 : 0
+
+  name                 = uuidv5("dns", "${azurerm_resource_group.rg_aml_workspace.name}${azurerm_user_assigned_identity.umi_aml_workspace[0].principal_id}azureaiadministrator")
+  scope                = azurerm_resource_group.rg_aml_workspace.id
+  role_definition_name = "Azure AI Administrator"
+  principal_id         = azurerm_user_assigned_identity.umi_aml_workspace[0].principal_id
+}
+
+## Create Azure RBAC Role Assignment granting the Azure AI Enterprise Network Connection Approver role on the
+## resource group to the AML Workspace user-assigned managed identity
+resource "azurerm_role_assignment" "umi_aml_workspace_azure_ai_enterprise_network_connection_approver" {
+  provider = azurerm.subscription_workload
+
+  depends_on = [
+    time_sleep.wait_umi_aml_workspace_identity
+  ]
+
+  count = var.workspace_umi ? 1 : 0
+
+  name                 = uuidv5("dns", "${azurerm_resource_group.rg_aml_workspace.name}${azurerm_user_assigned_identity.umi_aml_workspace[0].principal_id}azureaiadministratorenterprisenetworkconnectionapprover")
+  scope                = azurerm_resource_group.rg_aml_workspace.id
+  role_definition_name = "Azure AI Enterprise Network Connection Approver"
+  principal_id         = azurerm_user_assigned_identity.umi_aml_workspace[0].principal_id
+}
+
+## Create Azure RBAC Role Assignment granting Key Vault Administrator role on the 
+## Key Vault that will be used to store connection secrets for the AML Workspace to the
+## AML Workspace user-assigned managed identity
+resource "azurerm_role_assignment" "umi_aml_workspace_kv_administrator" {
+  provider = azurerm.subscription_workload
+
+  depends_on = [
+    time_sleep.wait_umi_aml_workspace_identity
+  ]
+
+  count = var.workspace_umi ? 1 : 0
+
+  name                 = uuidv5("dns", "${azurerm_key_vault.key_vault_aml_workspace.id}${azurerm_user_assigned_identity.umi_aml_workspace[0].principal_id}keyvaultadministrator")
+  scope                = azurerm_key_vault.key_vault_aml_workspace.id
+  role_definition_name = "Key Vault Administrator"
+  principal_id         = azurerm_user_assigned_identity.umi_aml_workspace[0].principal_id
+}
+
+## Create Azure RBAC Role Assignment granting Key Vault Crypto User role on the
+## Key Vault that holds the CMK for the AML Workspace to the AML Workspace user-assigned managed identity
+resource "azurerm_role_assignment" "umi_aml_workspace_kv_crypto_user" {
+  provider = azurerm.subscription_workload
+
+  depends_on = [
+    time_sleep.wait_umi_aml_workspace_identity
+  ]
+
+  count = var.workspace_umi ? 1 : 0
+
+  name                 = uuidv5("dns", "${azurerm_key_vault.key_vault_aml_workspace_cmk.id}${azurerm_user_assigned_identity.umi_aml_workspace[0].principal_id}keyvaultcryptouser")
+  scope                = azurerm_key_vault.key_vault_aml_workspace_cmk.id
+  role_definition_name = "Key Vault Crypto User"
+  principal_id         = azurerm_user_assigned_identity.umi_aml_workspace[0].principal_id
+}
+
+## Create Azure RBAC Role Assignment granting the Storage Blob Data Contributor role on the
+## AML Hub storage account to the AML Workspace user-assigned managed identity
+resource "azurerm_role_assignment" "umi_aml_workspace_st_blob_data_contributor" {
+  provider = azurerm.subscription_workload
+
+  depends_on = [
+    time_sleep.wait_umi_aml_workspace_identity
+  ]
+
+  count = var.workspace_umi ? 1 : 0
+
+  name                 = uuidv5("dns", "${azurerm_storage_account.storage_account_aml_workspace.name}${azurerm_user_assigned_identity.umi_aml_workspace[0].principal_id}storageblobdatacontributor")
+  scope                = azurerm_storage_account.storage_account_aml_workspace.id
+  role_definition_name = "Storage Blob Data Contributor"
+  principal_id         = azurerm_user_assigned_identity.umi_aml_workspace[0].principal_id
+}
+
+## Create Azure RBAC Role Assignment granting the Storage File Data Privileged Contributor role on the
+## AML Hub storage account to the AML Workspace user-assigned managed identity
+resource "azurerm_role_assignment" "umi_aml_workspace_st_file_data_privileged_contributor" {
+  provider = azurerm.subscription_workload
+
+  depends_on = [
+    time_sleep.wait_umi_aml_workspace_identity
+  ]
+
+  count = var.workspace_umi ? 1 : 0
+
+  name                 = uuidv5("dns", "${azurerm_storage_account.storage_account_aml_workspace.name}${azurerm_user_assigned_identity.umi_aml_workspace[0].principal_id}storagefiledataprivilegedcontributor")
+  scope                = azurerm_storage_account.storage_account_aml_workspace.id
+  role_definition_name = "Storage File Data Privileged Contributor"
+  principal_id         = azurerm_user_assigned_identity.umi_aml_workspace[0].principal_id
+}
+
+## Pause for 120 seconds to allow for Azure RBAC Role Assignments to propagate
+##
+resource "time_sleep" "wait_aml_workspace_rbac_propagation" {
+  depends_on = [
+    azurerm_role_assignment.umi_aml_workspace_azure_ai_administrator,
+    azurerm_role_assignment.umi_aml_workspace_azure_ai_enterprise_network_connection_approver,
+    azurerm_role_assignment.umi_aml_workspace_kv_administrator,
+    azurerm_role_assignment.umi_aml_workspace_kv_crypto_user,
+    azurerm_role_assignment.umi_aml_workspace_st_blob_data_contributor,
+    azurerm_role_assignment.umi_aml_workspace_st_file_data_privileged_contributor
+  ]
+
+  count = var.workspace_umi ? 1 : 0
+
+  create_duration = "120s"
+}
+
 ########## Create the AML Workspace and its diagnostic settings
 ##########
 ##########
@@ -513,7 +650,8 @@ resource "azapi_resource" "aml_workspace" {
     azurerm_storage_account.storage_account_aml_workspace,
     azurerm_key_vault.key_vault_aml_workspace,
     azurerm_key_vault.key_vault_aml_workspace_cmk,
-    azurerm_key_vault_key.key_aml_workspace_cmk
+    azurerm_key_vault_key.key_aml_workspace_cmk,
+    time_sleep.wait_aml_workspace_rbac_propagation
   ]
 
   type                      = "Microsoft.MachineLearningServices/workspaces@2025-09-01"
@@ -523,10 +661,14 @@ resource "azapi_resource" "aml_workspace" {
   schema_validation_enabled = true
 
   body = {
-    # Set the AML workspace to use a system-assigned managed identity because Service-Side CMK encryption does not support
-    # user-assigned managed identities as of 10/2025
-    identity = {
-      type = "SystemAssigned"
+    identity = var.workspace_umi == true ? {
+      type = "UserAssigned"
+      userAssignedIdentities = {
+        "${azurerm_user_assigned_identity.umi_aml_workspace[0].id}" = {}
+      }
+      } : {
+      type                   = "SystemAssigned"
+      userAssignedIdentities = null
     }
 
     tags = var.tags
@@ -534,7 +676,7 @@ resource "azapi_resource" "aml_workspace" {
     # Create an AML Workspace
     kind = "Default"
 
-    properties = {
+    properties = merge({
       friendlyName = "Sample-AML-Workspace"
       description  = "This is a sample AML Workspace"
 
@@ -581,7 +723,14 @@ resource "azapi_resource" "aml_workspace" {
 
       # Set the authentication for system datastores to use the managed identity of the workspace instead of storing the API keys as secrets in Key Vault
       systemDatastoresAuthMode = "identity"
-    }
+
+      },
+
+      # If a user-assigned managed identity is being used, set the user-assigned managed identity ID
+      var.workspace_umi == true ? {
+        primaryUserAssignedIdentity = azurerm_user_assigned_identity.umi_aml_workspace[0].id
+      } : {}
+    )
   }
 
   response_export_values = [
@@ -593,7 +742,11 @@ resource "azapi_resource" "aml_workspace" {
   lifecycle {
     ignore_changes = [
       tags["created_date"],
-      tags["created_by"]
+      tags["created_by"],
+      # Azure API returns incorrect casing causing Terraform to try to change this properties
+      # which cannot be modified after the workspace is created
+      body.properties.applicationInsights,
+      body.properties.keyVault
     ]
   }
 }
@@ -895,46 +1048,7 @@ resource "azurerm_private_endpoint" "pe_container_registry_aml_workspace" {
   }
 }
 
-########## Create the Private DNS record to support authentication to AML compute
-##########
-##########
 
-## Create auth A record in the instances.azureml.ms private DNS zone for the AML Workspace
-##
-resource "azurerm_private_dns_a_record" "aml_compute_instance_dns_record_auth" {
-  provider = azurerm.subscription_infrastructure
-
-  depends_on = [
-    azurerm_private_endpoint.pe_aml_workspace
-  ]
-
-  name                = "auth.${var.region}"
-  zone_name           = "instances.azureml.ms"
-  resource_group_name = var.resource_group_name_dns
-  ttl                 = 10
-  records = [
-    azurerm_private_endpoint.pe_aml_workspace.private_service_connection.0.private_ip_address
-  ]
-}
-
-########## Create additional non-human Azure RBAC role assignments
-##########
-##########
-
-## Create Azure RBAC role assignment granting the AML Workspace system-assigned managed identity the Reader role on the 
-## AML Workspace default storage account's Private Endpoint for blob
-resource "azurerm_role_assignment" "role_assignment_aml_workspace_storage_account_blob_pe_reader" {
-  provider = azurerm.subscription_workload
-
-  depends_on = [
-    azurerm_private_endpoint.pe_storage_account_aml_workspace_blob,
-    azapi_resource.aml_workspace
-  ]
-
-  scope                = azurerm_private_endpoint.pe_storage_account_aml_workspace_blob.id
-  role_definition_name = "Reader"
-  principal_id         = azapi_resource.aml_workspace.output.identity.principalId
-}
 
 ########## Create an Azure Machine Learning compute instance for the AML Workspace
 ########## 
@@ -1024,7 +1138,7 @@ resource "azurerm_machine_learning_compute_instance" "aml_compute_instance" {
   tags                          = var.tags
   machine_learning_workspace_id = azapi_resource.aml_workspace.id
 
-  virtual_machine_size = "Standard_D2s_v3"
+  virtual_machine_size = "Standard_D4s_v3"
   description          = "Compute instance for Jupyter notebooks and experiments"
 
   # Identity controls
@@ -1224,12 +1338,17 @@ resource "azurerm_machine_learning_compute_cluster" "aml_compute_cluster" {
 ########## for environment builds
 ##########
 resource "null_resource" "aml_patch_image_build_compute" {
+
+  depends_on = [
+    azurerm_machine_learning_compute_cluster.aml_compute_cluster
+  ]
+
   triggers = {
     always_run = timestamp()
   }
 
   provisioner "local-exec" {
-    command = <<EOT
+    command     = <<EOT
       set -e
 
       WORKSPACE_NAME="${azapi_resource.aml_workspace.name}"

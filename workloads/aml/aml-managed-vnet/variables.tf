@@ -58,3 +58,9 @@ variable "user_object_id" {
   description = "The user object id of the ML Engineer"
   type        = string
 }
+
+variable "workspace_umi" {
+  description = "Setting this value to true will enable a user assigned managed identity on the AML Workspace"
+  type        = bool
+  default = false
+}
