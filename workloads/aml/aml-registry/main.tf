@@ -53,7 +53,7 @@ resource "azapi_resource" "aml_registry_production" {
   name                      = "amlrp${var.region_code}${var.random_string}"
   parent_id                 = azurerm_resource_group.rg_aml_registry_production.id
   location                  = var.region
-  schema_validation_enabled = false
+  schema_validation_enabled = true
 
   body = {
     # Set the identity for the AML Registry to use
@@ -82,15 +82,15 @@ resource "azapi_resource" "aml_registry_production" {
         }
       ]
       # You can uncomment and use this section if you want to assign an identity the AI Administrator role over the managed
-      # resource gorup and exempt from the denyAssignemnts. This is primarily used when a pipeline doesn't have subscription
+      # resource group and exempt from the denyAssignemnts. This is primarily used when a pipeline doesn't have subscription
       # wide permissions
-      managedResourceGroupSettings = {
-        assignedIdentities = [
-          {
-            principalId = "2e69d9f2-b5b3-482b-9c15-faeca086b632"
-          }
-        ]
-      }
+      #managedResourceGroupSettings = {
+      #  assignedIdentities = [
+      #    {
+      #      principalId = var.object_id
+      #    }
+      #  ]
+      #}
       publicNetworkAccess = "Disabled"
     }
 
@@ -239,6 +239,7 @@ resource "azapi_resource" "aml_registry_non_production" {
   provider = azapi.subscription_workload_non_production
 
   depends_on = [
+    azapi_resource.aml_registry_production,
     azurerm_resource_group.rg_aml_registry_non_production
   ]
 
@@ -480,7 +481,7 @@ resource "azurerm_private_endpoint" "pe_aml_registry_non_production" {
 
   name                = "pe${azapi_resource.aml_registry_non_production.name}registry"
   location            = var.region
-  resource_group_name = azurerm_resource_group.rg_aml_registry_production.name
+  resource_group_name = azurerm_resource_group.rg_aml_registry_non_production.name
   tags                = var.tags
   subnet_id           = var.subnet_id_private_endpoints
 
@@ -512,7 +513,7 @@ resource "azurerm_private_endpoint" "pe_aml_registry_non_production" {
 ##########
 ##########
 
-## Create an Azure RBAC Role Assignment granting the AML Hub managed identity the Azure AI Enterprise Network Connection Approver
+## Create an Azure RBAC Role Assignment granting the AML Workspace managed identity the Azure AI Enterprise Network Connection Approver
 ## role on the project resource group to allow it to approve the creation of managed private endpoints for AML Registries
 resource "azurerm_role_assignment" "smi_aml_rg_prod_azure_ai_net_conn_app" {
   provider = azurerm.subscription_workload_production
@@ -520,6 +521,8 @@ resource "azurerm_role_assignment" "smi_aml_rg_prod_azure_ai_net_conn_app" {
   depends_on = [
     azurerm_resource_group.rg_aml_registry_production
   ]
+
+  count = var.non_human_rbac ? 1 : 0
 
   name                 = uuidv5("dns", "${azurerm_resource_group.rg_aml_registry_production.name}${var.workspace_managed_identity_principal_id}netconnapp")
   scope                = azurerm_resource_group.rg_aml_registry_production.id
@@ -534,15 +537,16 @@ resource "azurerm_role_assignment" "smi_aml_rg_non_prod_azure_ai_net_conn_app" {
     azurerm_resource_group.rg_aml_registry_non_production
   ]
 
+  count = var.non_human_rbac ? 1 : 0
+
   name                 = uuidv5("dns", "${azurerm_resource_group.rg_aml_registry_non_production.name}${var.workspace_managed_identity_principal_id}netconnapp")
   scope                = azurerm_resource_group.rg_aml_registry_non_production.id
   role_definition_name = "Azure AI Enterprise Network Connection Approver"
   principal_id         = var.workspace_managed_identity_principal_id
 }
 
-
-## Create Azure RBAC Role Assignment granting the relevanted managed identity the AML Registry User role
-## to the production AML Registry
+## Create Azure RBAC Role Assignment granting the relevant AML workspace managed identity the AML Registry User role
+## to the production AML Registry. This could be the workspace managed identity or a compute-based managed identity depending on the pattern.
 resource "azurerm_role_assignment" "aml_registry_production_aml_registry_user_non_human" {
   provider = azurerm.subscription_workload_production
 
@@ -558,8 +562,8 @@ resource "azurerm_role_assignment" "aml_registry_production_aml_registry_user_no
   principal_id         = each.value
 }
 
-## Create Azure RBAC Role Assignment granting the relevanted managed identity the AML Registry User role
-## to the non-production AML Registry
+## Create Azure RBAC Role Assignment granting the relevant AML workspace managed identity the AML Registry User role
+## to the non-production AML Registry. This could be the workspace managed identity or a compute-based managed identity depending on the pattern.
 resource "azurerm_role_assignment" "aml_registry_non_production_aml_registry_user_non_human" {
   provider = azurerm.subscription_workload_production
 

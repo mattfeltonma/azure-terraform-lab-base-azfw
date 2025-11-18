@@ -58,6 +58,12 @@ variable "workspace_managed_identity_principal_id" {
   type        = string
 }
 
+variable "non_human_rbac" {
+  description = "Setting to true will create the non-human Azure RBAC role assignments for the AML Registries"
+  type        = bool
+  default     = true
+}
+
 variable "user_object_ids" {
   description = "The user object ids that will be assigned the AML Registry User role on the AML Registries"
   type        = list(string)

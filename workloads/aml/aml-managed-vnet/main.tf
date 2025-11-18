@@ -1213,7 +1213,7 @@ resource "azurerm_machine_learning_compute_cluster" "aml_compute_cluster" {
   # Identity controls
   local_auth_enabled = false
   identity {
-    type = "UserAssigned"
+    type = "SystemAssigned, UserAssigned"
     identity_ids = [
       azurerm_user_assigned_identity.umi_compute_cluster.id
     ]
