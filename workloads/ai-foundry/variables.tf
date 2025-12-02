@@ -1,3 +1,9 @@
+variable "byo_key_vault" {
+  description = "Set to true to create an Azure Key Vault to store secrets for connections created within Foundry that use key-based authentication"
+  type        = bool
+  default     = false
+}
+
 variable "external_openai" {
   description = "Indicate the external Azure OpenAI or Foundry instance that will host the LLMs"
   type = object({
@@ -16,6 +22,16 @@ variable "foundry_encryption" {
   validation {
     condition     = contains(["pmk", "cmk"], var.foundry_encryption)
     error_message = "Encryption must be either 'pmk' or 'cmk'."
+  }
+}
+
+variable "managed_identity_type" {
+  description = "The type of managed identity to create for the AI Foundry instance. Use 'smi' for System-assigned and 'umi' for User-assigned managed identity."
+  type        = string
+  default     = "umi"
+  validation {
+    condition     = contains(["smi", "umi"], var.managed_identity_type)
+    error_message = "Managed identity type must be either 'smi' or 'umi'."
   }
 }
 
@@ -44,7 +60,7 @@ variable "resource_group_name_dns" {
   type        = string
 }
 
-variable "sub_id_dns" {
+variable "subscription_id_infrastructure" {
   description = "The subscription where the Private DNS Zones are located"
   type        = string
 }

@@ -330,19 +330,52 @@ resource "azurerm_monitor_diagnostic_setting" "diag_storage_aifoundry_table" {
   }
 }
 
-########## Create optional Azure Key Vault and RSA key to support CMK encryption of the AI Foundry resource
-########## if var.encryption is set to "cmk"
-########## As of 10/2025 Foundry does not support UMI-based access of CMK so SMI must be used
+########## Create a user-assigned managed identity for the AI Foundry instance if the managed identity type is set to 'umi'
+########## This identity will be used with BYO Key Vault for Foundry secrets storage and CMK encryption
+##########
 
-## Create Azure Key Vault to store the CMK used to encrypt the Foundry instance
+## Create a user-assigned managed identity that will be assigned to the AI Foundry resource
 ##
-resource "azurerm_key_vault" "key_vault_foundry_cmk" {
-  count = var.foundry_encryption == "cmk" ? 1 : 0
+resource "azurerm_user_assigned_identity" "umi_aifoundry" {
+  count = var.managed_identity_type == "umi" ? 1 : 0
 
-  name                = "kvfoundrycmk${var.region_code}${var.random_string}"
+  name                = "umiaif${var.region_code}${var.random_string}"
   location            = var.region
   resource_group_name = azurerm_resource_group.rg_aifoundry.name
-  tags = var.tags
+  tags                = var.tags
+
+  lifecycle {
+    ignore_changes = [
+      tags["created_date"],
+      tags["created_by"]
+    ]
+  }
+}
+
+## Sleep for 15 seconds to ensure the user-assigned managed identity replicates through Entra ID
+##
+resource "time_sleep" "wait_umi_foundry" {
+  count = var.managed_identity_type == "umi" ? 1 : 0
+
+  depends_on = [
+    azurerm_user_assigned_identity.umi_aifoundry
+  ]
+  create_duration = "15s"
+}
+
+########## Create optional Azure Key Vault that will be used to store secrets for connections created within Foundry
+########## if var.byo_key_vault is set to true
+##########
+
+## Create an Azure Key Vault to store secrets for connections created within Foundry that use key-based authentication
+##
+resource "azurerm_key_vault" "key_vault_foundry_secrets" {
+  count = var.byo_key_vault ? 1 : 0
+
+  name                = "kvaifsec${var.region_code}${var.random_string}"
+  location            = var.region
+  resource_group_name = azurerm_resource_group.rg_aifoundry.name
+  tags                = var.tags
 
   sku_name  = "premium"
   tenant_id = data.azurerm_subscription.current.tenant_id
@@ -350,16 +383,16 @@ resource "azurerm_key_vault" "key_vault_foundry_cmk" {
   # Configure vault to support Azure RBAC-based authorization of data-plane
   rbac_authorization_enabled = true
 
-  soft_delete_retention_days  = 7
+  soft_delete_retention_days = 7
   # Purge protection is required when storing CMKs
-  purge_protection_enabled    = true
+  purge_protection_enabled = true
 
   network_acls {
     default_action = "Deny"
     # Azure Trusted Services bypass is required for consumption of CMK
-    bypass         = "AzureServices"
+    bypass = "AzureServices"
     # Allow Terraform deployment server IP network access to data plane. Only required for this lab
-    ip_rules       = [
+    ip_rules = [
       var.trusted_ip
     ]
   }
@@ -372,21 +405,66 @@ resource "azurerm_key_vault" "key_vault_foundry_cmk" {
   }
 }
 
-## Create RSA key in the Key Vault to be used as the CMK for the Foundry instance
+## Create an Azure RBAC role assignment granting the user-assigned managed identity for the AI Foundry resource
+## the Key Vault Secrets Officer role on the Key Vault to allow management of secrets
 ##
-resource "azurerm_key_vault_key" "key_foundry_cmk" {
+resource "azurerm_role_assignment" "umi_aifoundry_secrets_key_vault_secrets_officer" {
+  count = var.managed_identity_type == "umi" && var.byo_key_vault ? 1 : 0
+
   depends_on = [
-    azurerm_key_vault.key_vault_foundry_cmk
+    time_sleep.wait_umi_foundry
   ]
 
+  scope                = azurerm_key_vault.key_vault_foundry_secrets[0].id
+  role_definition_name = "Key Vault Secrets Officer"
+  principal_id         = azurerm_user_assigned_identity.umi_aifoundry[0].principal_id
+}
+
+## Sleep for 120 seconds to allow the Azure RBAC permissions to replicate across Azure
+##
+resource "time_sleep" "wait_key_vault_secrets_umi_rbac_replication" {
+  count = var.managed_identity_type == "umi" && var.byo_key_vault ? 1 : 0
+
+  depends_on = [
+    azurerm_role_assignment.umi_aifoundry_secrets_key_vault_secrets_officer
+  ]
+
+  create_duration = "120s"
+}
+
+########## Create optional Azure Key Vault and RSA key to support CMK encryption of the AI Foundry resource
+########## if var.encryption is set to "cmk"
+##########
+
+## Create Azure Key Vault to store the CMK used to encrypt the Foundry instance
+##
+resource "azurerm_key_vault" "key_vault_foundry_cmk" {
   count = var.foundry_encryption == "cmk" ? 1 : 0
 
-  name         = "foundrycmk"
-  key_vault_id = azurerm_key_vault.key_vault_foundry_cmk[0].id
-  key_type     = "RSA"
-  # As of 10/2025 Foundry only supports 2048 bit keys
-  key_size     = 2048
-  key_opts     = ["decrypt", "encrypt", "sign", "verify", "wrapKey", "unwrapKey"]
+  name                = "kvfoundrycmk${var.region_code}${var.random_string}"
+  location            = var.region
+  resource_group_name = azurerm_resource_group.rg_aifoundry.name
+  tags                = var.tags
+
+  sku_name  = "premium"
+  tenant_id = data.azurerm_subscription.current.tenant_id
+
+  # Configure vault to support Azure RBAC-based authorization of data-plane
+  rbac_authorization_enabled = true
+
+  soft_delete_retention_days = 7
+  # Purge protection is required when storing CMKs
+  purge_protection_enabled = true
+
+  network_acls {
+    default_action = "Deny"
+    # Azure Trusted Services bypass is required for consumption of CMK
+    bypass = "AzureServices"
+    # Allow Terraform deployment server IP network access to data plane. Only required for this lab
+    ip_rules = [
+      var.trusted_ip
+    ]
+  }
 
   lifecycle {
     ignore_changes = [
@@ -396,7 +474,60 @@ resource "azurerm_key_vault_key" "key_foundry_cmk" {
   }
 }
 
-########## Create optional resources to support the AI Foundry resource and Standard Agents
+## Create an Azure RBAC role assignment granting the AI Foundry user-assigned managed identity 
+## the Key Vault Crypto User role on the Key Vault to allow use of the CMK. This is only required if 
+## the managed identity type is 'umi' and encryption is set to 'cmk'
+resource "azurerm_role_assignment" "umi_aifoundry_cmk_key_vault_crypto_user" {
+  count = var.managed_identity_type == "umi" && var.foundry_encryption == "cmk" ? 1 : 0
+
+  depends_on = [
+    time_sleep.wait_umi_foundry
+  ]
+
+  scope                = azurerm_key_vault.key_vault_foundry_cmk[0].id
+  role_definition_name = "Key Vault Crypto User"
+  principal_id         = azurerm_user_assigned_identity.umi_aifoundry[0].principal_id
+}
+
+## Create RSA key in the Key Vault to be used as the CMK for the Foundry instance
+##
+resource "azurerm_key_vault_key" "key_foundry_cmk" {
+  count = var.foundry_encryption == "cmk" ? 1 : 0
+
+  depends_on = [
+    azurerm_key_vault.key_vault_foundry_cmk
+  ]
+
+  name         = "foundrycmk"
+  key_vault_id = azurerm_key_vault.key_vault_foundry_cmk[0].id
+  key_type     = "RSA"
+  # As of 10/2025 Foundry only supports 2048 bit keys
+  key_size = 2048
+  key_opts = ["decrypt", "encrypt", "sign", "verify", "wrapKey", "unwrapKey"]
+
+  lifecycle {
+    ignore_changes = [
+      tags["created_date"],
+      tags["created_by"]
+    ]
+  }
+}
+
+## Sleep for 120 seconds to allow the Azure RBAC permissions to replicate across Azure
+## This is only required if the managed identity type is 'umi' and encryption is set to 'cmk'
+##
+resource "time_sleep" "wait_key_vault_cmk_umi_rbac_replication" {
+  count = var.managed_identity_type == "umi" && var.foundry_encryption == "cmk" ? 1 : 0
+
+  depends_on = [
+    azurerm_key_vault_key.key_foundry_cmk,
+    azurerm_role_assignment.umi_aifoundry_cmk_key_vault_crypto_user
+  ]
+
+  create_duration = "120s"
+}
+
+########## Create optional resources to support agent tool usage
 ##########
 ##########
 
@@ -407,7 +538,7 @@ resource "azurerm_application_insights" "appins_foundry" {
   location            = var.region
   resource_group_name = azurerm_resource_group.rg_aifoundry.name
   workspace_id        = azurerm_log_analytics_workspace.log_analytics_workspace_workload.id
-  application_type    = "other"
+  application_type    = "web"
   tags                = var.tags
 
   lifecycle {
@@ -416,6 +547,15 @@ resource "azurerm_application_insights" "appins_foundry" {
       tags["created_by"]
     ]
   }
+}
+
+## Pause for 60 seconds to allow creation of Application Insights resource to replicate
+## Application Insight instances created and integrated with Log Analytics can take time to replicate the resource
+resource "time_sleep" "wait_appins" {
+  depends_on = [
+    azurerm_application_insights.appins_foundry
+  ]
+  create_duration = "60s"
 }
 
 ## Create Grounding Search with Bing
@@ -464,7 +604,7 @@ resource "azurerm_private_endpoint" "pe_cosmosdb_aifoundry" {
   private_dns_zone_group {
     name = "zoneconn${azurerm_cosmosdb_account.cosmosdb_aifoundry.name}cosmossql"
     private_dns_zone_ids = [
-      "/subscriptions/${data.azurerm_subscription.current.subscription_id}/resourceGroups/${var.resource_group_name_dns}/providers/Microsoft.Network/privateDnsZones/privatelink.documents.azure.com"
+      "/subscriptions/${var.subscription_id_infrastructure}/resourceGroups/${var.resource_group_name_dns}/providers/Microsoft.Network/privateDnsZones/privatelink.documents.azure.com"
     ]
   }
 
@@ -502,7 +642,7 @@ resource "azurerm_private_endpoint" "pe_aisearch_aifoundry" {
   private_dns_zone_group {
     name = "zoneconn${azapi_resource.ai_search_aifoundry.name}searchservice"
     private_dns_zone_ids = [
-      "/subscriptions/${data.azurerm_subscription.current.subscription_id}/resourceGroups/${var.resource_group_name_dns}/providers/Microsoft.Network/privateDnsZones/privatelink.search.windows.net"
+      "/subscriptions/${var.subscription_id_infrastructure}/resourceGroups/${var.resource_group_name_dns}/providers/Microsoft.Network/privateDnsZones/privatelink.search.windows.net"
     ]
   }
 
@@ -540,7 +680,7 @@ resource "azurerm_private_endpoint" "pe_storage_blob_aifoundry" {
   private_dns_zone_group {
     name = "zoneconn${azurerm_storage_account.storage_account_aifoundry.name}blob"
     private_dns_zone_ids = [
-      "/subscriptions/${data.azurerm_subscription.current.subscription_id}/resourceGroups/${var.resource_group_name_dns}/providers/Microsoft.Network/privateDnsZones/privatelink.blob.core.windows.net"
+      "/subscriptions/${var.subscription_id_infrastructure}/resourceGroups/${var.resource_group_name_dns}/providers/Microsoft.Network/privateDnsZones/privatelink.blob.core.windows.net"
     ]
   }
 
@@ -552,13 +692,62 @@ resource "azurerm_private_endpoint" "pe_storage_blob_aifoundry" {
   }
 }
 
-## Pause for 60 seconds to allow creation of Application Insights resource to replicate
-## Application Insight instances created and integrated with Log Analytics can take time to replicate the resource
-resource "time_sleep" "wait_appins" {
+######### Create Private Endpoints for optional Key Vault resources used to store CMK and connection secrets
+#########
+#########
+
+## Create Private Endpoint for the Key Vault used to store secrets for connections created within Foundry
+## This is only required if var.byo_key_vault is set to true
+resource "azurerm_private_endpoint" "pe_key_vault_secrets_aifoundry" {
+  count = var.byo_key_vault ? 1 : 0
   depends_on = [
-    azurerm_application_insights.appins_foundry
+    azurerm_key_vault.key_vault_foundry_secrets
   ]
-  create_duration = "60s"
+  name                = "pe${azurerm_key_vault.key_vault_foundry_secrets[0].name}kv"
+  location            = var.region
+  resource_group_name = azurerm_resource_group.rg_aifoundry.name
+  tags                = var.tags
+  subnet_id           = var.subnet_id_private_endpoints
+  custom_network_interface_name = "nic${azurerm_key_vault.key_vault_foundry_secrets[0].name}kv"
+  private_service_connection {
+    name                           = "peconn${azurerm_key_vault.key_vault_foundry_secrets[0].name}kv"
+    private_connection_resource_id = azurerm_key_vault.key_vault_foundry_secrets[0].id
+    subresource_names              = ["vault"]
+    is_manual_connection           = false
+  }
+  private_dns_zone_group {
+    name = "zoneconn${azurerm_key_vault.key_vault_foundry_secrets[0].name}kv"
+    private_dns_zone_ids = [
+      "/subscriptions/${var.subscription_id_infrastructure}/resourceGroups/${var.resource_group_name_dns}/providers/Microsoft.Network/privateDnsZones/privatelink.vaultcore.azure.net"
+    ]
+  }
+}
+
+## Create Private Endpoint for the Key Vault used to store the CMK for Foundry encryption
+## This is only required if var.encryption is set to "cmk"
+resource "azurerm_private_endpoint" "pe_key_vault_cmk_aifoundry" {
+  count = var.foundry_encryption == "cmk" ? 1 : 0
+  depends_on = [
+    azurerm_key_vault.key_vault_foundry_cmk
+  ]
+  name                = "pe${azurerm_key_vault.key_vault_foundry_cmk[0].name}kv"
+  location            = var.region
+  resource_group_name = azurerm_resource_group.rg_aifoundry.name
+  tags                = var.tags
+  subnet_id           = var.subnet_id_private_endpoints
+  custom_network_interface_name = "nic${azurerm_key_vault.key_vault_foundry_cmk[0].name}kv"
+  private_service_connection {
+    name                           = "peconn${azurerm_key_vault.key_vault_foundry_cmk[0].name}kv"
+    private_connection_resource_id = azurerm_key_vault.key_vault_foundry_cmk[0].id
+    subresource_names              = ["vault"]
+    is_manual_connection           = false
+  }
+  private_dns_zone_group {
+    name = "zoneconn${azurerm_key_vault.key_vault_foundry_cmk[0].name}kv"
+    private_dns_zone_ids = [
+      "/subscriptions/${var.subscription_id_infrastructure}/resourceGroups/${var.resource_group_name_dns}/providers/Microsoft.Network/privateDnsZones/privatelink.vaultcore.azure.net"
+    ]
+  }
 }
 
 ######### Create the Azure AI Foundry deployment that supports Standard Agents
@@ -567,67 +756,67 @@ resource "time_sleep" "wait_appins" {
 
 ## Create the Azure Foundry account and configure it to use VNet injection to support BYO VNet
 ##
-resource "azapi_resource" "ai_foundry_account" {
+resource "azurerm_cognitive_account" "ai_foundry_resource" {
   depends_on = [
-    azapi_resource.bing_grounding_search_foundry,
-    azurerm_private_endpoint.pe_aisearch_aifoundry,
+    # Wait for user-assigned managed identity creation and permissioning
+    time_sleep.wait_umi_foundry,
+    time_sleep.wait_key_vault_secrets_umi_rbac_replication,
+    time_sleep.wait_key_vault_cmk_umi_rbac_replication,
+    ## Wait for creation of required resources to support Standard Agents
+    azurerm_cosmosdb_account.cosmosdb_aifoundry,
+    azurerm_storage_account.storage_account_aifoundry,
+    azapi_resource.ai_search_aifoundry,
     azurerm_private_endpoint.pe_cosmosdb_aifoundry,
+    azurerm_private_endpoint.pe_aisearch_aifoundry,
     azurerm_private_endpoint.pe_storage_blob_aifoundry,
-    azurerm_key_vault_key.key_foundry_cmk,
-    time_sleep.wait_appins
+    azurerm_private_endpoint.pe_key_vault_cmk_aifoundry,
+    azurerm_private_endpoint.pe_key_vault_secrets_aifoundry,
+    ## Wait for creation of optional resources used to support agent tool usage and tracing
+    time_sleep.wait_appins,
+    azapi_resource.bing_grounding_search_foundry,
+    ## Wait for creation of optional Key Vaults and CMK if configured
+    azurerm_key_vault.key_vault_foundry_secrets,
+    azurerm_key_vault.key_vault_foundry_cmk
   ]
 
-  type                      = "Microsoft.CognitiveServices/accounts@2025-06-01"
-  name                      = "aif${var.region_code}${var.random_string}"
-  parent_id                 = azurerm_resource_group.rg_aifoundry.id
-  location                  = var.region
-  tags                      = var.tags
-  schema_validation_enabled = false
+  name                = "aif${var.region_code}${var.random_string}"
+  location            = var.region
+  resource_group_name = azurerm_resource_group.rg_aifoundry.name
+  tags                = var.tags
 
-  body = {
-    kind = "AIServices",
-    sku = {
-      name = "S0"
-    }
+  # Create an AI Foundry resource
+  kind                       = "AIServices"
+  sku_name                   = "S0"
+  project_management_enabled = true
 
-    # Assign a system-assigned managed identity to the AI Foundry account. 
-    # 9/2025 User-assigned managed identities are pretty useless because they're not yet supported for CMK access
-    identity = {
-      type = "SystemAssigned"
-    }
-
-    properties = {
-
-      # This property specifies the creation of an AI Foundry account vs an AI Services account
-      allowProjectManagement = true
-
-      # Set custom subdomain name for DNS names created for this Foundry resource
-      customSubDomainName = "aif${var.region_code}${var.random_string}"
-
-      # Network-related controls
-      # Disable public access but allow Trusted Azure Services exception
-      publicNetworkAccess = "Disabled"
-      networkAcls = {
-        bypass        = "AzureServices"
-        defaultAction = "Deny"
-      }
-
-      # Enable VNet injection for Standard Agents
-      networkInjections = [
-        {
-          scenario                   = "agent"
-          subnetArmId                = var.subnet_id_agent
-          useMicrosoftManagedNetwork = false
-        }
-      ]
-    }
+  # Assigned a system-assigned managed identity or user-assigned managed identity based on variable
+  identity {
+    type = var.managed_identity_type == "umi" ? "UserAssigned" : "SystemAssigned"
+    identity_ids = var.managed_identity_type == "umi" ? [
+      azurerm_user_assigned_identity.umi_aifoundry[0].id
+    ] : null
   }
 
-  # Output the principalId of the managed identity and custom subdomain of the AI Foundry account
-  response_export_values = [
-    "identity.principalId",
-    "properties.customSubDomainName"
-  ]
+  # Set the Foundry resource to use a CMK if the var.foundry_encryption is set to "cmk"
+  customer_managed_key {
+    key_vault_key_id = var.foundry_encryption == "cmk" && var.managed_identity_type == "umi" ? azurerm_key_vault_key.key_foundry_cmk[0].id : null
+    identity_client_id = var.foundry_encryption == "cmk" && var.managed_identity_type == "umi" ? azurerm_user_assigned_identity.umi_aifoundry[0].client_id : null
+  }
+  # Set custom subdomain name for DNS names created for this Foundry resource
+  custom_subdomain_name = "aif${var.region_code}${var.random_string}"
+
+  # Network-related controls
+  public_network_access_enabled = false
+  network_acls {
+    bypass        = "AzureServices"
+    default_action = "Deny"
+  }
+
+  # Enable VNet injection for Standard Agents
+  network_injection {
+    scenario                   = "agent"
+    subnet_id                  = var.subnet_id_agent
+  }
 
   lifecycle {
     ignore_changes = [
@@ -641,11 +830,11 @@ resource "azapi_resource" "ai_foundry_account" {
 ##
 resource "azurerm_monitor_diagnostic_setting" "diag_foundry_resource" {
   depends_on = [
-    azapi_resource.ai_foundry_account
+    azurerm_cognitive_account.ai_foundry_resource
   ]
 
   name                       = "diag"
-  target_resource_id         = azapi_resource.ai_foundry_account.id
+  target_resource_id         = azurerm_cognitive_account.ai_foundry_resource.id
   log_analytics_workspace_id = azurerm_log_analytics_workspace.log_analytics_workspace_workload.id
 
   enabled_log {
@@ -665,34 +854,101 @@ resource "azurerm_monitor_diagnostic_setting" "diag_foundry_resource" {
   }
 }
 
-## Wait 10 seconds for the creation of the AI Foundry managed identity to replicate through Entra ID
+## Wait 10 seconds for the creation of the AI Foundry managed identity to replicate through Entra ID 
+## This is only required when the managed identity is not set to use a user-assigned managed identity
 ##
-resource "time_sleep" "wait_foundry_identity" {
+resource "time_sleep" "wait_foundry_smi" {
+  count = var.managed_identity_type == "smi" ? 1 : 0
+
   depends_on = [
-    azapi_resource.ai_foundry_account
+    azurerm_cognitive_account.ai_foundry_resource
   ]
   create_duration = "10s"
 }
 
-## Create a role assignment granting the AI Foundry account managed identity the Key Vault Crypto User role which will allow the Foundry account
-## to access the CMK in the Key Vault if var.foundry_encryption is set to "cmk"
-##
-resource "azurerm_role_assignment" "foundry_key_vault_crypto_user" {
+## Create a Foundry resource connection to the Key Vault used to store secrets for connections created within Foundry
+## This is only required if var.byo_key_vault is set to true
+resource "azapi_resource" "conn_key_vault_secrets" {
+  count = var.byo_key_vault && length(azurerm_key_vault.key_vault_foundry_secrets) > 0 ? 1 : 0
+
   depends_on = [
-    time_sleep.wait_foundry_identity
+    azurerm_cognitive_account.ai_foundry_resource,
+    time_sleep.wait_key_vault_secrets_umi_rbac_replication
+
   ]
 
-  count = var.foundry_encryption == "cmk" ? 1 : 0
+  type                      = "Microsoft.CognitiveServices/accounts/connections@2025-04-01-preview"
+  name                      = azurerm_key_vault.key_vault_foundry_secrets[0].name
+  parent_id                 = azurerm_cognitive_account.ai_foundry_resource.id
+  schema_validation_enabled = false
 
-  principal_id   = azapi_resource.ai_foundry_account.output.identity.principalId
+  body = {
+    properties = {
+      category = "AzureKeyVault"
+      target   = azurerm_key_vault.key_vault_foundry_secrets[0].vault_uri
+      authType = "AccountManagedIdentity"
+      credentials = {}
+      isSharedToAll = true
+      metadata = {
+        ApiType    = "Azure"
+        ResourceId = azurerm_key_vault.key_vault_foundry_secrets[0].id
+        Location   = var.region
+      }
+    }
+  }
+}
+
+## Create a Foundry resoure connection to the Application Insights instance to support tracing. This must be created after the connection to the Key Vault if using BYO Key Vault for secrets
+##
+resource "azapi_resource" "conn_appins_foundry" {
+  depends_on = [
+    azurerm_cognitive_account.ai_foundry_resource,
+    azapi_resource.conn_key_vault_secrets,
+    time_sleep.wait_appins,
+    time_sleep.wait_foundry_smi
+  ]
+    
+  type                      = "Microsoft.CognitiveServices/accounts/connections@2025-10-01-preview"
+  name                      = "conn-${azurerm_application_insights.appins_foundry.name}"
+  parent_id                 = azurerm_cognitive_account.ai_foundry_resource.id
+  schema_validation_enabled = false
+
+  body = {
+    properties = {
+      category = "AppInsights"
+      target   = azurerm_application_insights.appins_foundry.id
+      authType = "ApiKey"
+      isSharedToAll = true
+      credentials = {
+        key = azurerm_application_insights.appins_foundry.connection_string
+      }
+      metadata = {
+        ApiType    = "Azure"
+        ResourceId = azurerm_application_insights.appins_foundry.id
+      }
+    }
+  }
+}
+
+## Create a role assignment granting the AI Foundry account managed identity the Key Vault Crypto User role which will allow the Foundry account
+## to access the CMK in the Key Vault if var.foundry_encryption is set to "cmk" and the managed identity type is system-assigned
+##
+resource "azurerm_role_assignment" "foundry_key_vault_crypto_user" {
+  count = var.foundry_encryption == "cmk" && var.managed_identity_type == "smi" ? 1 : 0
+
+  depends_on = [
+    time_sleep.wait_foundry_smi
+  ]
+
+  principal_id         = azurerm_cognitive_account.ai_foundry_resource.identity[0].principal_id
   role_definition_name = "Key Vault Crypto User"
-  scope          = azurerm_key_vault.key_vault_foundry_cmk[0].id
+  scope                = azurerm_key_vault.key_vault_foundry_cmk[0].id
 }
 
 ## Wait 120 seconds for the role assignment to replicate through Azure RBAC
 ##
-resource "time_sleep" "wait_foundry_account_rbac" {
-  count = var.foundry_encryption == "cmk" ? 1 : 0
+resource "time_sleep" "wait_foundry_resource_cmk_rbac" {
+  count = var.foundry_encryption == "cmk" && var.managed_identity_type == "smi" ? 1 : 0
 
   depends_on = [
     azurerm_role_assignment.foundry_key_vault_crypto_user
@@ -703,13 +959,13 @@ resource "time_sleep" "wait_foundry_account_rbac" {
 ## Modify the Azure AI Foundry account to use a CMK in Key Vault if var.foundry_encryption is set to "cmk"
 ##
 resource "azurerm_cognitive_account_customer_managed_key" "ai_foundry_cmk" {
-  count = var.foundry_encryption == "cmk" ? 1 : 0
+  count = var.foundry_encryption == "cmk" && var.managed_identity_type == "smi" ? 1 : 0
 
   depends_on = [
-    time_sleep.wait_foundry_account_rbac
+    time_sleep.wait_foundry_resource_cmk_rbac
   ]
 
-  cognitive_account_id = azapi_resource.ai_foundry_account.id
+  cognitive_account_id = azurerm_cognitive_account.ai_foundry_resource.id
   key_vault_key_id     = azurerm_key_vault_key.key_foundry_cmk[0].id
 }
 
@@ -723,7 +979,7 @@ resource "azurerm_cognitive_deployment" "deployment_gpt_4o" {
   count = var.external_openai != null ? 0 : 1
 
   name                 = "gpt-4o"
-  cognitive_account_id = azapi_resource.ai_foundry_account.id
+  cognitive_account_id = azurerm_cognitive_account.ai_foundry_resource.id
 
   sku {
     name     = "GlobalStandard"
@@ -746,7 +1002,7 @@ resource "azurerm_cognitive_deployment" "deployment_text_embedding_3_large" {
   count = var.external_openai != null ? 0 : 1
 
   name                 = "text-embedding-3-large"
-  cognitive_account_id = azapi_resource.ai_foundry_account.id
+  cognitive_account_id = azurerm_cognitive_account.ai_foundry_resource.id
 
   sku {
     name     = "GlobalStandard"
@@ -767,27 +1023,27 @@ resource "azurerm_private_endpoint" "pe_aifoundry_account" {
     azurerm_cognitive_deployment.deployment_text_embedding_3_large
   ]
 
-  name                = "pe${azapi_resource.ai_foundry_account.name}account"
+  name                = "pe${azurerm_cognitive_account.ai_foundry_resource.name}account"
   location            = var.region
   resource_group_name = azurerm_resource_group.rg_aifoundry.name
   tags                = var.tags
   subnet_id           = var.subnet_id_private_endpoints
 
-  custom_network_interface_name = "nic${azapi_resource.ai_foundry_account.name}account"
+  custom_network_interface_name = "nic${azurerm_cognitive_account.ai_foundry_resource.name}account"
 
   private_service_connection {
-    name                           = "peconn${azapi_resource.ai_foundry_account.name}account"
-    private_connection_resource_id = azapi_resource.ai_foundry_account.id
+    name                           = "peconn${azurerm_cognitive_account.ai_foundry_resource.name}account"
+    private_connection_resource_id = azurerm_cognitive_account.ai_foundry_resource.id
     subresource_names              = ["account"]
     is_manual_connection           = false
   }
 
   private_dns_zone_group {
-    name = "zoneconn${azapi_resource.ai_foundry_account.name}account"
+    name = "zoneconn${azurerm_cognitive_account.ai_foundry_resource.name}account"
     private_dns_zone_ids = [
-      "/subscriptions/${data.azurerm_subscription.current.subscription_id}/resourceGroups/${var.resource_group_name_dns}/providers/Microsoft.Network/privateDnsZones/privatelink.services.ai.azure.com",
-      "/subscriptions/${data.azurerm_subscription.current.subscription_id}/resourceGroups/${var.resource_group_name_dns}/providers/Microsoft.Network/privateDnsZones/privatelink.openai.azure.com",
-      "/subscriptions/${data.azurerm_subscription.current.subscription_id}/resourceGroups/${var.resource_group_name_dns}/providers/Microsoft.Network/privateDnsZones/privatelink.cognitiveservices.azure.com"
+      "/subscriptions/${var.subscription_id_infrastructure}/resourceGroups/${var.resource_group_name_dns}/providers/Microsoft.Network/privateDnsZones/privatelink.services.ai.azure.com",
+      "/subscriptions/${var.subscription_id_infrastructure}/resourceGroups/${var.resource_group_name_dns}/providers/Microsoft.Network/privateDnsZones/privatelink.openai.azure.com",
+      "/subscriptions/${var.subscription_id_infrastructure}/resourceGroups/${var.resource_group_name_dns}/providers/Microsoft.Network/privateDnsZones/privatelink.cognitiveservices.azure.com"
     ]
   }
 
@@ -799,7 +1055,7 @@ resource "azurerm_private_endpoint" "pe_aifoundry_account" {
   }
 }
 
-########## Create AI Foundry Project, connections to CosmosDB, AI Search, Storage Account, Grounding Search with Bing, and Application Insights
+########## Create AI Foundry Project
 ##########
 ##########
 
@@ -807,12 +1063,14 @@ resource "azurerm_private_endpoint" "pe_aifoundry_account" {
 ##
 resource "azapi_resource" "ai_foundry_project" {
   depends_on = [
+    azapi_resource.conn_key_vault_secrets,
+    azapi_resource.conn_appins_foundry,
     azurerm_private_endpoint.pe_aifoundry_account
   ]
 
-  type                      = "Microsoft.CognitiveServices/accounts/projects@2025-04-01-preview"
+  type                      = "Microsoft.CognitiveServices/accounts/projects@2025-10-01-preview"
   name                      = "sampleproject1"
-  parent_id                 = azapi_resource.ai_foundry_account.id
+  parent_id                 = azurerm_cognitive_account.ai_foundry_resource.id
   location                  = var.region
   schema_validation_enabled = false
 
@@ -845,6 +1103,10 @@ resource "time_sleep" "wait_project_identities" {
   ]
   create_duration = "10s"
 }
+
+########## Create connections to the required resources for Standard Agents within the AI Foundry project
+##########
+##########
 
 ## Create the AI Foundry project connection to CosmosDB
 ##
@@ -940,6 +1202,10 @@ resource "azapi_resource" "conn_aisearch_aifoundry" {
   ]
 }
 
+########## Create connections to the optional resources for Standard Agents within the AI Foundry project
+##########
+##########
+
 ## Create the AI Foundry project connection to the Bing Grounding Search instance
 ##
 resource "azapi_resource" "conn_bing_grounding_search_aifoundry" {
@@ -964,7 +1230,7 @@ resource "azapi_resource" "conn_bing_grounding_search_aifoundry" {
       metadata = {
         ApiType    = "Azure"
         ResourceId = azapi_resource.bing_grounding_search_foundry.id
-        type = "bing_grounding"
+        type       = "bing_grounding"
       }
     }
   }
@@ -973,7 +1239,7 @@ resource "azapi_resource" "conn_bing_grounding_search_aifoundry" {
     "identity.principalId"
   ]
 }
-  
+
 ## Create the AI Foundry project connection to the external Azure OpenAI Service or Foundry instance if that is specified in the external_openai variable
 ##
 resource "azapi_resource" "conn_external_openai_aifoundry" {
@@ -982,7 +1248,7 @@ resource "azapi_resource" "conn_external_openai_aifoundry" {
   ]
 
   count = var.external_openai != null ? 1 : 0
-  
+
 
   type                      = "Microsoft.CognitiveServices/accounts/projects/connections@2025-04-01-preview"
   name                      = "conn-${var.external_openai.name}"
@@ -999,7 +1265,7 @@ resource "azapi_resource" "conn_external_openai_aifoundry" {
         ApiType    = "Azure"
         ResourceId = var.external_openai.resource_id
         # As of 10/2025 the Azure OpenAI Service must be in the same region as the AI Foundry resource
-        location   = var.region
+        location = var.region
       }
     }
   }
@@ -1107,7 +1373,7 @@ resource "azapi_resource" "ai_foundry_project_capability_host" {
       ]
 
       # If using an external OpenAI resource, add that connection to the capability host
-      aiServicesConnections = var.external_openai != null ? azapi_resource.conn_external_openai_aifoundry[0].name: null
+      aiServicesConnections = var.external_openai != null ? azapi_resource.conn_external_openai_aifoundry[0].name : null
     }
   }
 }
@@ -1190,7 +1456,7 @@ resource "azurerm_role_assignment" "ai_foundry_user" {
     azapi_resource.ai_foundry_project
   ]
 
-  name                 = uuidv5("dns", "${var.user_object_id}${azapi_resource.ai_foundry_account.name}${azapi_resource.ai_foundry_project.name}user")
+  name                 = uuidv5("dns", "${var.user_object_id}${azurerm_cognitive_account.ai_foundry_resource.name}${azapi_resource.ai_foundry_project.name}user")
   scope                = azapi_resource.ai_foundry_project.id
   role_definition_name = "Azure AI User"
   principal_id         = var.user_object_id
@@ -1203,8 +1469,8 @@ resource "azurerm_role_assignment" "cognitive_services_user" {
     azapi_resource.ai_foundry_project
   ]
 
-  name                 = uuidv5("dns", "${var.user_object_id}${azapi_resource.ai_foundry_account.name}${azapi_resource.ai_foundry_project.name}cognitiveservicesuser")
-  scope                = azapi_resource.ai_foundry_account.id
+  name                 = uuidv5("dns", "${var.user_object_id}${azurerm_cognitive_account.ai_foundry_resource.name}${azapi_resource.ai_foundry_project.name}cognitiveservicesuser")
+  scope                = azurerm_cognitive_account.ai_foundry_resource.id
   role_definition_name = "Cognitive Services User"
   principal_id         = var.user_object_id
 }
@@ -1217,11 +1483,12 @@ resource "azurerm_role_assignment" "cognitive_services_user" {
 ## to call the OpenAI models deployed in the AI Foundry account to vectorize data
 ##
 resource "azurerm_role_assignment" "cognitive_services_openai_contributor_ai_search_service" {
+
   depends_on = [
-    azapi_resource.ai_foundry_account
+    azurerm_cognitive_account.ai_foundry_resource
   ]
-  name                 = uuidv5("dns", "${azapi_resource.ai_search_aifoundry.output.identity.principalId}${azapi_resource.ai_foundry_account.name}openaiuser")
-  scope                = azapi_resource.ai_foundry_account.id
+  name                 = uuidv5("dns", "${azapi_resource.ai_search_aifoundry.output.identity.principalId}${azurerm_cognitive_account.ai_foundry_resource.name}openaiuser")
+  scope                = azurerm_cognitive_account.ai_foundry_resource.id
   role_definition_name = "Cognitive Services OpenAI Contributor"
   principal_id         = azapi_resource.ai_search_aifoundry.output.identity.principalId
 }
@@ -1231,7 +1498,8 @@ resource "azurerm_role_assignment" "cognitive_services_openai_contributor_ai_sea
 ## This is required to support the import and vectorize feature of AI Search
 resource "azurerm_role_assignment" "storage_blob_data_contributor_ai_search_service" {
   depends_on = [
-    azapi_resource.ai_foundry_account
+    azurerm_storage_account.storage_account_aifoundry,
+    azapi_resource.ai_search_aifoundry
   ]
 
   name                 = uuidv5("dns", "${azapi_resource.ai_search_aifoundry.output.identity.principalId}${azurerm_storage_account.storage_account_aifoundry.name}blobdatacontributor")
@@ -1263,18 +1531,4 @@ resource "azurerm_role_assignment" "aisearch_user_data_contributor" {
   scope                = azapi_resource.ai_search_aifoundry.id
   role_definition_name = "Search Index Data Contributor"
   principal_id         = var.user_object_id
-}
-
-########## Extra code that can help to purge the AI Foundry account during destroy. The AzApi provider doesn't
-########## support purging the AI Foundry account during destroy operations
-##########
-
-## Added AI Foundry account purger to avoid running into InUseSubnetCannotBeDeleted-lock caused by the agent subnet delegation.
-## The azapi_resource_action.purge_ai_foundry (only gets executed during destroy) purges the AI foundry account removing /subnets/snet-agent/serviceAssociationLinks/legionservicelink so the agent subnet can get properly removed.
-## Credit for this to Sebastian Graf
-resource "azapi_resource_action" "purge_ai_foundry" {
-  method      = "DELETE"
-  resource_id = "/subscriptions/${data.azurerm_client_config.current.subscription_id}/providers/Microsoft.CognitiveServices/locations/${var.region}/resourceGroups/${azurerm_resource_group.rg_aifoundry.name}/deletedAccounts/aifoundry${var.random_string}"
-  type        = "Microsoft.Resources/resourceGroups/deletedAccounts@2021-04-30"
-  when        = "destroy"
 }
