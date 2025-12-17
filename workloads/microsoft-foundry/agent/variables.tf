@@ -1,11 +1,33 @@
+variable "agent_service_outbound_networking" {
+  description = "Configuration for agent service outbound networking"
+  type = object({
+    type      = string
+    subnet_id = optional(string)
+  })
+  
+  validation {
+    condition = contains(["vnet_injection", "managed_virtual_network"], var.agent_service_outbound_networking.type)
+    error_message = "type must be either 'vnet_injection' or 'managed_virtual_network'"
+  }
+  
+  validation {
+    condition = (
+      var.agent_service_outbound_networking.type == "vnet_injection" ? 
+        var.agent_service_outbound_networking.subnet_id != null : 
+        true
+    )
+    error_message = "subnet_id is required when type is 'vnet_injection'"
+  }
+}
+
 variable "byo_key_vault" {
-  description = "Set to true to create an Azure Key Vault to store secrets for connections created within Foundry that use key-based authentication"
+  description = "Set to true to create an Azure Key Vault to store secrets for connections created within Foundry resource and projects that use key-based authentication"
   type        = bool
   default     = false
 }
 
 variable "external_openai" {
-  description = "Indicate the external Azure OpenAI or Foundry instance that will host the LLMs"
+  description = "Indicate the external Azure OpenAI or Foundry resource that will host the LLMs"
   type = object({
     name        = string
     endpoint    = string
@@ -16,7 +38,7 @@ variable "external_openai" {
 }
 
 variable "foundry_encryption" {
-  description = "Indicate whether the AI Foundry account should be encrypted with a provider-managed key or customer-managed key. CMK will create a Key Vault, key, and necessary role assignments"
+  description = "Indicate whether the Foundry resource should be encrypted with a provider-managed key or customer-managed key. CMK will create a Key Vault, key, and necessary role assignments"
   type        = string
   default     = "cmk"
   validation {
@@ -25,12 +47,12 @@ variable "foundry_encryption" {
   }
 }
 
-variable "managed_identity_type" {
-  description = "The type of managed identity to create for the AI Foundry instance. Use 'smi' for System-assigned and 'umi' for User-assigned managed identity."
+variable "resource_managed_identity_type" {
+  description = "The type of managed identity to create for the Foundry resource. Use 'smi' for System-assigned and 'umi' for User-assigned managed identity."
   type        = string
   default     = "umi"
   validation {
-    condition     = contains(["smi", "umi"], var.managed_identity_type)
+    condition     = contains(["smi", "umi"], var.resource_managed_identity_type)
     error_message = "Managed identity type must be either 'smi' or 'umi'."
   }
 }
@@ -65,12 +87,6 @@ variable "subscription_id_infrastructure" {
   type        = string
 }
 
-variable "subnet_id_agent" {
-  description = "The subnet id to use for Standard Agent vnet injection"
-  type        = string
-  default     = null
-}
-
 variable "subnet_id_private_endpoints" {
   description = "The subnet id to deploy the private endpoints to"
   type        = string
@@ -82,7 +98,7 @@ variable "tags" {
 }
 
 variable "trusted_ip" {
-  description = "The trusted IP address of the Terraform deployment server. This is only used for this lab and is not required for a production deployment"
+  description = "The trusted IP address of the Terraform deployment server. This is only used for this lab because the Terraform deployment server is not within the virtual network and is not required for a production deployment"
   type        = string
 }
 

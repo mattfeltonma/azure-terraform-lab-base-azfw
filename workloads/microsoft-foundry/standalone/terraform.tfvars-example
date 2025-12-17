@@ -1,0 +1,17 @@
+byo_key_vault = true
+foundry_encryption = "cmk"
+resource_managed_identity_type = "umi"
+region = "westus3"
+region_code = "wus3"
+purpose = "lab"
+rag_pattern = true
+random_string = "26z101"
+resource_group_name_dns = "rgshwus326z"
+subscription_id_infrastructure = "XXXXXXXX-XXXX-XXXX-XXXX-XXXXXXXXXXXX"
+subnet_id_private_endpoints = "/subscriptions/XXXXXXXX-XXXX-XXXX-XXXX-XXXXXXXXXXXX/resourceGroups/rgwlwus326z/providers/Microsoft.Network/virtualNetworks/vnetwl1wus326z/subnets/snet-svc"
+user_object_id = "XXXXXXXX-XXXX-XXXX-XXXX-XXXXXXXXXXXX"
+tags = {
+  environment = "lab"
+  product     = "foundry"
+}
+trusted_ip = "X.X.X.X"

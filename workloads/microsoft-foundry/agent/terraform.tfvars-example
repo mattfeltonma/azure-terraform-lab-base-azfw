@@ -1,0 +1,27 @@
+# Uncomment the lines below to allow the use of model deployments in an existing Azure OpenAI Service instance
+#external_openai = {
+# name = "myinstance"
+# endpoint = "https://myinstance.openai.azure.com/"
+# resource_id = "/subscriptions/XXXXXXXX-XXXX-XXXX-XXXX-XXXXXXXXXXXX/resourceGroups/rgworkce540/providers/Microsoft.CognitiveServices/accounts/jogopenai"
+# region = "westus3"
+#}
+byo_key_vault = true
+foundry_encryption = "cmk"
+resource_managed_identity_type = "umi"
+region = "eastus2"
+region_code = "eus2"
+purpose = "lab"
+random_string = "26z401"
+resource_group_name_dns = "rgshwus326z"
+subscription_id_infrastructure = "XXXXXXXX-XXXX-XXXX-XXXX-XXXXXXXXXXXX"
+agent_service_outbound_networking = {
+    type = "vnet_injection"
+    subnet_id = "/subscriptions/XXXXXXXX-XXXX-XXXX-XXXX-XXXXXXXXXXXX/resourceGroups/rgwlwus326z/providers/Microsoft.Network/virtualNetworks/vnetwl3eus226z/subnets/snet-app1"
+}
+subnet_id_private_endpoints = "/subscriptions/XXXXXXXX-XXXX-XXXX-XXXX-XXXXXXXXXXXX/resourceGroups/rgwlwus326z/providers/Microsoft.Network/virtualNetworks/vnetwl3eus226z/subnets/snet-svc"
+user_object_id = "XXXXXXXX-XXXX-XXXX-XXXX-XXXXXXXXXXXX"
+tags = {
+  environment = "lab"
+  product     = "foundry"
+}
+trusted_ip = "X.X.X.X"
