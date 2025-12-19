@@ -1,0 +1,70 @@
+# Example of using external OpenAI resource
+#external_openai = {
+#  name = "jogopenai"
+#  endpoint = "https://jogopenai.openai.azure.com/"
+#  resource_id = "/subscriptions/XXXXXXXX-XXXX-XXXX-XXXX-XXXXXXXXXXXX/resourceGroups/rgworkce540/providers/Microsoft.CognitiveServices/accounts/jogopenai"
+#  region = "westus3"
+#}
+
+## Example of a stand alone deployment
+#agents = false
+#deploy_rag_resources = false
+#foundry_encryption = "pmk"
+#resource_managed_identity_type = "umi"
+#region = "eastus2"
+#region_code = "eus2"
+#purpose = "lab"
+#random_string = "26z410"
+#resource_group_name_dns = "rgshwus326z"
+#subscription_id_infrastructure = "XXXXXXXX-XXXX-XXXX-XXXX-XXXXXXXXXXXX"
+#subnet_id_private_endpoints = "/subscriptions/XXXXXXXX-XXXX-XXXX-XXXX-XXXXXXXXXXXX/resourceGroups/rgwlwus326z/providers/Microsoft.Network/virtualNetworks/vnetwl3eus226z/subnets/snet-svc"
+#user_object_id = "XXXXXXXX-XXXX-XXXX-XXXX-XXXXXXXXXXXX"
+#tags = {
+#  environment = "lab"
+#  product     = "foundry"
+#}
+#trusted_ip = "X.X.X.X"
+
+## Example of a deployment used to demonstrate simple RAG patterns
+#agents = false
+#deploy_rag_resources = true
+#foundry_encryption = "cmk"
+#resource_managed_identity_type = "umi"
+#region = "eastus2"
+#region_code = "eus2"
+#purpose = "lab"
+#random_string = "26z420"
+#resource_group_name_dns = "rgshwus326z"
+#subscription_id_infrastructure = "XXXXXXXX-XXXX-XXXX-XXXX-XXXXXXXXXXXX"
+#subnet_id_private_endpoints = "/subscriptions/XXXXXXXX-XXXX-XXXX-XXXX-XXXXXXXXXXXX/resourceGroups/rgwlwus326z/providers/Microsoft.Network/virtualNetworks/vnetwl3eus226z/subnets/snet-svc"
+#user_object_id = "XXXXXXXX-XXXX-XXXX-XXXX-XXXXXXXXXXXX"
+#tags = {
+#  environment = "lab"
+#  product     = "foundry"
+#}
+#trusted_ip = "X.X.X.X"
+
+
+## Example of an agent deployment
+agents = true
+deploy_key_vault_connection_secrets = true
+deploy_rag_resources = false
+foundry_encryption = "cmk"
+resource_managed_identity_type = "umi"
+region = "eastus2"
+region_code = "eus2"
+purpose = "lab"
+random_string = "26z430"
+resource_group_name_dns = "rgshwus326z"
+subscription_id_infrastructure = "XXXXXXXX-XXXX-XXXX-XXXX-XXXXXXXXXXXX"
+agent_service_outbound_networking = {
+    type = "vnet_injection"
+    subnet_id = "/subscriptions/XXXXXXXX-XXXX-XXXX-XXXX-XXXXXXXXXXXX/resourceGroups/rgwlwus326z/providers/Microsoft.Network/virtualNetworks/vnetwl3eus226z/subnets/snet-app"
+}
+subnet_id_private_endpoints = "/subscriptions/XXXXXXXX-XXXX-XXXX-XXXX-XXXXXXXXXXXX/resourceGroups/rgwlwus326z/providers/Microsoft.Network/virtualNetworks/vnetwl3eus226z/subnets/snet-svc"
+user_object_id = "XXXXXXXX-XXXX-XXXX-XXXX-XXXXXXXXXXXX"
+tags = {
+  environment = "lab"
+  product     = "foundry"
+}
+#trusted_ip = "X.X.X.X"

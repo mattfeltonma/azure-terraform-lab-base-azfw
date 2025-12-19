@@ -1,9 +1,10 @@
-# API Management as an AI Gateway
+# API Management as an AI Gateway using Classic SKU APIM
 [![Terraform](https://img.shields.io/badge/Terraform-%3E%3D1.8.3-blue)](https://www.terraform.io/)
 [![Azure](https://img.shields.io/badge/Azure-Cloud-blue)](https://azure.microsoft.com/)
 
 ## Table of Contents
 - [Updates](#updates)
+- [TODOS](#TODOS)
 - [Overview](#overview)
 - [Architecture](#architecture)
 - [Features](#features)
@@ -12,15 +13,17 @@
 - [Deployment](#deployment)
 - [Post-Deployment](#post-deployment)
 
-
 ## Updates
 
 ### 2025
 * **November 14th, 2025**
   * Initial release
 
+## TODOS
+  * Update lab once Premium v2 SKU is more widely available across regions or be really lazy and wait for Developer v2 SKU.
+
 ## Overview
-This Terraform code provisions an (APIM) API Management instance into the base lab environment to demonstrate the AI Gateway capabilities of APIM. It is deployed into a hub and spoke base lab environment (you must deploy the base lab first) using the v1 (AKA classic) Developer SKU deployed in internal mode configuration. Advanced logging is setup to capture prompts and responses sent through the AI Gateway.
+This Terraform code provisions an APIM (Azure API Management) instance with the classic SKU into the base lab environment included in this repository to demonstrate the AI Gateway capabilities of APIM. It is deployed to one of the workload spokes using the Classic Developer SKU deployed in [internal mode](https://learn.microsoft.com/en-us/azure/api-management/api-management-using-with-internal-vnet). The base lab includes the necessary NSG (Network Security Group) and Azure Firewall rules required for internal mode deployments.
 
 ![AI Gateway Features](./images/lab-ai-gateway-features.svg)
 
@@ -33,7 +36,7 @@ The items pictured below in blue are deployed as part of this lab.
 ### API Management Setup
 APIs are created for the [2024-10-21 Azure OpenAI inferencing and authoring APIs](https://github.com/Azure/azure-rest-api-specs/tree/main/specification/cognitiveservices/OpenAI.Authoring) and the [Azure OpenAI v1 API](https://github.com/Azure/azure-rest-api-specs/blob/main/specification/ai/data-plane/OpenAI.v1/azure-v1-v1-generated.json). A sample APIM policy is deployed for each API with commonly used API policy snippets.
 
-Two AI Foundry instances are deployed with the OpenAI 4o model. These are deployed to West US and East US 2. These instances are configured as backends for the APIs with circuit breaker logic. A pooled backend is created to contain these two backends.
+Two AI Foundry instances are deployed with the OpenAI 4o model. These are deployed to West US and East US 2. These instances are configured as backends for the APIs with circuit breaker logic. A pooled backend is created to contain these two backends. This configuration is used to demonstrate load balancing capabilities.
 
 ![APIM Resources](./images/lab-ai-gateway-apim-setup.svg)
 
@@ -51,12 +54,12 @@ Azure RBAC is configured so multiple types of authentication flows can be tested
 - **Key Vault Integration**: APIM uses certificate sourced from Azure Key Vault for configuration of custom domains
 
 ### Network & Connectivity
-- Azure Firewall and Network Security Groups are pre-configured to support internal mode APIM.
+- [Azure Firewall application and network rules](https://learn.microsoft.com/en-us/azure/api-management/virtual-network-reference) and [Network Security Groups](https://learn.microsoft.com/en-us/azure/api-management/api-management-using-with-internal-vnet#configure-nsg-rules) security rules are pre-configured in the base lab to support internal mode APIM deployed to the snet-apim subnet in the workload virtual network. Reference those templates to see the required rules.
+- Access to the APIM instance is restricted to the virtual network. You should use the jump host from the base lab to interact with the instance.
 
 ### Monitoring & Logging
-- **Azure Monitor Integration**: Centralized logging and alerting
+- **Azure Monitor Integration**: Logs and diagnostics are turned on for all resources and are set to an Azure Log Analytics Workspace.
 - **Prompt and Response Logging**: [APIM prompt and response logging is enabled](https://journeyofthegeek.com/2025/05/27/generative-ai-in-azure-for-the-generalist-prompt-and-response-logging-with-api-management/)
-- **Diagnostic Settings**: Service-level and data plane logs are setup for all resources
 
 ## Prerequisites
 
@@ -67,7 +70,7 @@ Azure RBAC is configured so multiple types of authentication flows can be tested
    - Role assignment creation
    - Network resource provisioning
 
-3. **Base Lab**: You must have already deployed the base lab.
+3. **Base Lab**: You must have already deployed the [base lab](../../README.md).
 
 ### Local Development Environment
 1. **Terraform**: Version 1.8.3 or higher
@@ -122,7 +125,7 @@ terraform init
 # Plan deployment
 terraform plan
 
-# Deploy with limited parallelism to avoid API limits
+# Deploy with limited parallelism to avoid API limits. You can tweak this however you want.
 terraform apply -parallelism=3
 ```
 
