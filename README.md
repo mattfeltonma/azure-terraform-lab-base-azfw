@@ -33,6 +33,9 @@ Hope any bit of this code helps save you some time or learn something new!
 ## Updates
 
 ### 2025
+* **December 19, 2025**
+  * Added updated [Microsoft Foundry workload](/workloads/microsoft-foundry/) plugin
+
 * **November 14, 2025**
   * Added [AI Gateway workload](/workloads/ai-gateway/) plugin
 
