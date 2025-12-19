@@ -1,4 +1,10 @@
-variable "byo_key_vault" {
+variable "agents" {
+  description = "Specify whether to deploy the AI Agents resources within the Foundry project"
+  type        = bool
+  default     = false
+}
+
+variable "deploy_key_vault_connection_secrets" {
   description = "Specify whether BYO Key Vault will be used to store secrets for connections created within Foundry resource and projects that use key-based authentication"
   type        = bool
   default     = false
@@ -43,23 +49,27 @@ variable "region" {
 variable "shared_app_insights_resource_id" {
   description = "The resource id of the Application Insights resource to connect to the Foundry project"
   type        = string
+  default     = null
 }
 
 variable "shared_app_insights_connection_string" {
   description = "The connection string of the Application Insights resource to connect to the Foundry resource"
   type        = string
   sensitive   = true
+  default     = null
 }
 
 variable "shared_bing_grounding_search_resource_id" {
   description = "The resource id of the Bing Grounding Search resource to connect to the Foundry project"
   type        = string
+  default     = null
 }
 
 variable "shared_bing_grounding_search_api_key" {
   description = "The API key of the Bing Grounding Search resource to connect to the Foundry project"
   type        = string
   sensitive   = true
+  default     = null
 }
 
 variable "shared_byo_key_vault_resource_id" {
@@ -71,26 +81,31 @@ variable "shared_byo_key_vault_resource_id" {
 variable "shared_agent_ai_search_resource_id" {
   description = "The resource id of the AI Search resource to connect to the Foundry project"
   type        = string
+  default = null
 }
 
 variable "shared_agent_cosmosdb_account_resource_id" {
   description = "The resource id of the CosmosDB account to connect to the Foundry project"
   type        = string
+  default     = null
 }
 
 variable "shared_agent_cosmosdb_account_endpoint" {
   description = "The endpoint of the CosmosDB account to connect to the Foundry project"
   type        = string
+  default     = null
 }
 
 variable "shared_agent_storage_account_blob_endpoint" {
   description = "The blob endpoint of the Storage Account to connect to the Foundry project"
   type        = string
+  default     = null
 }
 
 variable "shared_agent_storage_account_resource_id" {
   description = "The resource id of the Storage Account to connect to the Foundry project"
   type        = string
+  default     = null
 }
 
 variable "shared_external_openai" {

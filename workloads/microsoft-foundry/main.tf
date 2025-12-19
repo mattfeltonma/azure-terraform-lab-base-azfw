@@ -2,7 +2,7 @@
 ##########
 ##########
 
-## Create resource group the resources in this deployment will be deployed to
+###Create resource group the resources in this deployment will be deployed to
 ##
 resource "azurerm_resource_group" "rg_foundry" {
   name     = "rgmsf${var.region_code}${var.random_string}"
@@ -127,10 +127,12 @@ resource "azurerm_monitor_diagnostic_setting" "diag_nsp_ai_resources" {
   }
 }
 
-## Create a Network Security Perimeter profile which will contain the Azure Key Vault used to store secrets for connections if BYO Key Vault is used
-##
+## AGENT DEPLOYMENTS
+## TODO: 12/2025 Remove this comment after NSP issue with BYO Key Vault for connection secret is fixed
+## If var.deploy_key_vault_connection_secrets is set to true create a Network Security Perimeter profile for the customer Key Vault instance that will store 
+## secrets for connections created within the associated Microsoft Foundry instance
 resource "azapi_resource" "profile_nsp_foundry_key_vault_secrets" {
-  count = var.byo_key_vault ? 1 : 0
+  count = var.deploy_key_vault_connection_secrets && var.agents ? 1 : 0
 
   depends_on = [
     azapi_resource.nsp_ai_resources
@@ -142,13 +144,15 @@ resource "azapi_resource" "profile_nsp_foundry_key_vault_secrets" {
   parent_id = azapi_resource.nsp_ai_resources.id
 }
 
-## LAB ONLY: Create an access rule to allow the trusted IP access to the Key Vault data plane for terraform deployments and redeploys
+## MY LAB ONLY
+## AGENT DEPLOYMENTS
+## Create an access rule to allow the trusted IP access to the Key Vault data plane for the Key Vault instance used for connection secretsfor terraform deployments and redeploys
 ##
 resource "azapi_resource" "access_rule_foundry_key_vault_secrets_ipprefix" {
-  count = var.foundry_encryption == "cmk" ? 1 : 0
+  count = var.deploy_key_vault_connection_secrets && var.agents ? 1 : 0
 
   depends_on = [
-    azapi_resource.access_rule_foundry_key_vault_cmk_subscription
+    azapi_resource.profile_nsp_foundry_key_vault_secrets
   ]
 
   type                      = "Microsoft.Network/networkSecurityPerimeters/profiles/accessRules@2024-07-01"
@@ -210,7 +214,8 @@ resource "azapi_resource" "access_rule_foundry_key_vault_cmk_subscription" {
   }
 }
 
-## LAB ONLY: Create an access rule to allow the trusted IP access to the Key Vault data plane for terraform redeploys
+## MY LAB ONLY
+## Create an access rule to allow the trusted IP access to the Key Vault data plane for terraform redeploys
 ##
 resource "azapi_resource" "access_rule_foundry_key_vault_cmk_ipprefix" {
   count = var.foundry_encryption == "cmk" ? 1 : 0
@@ -236,9 +241,12 @@ resource "azapi_resource" "access_rule_foundry_key_vault_cmk_ipprefix" {
   }
 }
 
-## Create a Network Security Perimeter profile which will contain the AI Search service, and Storage Account
-## TODO: 12/2025 Add CosmosDB to this profile once its out of public preview
+## AGENTS DEPLOYMENT OR RAG DEMO
+## TODO: 12/2025 Add CosmosDB to this profile once its out of public preview. This is not used at this time and could be consolidated into the MS Foundry profile at some point
+## If var.agents is true, create a Network Security Perimeter profile which will contain the AI Search service, Storage Account, and CosmosDB account used by the agent service
 resource "azapi_resource" "profile_nsp_foundry_ai_resources" {
+  count = var.agents || var.deploy_rag_resources ? 1 : 0
+
   depends_on = [
     azapi_resource.nsp_ai_resources
   ]
@@ -264,9 +272,9 @@ resource "azapi_resource" "profile_nsp_foundry_ms_foundry" {
 ########## 
 ##########
 
+## TODO: 12/2025 Remove this condition when UMI is supported across all regions and it make it the default instead of SMI
 ## Create a user-assigned managed identity that will be assigned to the Foundry resource
 ## This identity will be used when accessing the Key Vault when using a CMK for encryption of the Foundry resource
-## TODO: 12/2025 Remove this condition when UMI is supported across all regions and it make it the default instead of SMI
 resource "azurerm_user_assigned_identity" "umi_foundry_resource" {
   count = var.resource_managed_identity_type == "umi" ? 1 : 0
 
@@ -283,11 +291,13 @@ resource "azurerm_user_assigned_identity" "umi_foundry_resource" {
   }
 }
 
+## TODO: 12/2025 Remove this condition when the UMI restrictions are lifted. Restrictions includes inability to use UMI to interact with storage account in same region
 ## Create a user-assigned managed identity that will be assigned to the AI Search instance
 ## This identity will be used to access models within the Foundry resource, when using skillsets,
 ## to connect to Cognitive Services APIs and storage accounts in other regions
-## TODO: 12/2025 Remove this condition when the UMI restrictions are lifted. Example includes inability to use UMI to interact with storage account in same region
 resource "azurerm_user_assigned_identity" "umi_ai_search" {
+  count = var.deploy_rag_resources || var.agents ? 1 : 0
+
   name                = "umiais${var.region_code}${var.random_string}"
   location            = var.region
   resource_group_name = azurerm_resource_group.rg_foundry.name
@@ -313,14 +323,15 @@ resource "time_sleep" "wait_umi_foundry_resource" {
   create_duration = "15s"
 }
 
+########## AGENT DEPLOYMENTS
 ########## Create optional Azure Key Vault that will be used to store secrets for connections created within Foundry
-########## if var.byo_key_vault is set to true
+########## if var.deploy_key_vault_connection_secrets and var.agents are set to true
 ##########
 
 ## Create an Azure Key Vault to store secrets for connections created within Foundry that use key-based authentication
 ##
 resource "azurerm_key_vault" "key_vault_foundry_secrets" {
-  count = var.byo_key_vault ? 1 : 0
+  count = var.deploy_key_vault_connection_secrets && var.agents ? 1 : 0
 
   depends_on = [
     azurerm_resource_group.rg_foundry,
@@ -368,7 +379,7 @@ resource "azurerm_key_vault" "key_vault_foundry_secrets" {
 ## Create diagnostic settings for the Key Vault used to store secrets for connections created within Foundry
 ##
 resource "azurerm_monitor_diagnostic_setting" "diag_key_vault_foundry_secrets" {
-  count = var.byo_key_vault ? 1 : 0
+  count = var.deploy_key_vault_connection_secrets && var.agents ? 1 : 0
 
   depends_on = [
     azurerm_key_vault.key_vault_foundry_secrets
@@ -391,7 +402,7 @@ resource "azurerm_monitor_diagnostic_setting" "diag_key_vault_foundry_secrets" {
 ## the Key Vault Secrets Officer role on the Key Vault to allow management of secrets
 ##
 resource "azurerm_role_assignment" "umi_foundry_resource_secrets_key_vault_secrets_officer" {
-  count = var.resource_managed_identity_type == "umi" && var.byo_key_vault ? 1 : 0
+  count = var.resource_managed_identity_type == "umi" && var.deploy_key_vault_connection_secrets && var.agents ? 1 : 0
 
   depends_on = [
     time_sleep.wait_umi_foundry_resource
@@ -405,8 +416,7 @@ resource "azurerm_role_assignment" "umi_foundry_resource_secrets_key_vault_secre
 ## Associate the Key Vault used to store secrets for connections with the Network Security Perimeter profile
 ## TODO: 12/2025 Uncomment this when the NSP issue is sorted out with this secrets vault
 #resource "azapi_resource" "assoc_foundry_key_vault_secrets" {
-#  count = var.byo_key_vault ? 1 : 0
-#
+#  count = var.deploy_key_vault_connection_secrets && var.agents ? 1 : 0
 #  depends_on = [
 #    azurerm_key_vault.key_vault_foundry_secrets
 #  ]
@@ -433,7 +443,7 @@ resource "azurerm_role_assignment" "umi_foundry_resource_secrets_key_vault_secre
 ## Sleep for 120 seconds to allow the Azure RBAC permissions to replicate across Azure
 ##
 resource "time_sleep" "wait_key_vault_secrets_umi_rbac_replication" {
-  count = var.resource_managed_identity_type == "umi" && var.byo_key_vault ? 1 : 0
+  count = var.resource_managed_identity_type == "umi" && var.deploy_key_vault_connection_secrets && var.agents ? 1 : 0
 
   depends_on = [
     azurerm_role_assignment.umi_foundry_resource_secrets_key_vault_secrets_officer
@@ -590,13 +600,17 @@ resource "azurerm_key_vault_key" "key_foundry_cmk" {
   }
 }
 
+########## AGENT DEPLOYMENTS
 ########## Create optional resources to support agent tracing and some built-in tool usage for all projects within the Foundry resource
 ##########
 ##########
 
+## AGENT DEPLOYMENTS
 ## Create Application Insights instance to be used by the AI Foundry resource
 ##
 resource "azurerm_application_insights" "appins_foundry" {
+  count = var.agents ? 1 : 0
+
   name                = "appinsmsf${var.region_code}${var.random_string}"
   location            = var.region
   resource_group_name = azurerm_resource_group.rg_foundry.name
@@ -612,9 +626,12 @@ resource "azurerm_application_insights" "appins_foundry" {
   }
 }
 
+## AGENTS DEPLOYMENTS
 ## Pause for 60 seconds to allow creation of Application Insights resource to replicate
 ## Application Insight instances created and integrated with Log Analytics can take time to replicate the resource
 resource "time_sleep" "wait_appins" {
+  count = var.agents ? 1 : 0
+
   depends_on = [
     azurerm_application_insights.appins_foundry
   ]
@@ -624,6 +641,8 @@ resource "time_sleep" "wait_appins" {
 ## Create Grounding Search with Bing
 ##
 resource "azapi_resource" "bing_grounding_search_foundry" {
+  count = var.agents ? 1 : 0
+
   type                      = "Microsoft.Bing/accounts@2020-06-10"
   name                      = "bingmsf${var.region_code}${var.random_string}"
   parent_id                 = azurerm_resource_group.rg_foundry.id
@@ -642,10 +661,11 @@ resource "azapi_resource" "bing_grounding_search_foundry" {
 #########
 #########
 
+## AGENT DEPLOYMENTS
 ## Create Private Endpoint for the Key Vault used to store secrets for connections created within Foundry
-## This is only required if var.byo_key_vault is set to true
+## This is only required if var.deploy_key_vault_connection_secrets and var.agents are set to true
 resource "azurerm_private_endpoint" "pe_key_vault_secrets_foundry" {
-  count = var.byo_key_vault ? 1 : 0
+  count = var.deploy_key_vault_connection_secrets && var.agents ? 1 : 0
 
   depends_on = [
     azurerm_key_vault.key_vault_foundry_secrets
@@ -763,9 +783,10 @@ resource "azurerm_cognitive_account" "foundry_resource" {
   # Configure network controls to block all public network access and restrict to Private Endpoints only. Network Security Perimeter will control access over Microsoft public backbone
   public_network_access_enabled = false
 
-  # Enable VNet injection for Standard Agents if agent_service_outbound_networking.type is set to "vnet_injection"
+  # TODO: 12/2025 Add option for managed virtual network after more testing
+  # Enable VNet injection for Standard Agents if agent_service_outbound_networking.type is set
   dynamic "network_injection" {
-    for_each = var.agent_service_outbound_networking.type == "vnet_injection" ? [1] : []
+    for_each = var.agent_service_outbound_networking.type != "none" ? [1] : []
     content {
       scenario  = "agent"
       subnet_id = var.agent_service_outbound_networking.subnet_id
@@ -830,7 +851,7 @@ resource "azapi_resource" "assoc_foundry_resource" {
         id = azurerm_cognitive_account.foundry_resource.id
       }
       profile = {
-        id = azapi_resource.profile_nsp_foundry_ai_resources.id
+        id = azapi_resource.profile_nsp_foundry_ms_foundry.id
       }
     }
   }
@@ -851,11 +872,12 @@ resource "time_sleep" "wait_smi_foundry" {
   create_duration = "10s"
 }
 
+## AGENT DEPLOYMENTS
 ## Create an Azure RBAC role assignment granting the system-assigned managed identity for the AI Foundry resource
 ## the Key Vault Secrets Officer role on the Key Vault to allow management of secrets
 ##
 resource "azurerm_role_assignment" "smi_foundry_secrets_key_vault_secrets_officer" {
-  count = var.resource_managed_identity_type == "smi" && var.byo_key_vault ? 1 : 0
+  count = var.resource_managed_identity_type == "smi" && var.deploy_key_vault_connection_secrets && var.agents ? 1 : 0
 
   depends_on = [
     time_sleep.wait_smi_foundry
@@ -911,7 +933,8 @@ resource "azurerm_cognitive_account_customer_managed_key" "foundry_cmk" {
 #########
 #########
 
-# Create a deployment for OpenAI's GPT-4o if var.external_openai is not set
+## TODO: 12/2025 Update LLM model to another more current model after determining which one is most available
+## Create a deployment for OpenAI's GPT-4o if var.external_openai is not set
 ##
 resource "azurerm_cognitive_deployment" "deployment_gpt_4o" {
   depends_on = [
@@ -1021,7 +1044,7 @@ resource "azurerm_private_endpoint" "pe_foundry_resource" {
   }
 }
 
-########## Create the the resources required for the standard agent configuration.
+########## Create the the resources required for a standard agent depoyment or for demonstration of simple RAG patterns
 ########## These resources will be shared across all projects deployed to the Foundry resource
 ##########
 
@@ -1029,6 +1052,8 @@ resource "azurerm_private_endpoint" "pe_foundry_resource" {
 ## DB account will support DocumentDB API and will have diagnostic settings enabled
 ## Deployed to one region with no failover to reduce costs
 resource "azurerm_cosmosdb_account" "cosmosdb_foundry" {
+  count = var.agents ? 1 : 0
+
   depends_on = [
     azurerm_resource_group.rg_foundry,
     azurerm_log_analytics_workspace.log_analytics_workspace_workload
@@ -1075,12 +1100,14 @@ resource "azurerm_cosmosdb_account" "cosmosdb_foundry" {
 ## Create diagnostic settings for the Cosmos DB account
 ##
 resource "azurerm_monitor_diagnostic_setting" "diag_cosmosdb" {
+  count = var.agents ? 1 : 0
+
   depends_on = [
     azurerm_cosmosdb_account.cosmosdb_foundry
   ]
 
   name                       = "diag-base"
-  target_resource_id         = azurerm_cosmosdb_account.cosmosdb_foundry.id
+  target_resource_id         = azurerm_cosmosdb_account.cosmosdb_foundry[0].id
   log_analytics_workspace_id = azurerm_log_analytics_workspace.log_analytics_workspace_workload.id
 
   enabled_log {
@@ -1120,9 +1147,12 @@ resource "azurerm_monitor_diagnostic_setting" "diag_cosmosdb" {
   }
 }
 
+## AGENTS DEPLOYMENT OR RAG DEMO
 ## Create an AI Search service where vector stores can be created if using the chat with your data workload in 
 ## Foundry to ingest data into AI Search
 resource "azurerm_search_service" "ai_search_foundry" {
+  count = var.agents || var.deploy_rag_resources ? 1 : 0
+
   depends_on = [
     azurerm_resource_group.rg_foundry,
     azurerm_log_analytics_workspace.log_analytics_workspace_workload,
@@ -1142,7 +1172,7 @@ resource "azurerm_search_service" "ai_search_foundry" {
   identity {
     type = "SystemAssigned, UserAssigned"
     identity_ids = [
-      azurerm_user_assigned_identity.umi_ai_search.id
+      azurerm_user_assigned_identity.umi_ai_search[0].id
     ]
   }
 
@@ -1168,15 +1198,18 @@ resource "azurerm_search_service" "ai_search_foundry" {
   }
 }
 
+## AGENTS DEPLOYMENT OR RAG DEMO
 ## Create diagnostic settings for the Azure AI Search service
 ##
 resource "azurerm_monitor_diagnostic_setting" "diag_ai_search" {
+  count = var.agents || var.deploy_rag_resources ? 1 : 0
+
   depends_on = [
     azurerm_search_service.ai_search_foundry
   ]
 
   name                       = "diag-base"
-  target_resource_id         = azurerm_search_service.ai_search_foundry.id
+  target_resource_id         = azurerm_search_service.ai_search_foundry[0].id
   log_analytics_workspace_id = azurerm_log_analytics_workspace.log_analytics_workspace_workload.id
 
   enabled_log {
@@ -1184,9 +1217,12 @@ resource "azurerm_monitor_diagnostic_setting" "diag_ai_search" {
   }
 }
 
+## AGENTS DEPLOYMENT OR RAG DEMO
 ## Associate the Search Service used for the standard agent to the Network Security Perimeter
 ##
 resource "azapi_resource" "assoc_foundry_ai_search" {
+  count = var.agents || var.deploy_rag_resources ? 1 : 0
+
   depends_on = [
     azurerm_search_service.ai_search_foundry
   ]
@@ -1199,21 +1235,25 @@ resource "azapi_resource" "assoc_foundry_ai_search" {
 
   body = {
     properties = {
-      accessMode = "Enforced"
+      # TODO: 12/2025 Set this to Learning mode for now due to issue with Search service import data wizard rejecting xms_az_nwpeimid claim. Notified PG and waiting to hear back
+      accessMode = var.deploy_rag_resources ? "Learning" : "Enforced"
       privateLinkResource = {
-        id = azurerm_search_service.ai_search_foundry.id
+        id = azurerm_search_service.ai_search_foundry[0].id
       }
       profile = {
-        id = azapi_resource.profile_nsp_foundry_ai_resources.id
+        id = azapi_resource.profile_nsp_foundry_ai_resources[0].id
       }
     }
   }
 
 }
 
+## AGENTS DEPLOYMENT OR RAG DEMO
 ## Create a storage account which will store any files uploaded by developers or end users for flows which
 ## allow for uploaded data
 resource "azurerm_storage_account" "storage_account_foundry" {
+  count = var.agents || var.deploy_rag_resources ? 1 : 0
+
   depends_on = [
     azurerm_resource_group.rg_foundry,
     azurerm_log_analytics_workspace.log_analytics_workspace_workload,
@@ -1247,16 +1287,18 @@ resource "azurerm_storage_account" "storage_account_foundry" {
   }
 }
 
+## AGENTS DEPLOYMENT OR RAG DEMO
 ## Configure diagnostic settings for blob, file, queue, and table services to send logs to Log Analytics Workspace
 ##
 resource "azurerm_monitor_diagnostic_setting" "diag_storage_foundry_blob" {
+  count = var.agents || var.deploy_rag_resources ? 1 : 0
 
   depends_on = [
     azurerm_storage_account.storage_account_foundry
   ]
 
   name                       = "diag-base"
-  target_resource_id         = "${azurerm_storage_account.storage_account_foundry.id}/blobServices/default"
+  target_resource_id         = "${azurerm_storage_account.storage_account_foundry[0].id}/blobServices/default"
   log_analytics_workspace_id = azurerm_log_analytics_workspace.log_analytics_workspace_workload.id
 
   enabled_log {
@@ -1273,13 +1315,15 @@ resource "azurerm_monitor_diagnostic_setting" "diag_storage_foundry_blob" {
 }
 
 resource "azurerm_monitor_diagnostic_setting" "diag_storage_foundry_file" {
+  count = var.agents || var.deploy_rag_resources ? 1 : 0
+
   depends_on = [
     azurerm_storage_account.storage_account_foundry,
     azurerm_monitor_diagnostic_setting.diag_storage_foundry_blob
   ]
 
   name                       = "diag-base"
-  target_resource_id         = "${azurerm_storage_account.storage_account_foundry.id}/fileServices/default"
+  target_resource_id         = "${azurerm_storage_account.storage_account_foundry[0].id}/fileServices/default"
   log_analytics_workspace_id = azurerm_log_analytics_workspace.log_analytics_workspace_workload.id
 
   enabled_log {
@@ -1296,13 +1340,15 @@ resource "azurerm_monitor_diagnostic_setting" "diag_storage_foundry_file" {
 }
 
 resource "azurerm_monitor_diagnostic_setting" "diag_storage_foundry_queue" {
+  count = var.agents || var.deploy_rag_resources ? 1 : 0
+
   depends_on = [
     azurerm_storage_account.storage_account_foundry,
     azurerm_monitor_diagnostic_setting.diag_storage_foundry_file
   ]
 
   name                       = "diag-base"
-  target_resource_id         = "${azurerm_storage_account.storage_account_foundry.id}/queueServices/default"
+  target_resource_id         = "${azurerm_storage_account.storage_account_foundry[0].id}/queueServices/default"
   log_analytics_workspace_id = azurerm_log_analytics_workspace.log_analytics_workspace_workload.id
 
   enabled_log {
@@ -1319,6 +1365,7 @@ resource "azurerm_monitor_diagnostic_setting" "diag_storage_foundry_queue" {
 }
 
 resource "azurerm_monitor_diagnostic_setting" "diag_storage_foundry_table" {
+  count = var.agents || var.deploy_rag_resources ? 1 : 0
 
   depends_on = [
     azurerm_storage_account.storage_account_foundry,
@@ -1326,7 +1373,7 @@ resource "azurerm_monitor_diagnostic_setting" "diag_storage_foundry_table" {
   ]
 
   name                       = "diag-base"
-  target_resource_id         = "${azurerm_storage_account.storage_account_foundry.id}/tableServices/default"
+  target_resource_id         = "${azurerm_storage_account.storage_account_foundry[0].id}/tableServices/default"
   log_analytics_workspace_id = azurerm_log_analytics_workspace.log_analytics_workspace_workload.id
 
   enabled_log {
@@ -1342,9 +1389,12 @@ resource "azurerm_monitor_diagnostic_setting" "diag_storage_foundry_table" {
   }
 }
 
+## AGENTS DEPLOYMENT OR RAG DEMO
 ## Associate the Key Vault used to store secrets for connections with the Network Security Perimeter profile
 ##
 resource "azapi_resource" "assoc_foundry_storage_account" {
+  count = var.agents || var.deploy_rag_resources ? 1 : 0
+
   depends_on = [
     azurerm_storage_account.storage_account_foundry,
     azapi_resource.assoc_foundry_ai_search
@@ -1360,43 +1410,46 @@ resource "azapi_resource" "assoc_foundry_storage_account" {
     properties = {
       accessMode = "Enforced"
       privateLinkResource = {
-        id = azurerm_storage_account.storage_account_foundry.id
+        id = azurerm_storage_account.storage_account_foundry[0].id
       }
       profile = {
-        id = azapi_resource.profile_nsp_foundry_ai_resources.id
+        id = azapi_resource.profile_nsp_foundry_ai_resources[0].id
       }
     }
   }
 }
 
-########## Create Private Endpoints for Foundry Standard Agent resources
+########## Create Private Endpoints for resources used by Standard Agents or in RAG DEMO
 ##########
 ##########
 
+## AGENTS DEPLOYMENT
 ## Create Private Endpoint for the CosmosDB account used for the standard agent configuration
 ##
 resource "azurerm_private_endpoint" "pe_cosmosdb_foundry" {
+  count = var.agents ? 1 : 0
+
   depends_on = [
     azurerm_cosmosdb_account.cosmosdb_foundry,
     azurerm_private_endpoint.pe_foundry_resource
   ]
 
-  name                = "pe${azurerm_cosmosdb_account.cosmosdb_foundry.name}cosmossql"
+  name                = "pe${azurerm_cosmosdb_account.cosmosdb_foundry[0].name}cosmossql"
   location            = var.region
   resource_group_name = azurerm_resource_group.rg_foundry.name
   tags                = var.tags
   subnet_id           = var.subnet_id_private_endpoints
 
-  custom_network_interface_name = "nic${azurerm_cosmosdb_account.cosmosdb_foundry.name}cosmossql"
+  custom_network_interface_name = "nic${azurerm_cosmosdb_account.cosmosdb_foundry[0].name}cosmossql"
   private_service_connection {
-    name                           = "peconn${azurerm_cosmosdb_account.cosmosdb_foundry.name}cosmossql"
-    private_connection_resource_id = azurerm_cosmosdb_account.cosmosdb_foundry.id
+    name                           = "peconn${azurerm_cosmosdb_account.cosmosdb_foundry[0].name}cosmossql"
+    private_connection_resource_id = azurerm_cosmosdb_account.cosmosdb_foundry[0].id
     subresource_names              = ["Sql"]
     is_manual_connection           = false
   }
 
   private_dns_zone_group {
-    name = "zoneconn${azurerm_cosmosdb_account.cosmosdb_foundry.name}cosmossql"
+    name = "zoneconn${azurerm_cosmosdb_account.cosmosdb_foundry[0].name}cosmossql"
     private_dns_zone_ids = [
       "/subscriptions/${var.subscription_id_infrastructure}/resourceGroups/${var.resource_group_name_dns}/providers/Microsoft.Network/privateDnsZones/privatelink.documents.azure.com"
     ]
@@ -1410,31 +1463,34 @@ resource "azurerm_private_endpoint" "pe_cosmosdb_foundry" {
   }
 }
 
-## Create Private Endpoint for the AI Foundry AI Search instance used for the standard agent configuration
+## AGENTS DEPLOYMENT OR RAG DEMO
+## Create Private Endpoint for the AI Foundry AI Search instance used standard agent or RAG demo
 ##
 resource "azurerm_private_endpoint" "pe_aisearch_foundry" {
+  count = var.agents || var.deploy_rag_resources ? 1 : 0
+
   depends_on = [
     azurerm_private_endpoint.pe_cosmosdb_foundry,
     azurerm_search_service.ai_search_foundry
   ]
 
-  name                = "pe${azurerm_search_service.ai_search_foundry.name}searchservice"
+  name                = "pe${azurerm_search_service.ai_search_foundry[0].name}searchservice"
   location            = var.region
   resource_group_name = azurerm_resource_group.rg_foundry.name
   tags                = var.tags
   subnet_id           = var.subnet_id_private_endpoints
 
-  custom_network_interface_name = "nic${azurerm_search_service.ai_search_foundry.name}searchservice"
+  custom_network_interface_name = "nic${azurerm_search_service.ai_search_foundry[0].name}searchservice"
 
   private_service_connection {
-    name                           = "peconn${azurerm_search_service.ai_search_foundry.name}searchservice"
-    private_connection_resource_id = azurerm_search_service.ai_search_foundry.id
+    name                           = "peconn${azurerm_search_service.ai_search_foundry[0].name}searchservice"
+    private_connection_resource_id = azurerm_search_service.ai_search_foundry[0].id
     subresource_names              = ["searchService"]
     is_manual_connection           = false
   }
 
   private_dns_zone_group {
-    name = "zoneconn${azurerm_search_service.ai_search_foundry.name}searchservice"
+    name = "zoneconn${azurerm_search_service.ai_search_foundry[0].name}searchservice"
     private_dns_zone_ids = [
       "/subscriptions/${var.subscription_id_infrastructure}/resourceGroups/${var.resource_group_name_dns}/providers/Microsoft.Network/privateDnsZones/privatelink.search.windows.net"
     ]
@@ -1451,27 +1507,29 @@ resource "azurerm_private_endpoint" "pe_aisearch_foundry" {
 ## Create Private Endpoint for the AI Foundry storage account used for the standard agent configuration
 ##
 resource "azurerm_private_endpoint" "pe_storage_blob_foundry" {
+  count = var.agents || var.deploy_rag_resources ? 1 : 0
+
   depends_on = [
     azurerm_private_endpoint.pe_aisearch_foundry,
     azurerm_storage_account.storage_account_foundry
   ]
 
-  name                = "pe${azurerm_storage_account.storage_account_foundry.name}blob"
+  name                = "pe${azurerm_storage_account.storage_account_foundry[0].name}blob"
   location            = var.region
   resource_group_name = azurerm_resource_group.rg_foundry.name
   tags                = var.tags
   subnet_id           = var.subnet_id_private_endpoints
 
-  custom_network_interface_name = "nic${azurerm_storage_account.storage_account_foundry.name}blob"
+  custom_network_interface_name = "nic${azurerm_storage_account.storage_account_foundry[0].name}blob"
   private_service_connection {
-    name                           = "peconn${azurerm_storage_account.storage_account_foundry.name}blob"
-    private_connection_resource_id = azurerm_storage_account.storage_account_foundry.id
+    name                           = "peconn${azurerm_storage_account.storage_account_foundry[0].name}blob"
+    private_connection_resource_id = azurerm_storage_account.storage_account_foundry[0].id
     subresource_names              = ["blob"]
     is_manual_connection           = false
   }
 
   private_dns_zone_group {
-    name = "zoneconn${azurerm_storage_account.storage_account_foundry.name}blob"
+    name = "zoneconn${azurerm_storage_account.storage_account_foundry[0].name}blob"
     private_dns_zone_ids = [
       "/subscriptions/${var.subscription_id_infrastructure}/resourceGroups/${var.resource_group_name_dns}/providers/Microsoft.Network/privateDnsZones/privatelink.blob.core.windows.net"
     ]
@@ -1488,7 +1546,13 @@ resource "azurerm_private_endpoint" "pe_storage_blob_foundry" {
 ########## Create the Foundry project using the module
 ##########
 ##########
-module "foundry_project" {
+
+## AGENT DEPLOYMENT
+## Create a Foundry project suited for standard agent use cases
+##
+module "foundry_project_agents" {
+  count = var.agents ? 1 : 0
+
   depends_on = [
     # Wait for creation of Foundry resource
     azurerm_cognitive_account.foundry_resource,
@@ -1520,19 +1584,55 @@ module "foundry_project" {
 
   ## Required info for resource-level connections (Remove once this bug is fixed)
   shared_byo_key_vault_resource_id      = azurerm_key_vault.key_vault_foundry_secrets[0].id
-  shared_app_insights_resource_id       = azurerm_application_insights.appins_foundry.id
-  shared_app_insights_connection_string = azurerm_application_insights.appins_foundry.connection_string
-  byo_key_vault                         = var.byo_key_vault ? true : false
+  shared_app_insights_resource_id       = azurerm_application_insights.appins_foundry[0].id
+  shared_app_insights_connection_string = azurerm_application_insights.appins_foundry[0].connection_string
+  deploy_key_vault_connection_secrets   = var.deploy_key_vault_connection_secrets ? true : false
 
   ## Required info for project-level connections
-  shared_agent_ai_search_resource_id         = azurerm_search_service.ai_search_foundry.id
-  shared_agent_cosmosdb_account_resource_id  = azurerm_cosmosdb_account.cosmosdb_foundry.id
-  shared_agent_cosmosdb_account_endpoint     = azurerm_cosmosdb_account.cosmosdb_foundry.endpoint
-  shared_agent_storage_account_resource_id   = azurerm_storage_account.storage_account_foundry.id
-  shared_agent_storage_account_blob_endpoint = azurerm_storage_account.storage_account_foundry.primary_blob_endpoint
-  shared_bing_grounding_search_resource_id   = azapi_resource.bing_grounding_search_foundry.id
-  shared_bing_grounding_search_api_key       = data.azapi_resource_action.bing_api_keys.output.key1
+  agents                                     = var.agents ? true : false
+  project_managed_identity_type              = var.project_managed_identity_type
+  shared_agent_ai_search_resource_id         = azurerm_search_service.ai_search_foundry[0].id
+  shared_agent_cosmosdb_account_resource_id  = azurerm_cosmosdb_account.cosmosdb_foundry[0].id
+  shared_agent_cosmosdb_account_endpoint     = azurerm_cosmosdb_account.cosmosdb_foundry[0].endpoint
+  shared_agent_storage_account_resource_id   = azurerm_storage_account.storage_account_foundry[0].id
+  shared_agent_storage_account_blob_endpoint = azurerm_storage_account.storage_account_foundry[0].primary_blob_endpoint
+  shared_bing_grounding_search_resource_id   = azapi_resource.bing_grounding_search_foundry[0].id
+  shared_bing_grounding_search_api_key       = data.azapi_resource_action.bing_api_keys[0].output.key1
   shared_external_openai                     = var.external_openai
+
+  # User object id to grant permissions over project
+  user_object_id = var.user_object_id
+}
+
+## RAG DEMO DEPLOYMENT
+## Create a Foundry project suited for basic RAG demo use cases
+##
+module "foundry_project_rag" {
+  count = var.deploy_rag_resources ? 1 : 0
+
+  depends_on = [
+    # Wait for creation of Foundry resource
+    azurerm_cognitive_account.foundry_resource,
+    azurerm_private_endpoint.pe_foundry_resource,
+    azapi_resource.assoc_foundry_resource,
+    # Wait for resources to support RAG demo
+    azurerm_search_service.ai_search_foundry,
+    azurerm_storage_account.storage_account_foundry,
+    azurerm_private_endpoint.pe_aisearch_foundry,
+    azurerm_private_endpoint.pe_storage_blob_foundry
+  ]
+
+  source                             = "./modules/project"
+  foundry_resource_id                = azurerm_cognitive_account.foundry_resource.id
+  foundry_resource_resource_group_id = azurerm_resource_group.rg_foundry.id
+  region                             = var.region
+  first_project                      = true
+  project_number                     = 1
+
+  ## Required info for project-level connections
+  agents                        = var.agents ? true : false
+  project_managed_identity_type = var.project_managed_identity_type
+  shared_external_openai        = var.external_openai
 
   # User object id to grant permissions over project
   user_object_id = var.user_object_id
@@ -1542,80 +1642,111 @@ module "foundry_project" {
 ########## Create the necessary role assignments to support using skill sets in AI Search in combination with embedding models in Foundry
 ##########
 
+## RAG DEMO
 ## Create an Azure RBAC role assignment on the Foundry resource granting the AI Search service user-assigned managed identity the Cognitive Services OpenAI User role
 ## This allows it to call the embedding models to vectorize the data when using AI Search skillset to build and maintain indexes
 ##
 resource "azurerm_role_assignment" "cognitive_services_openai_user_ai_search_service" {
+  count = var.deploy_rag_resources ? 1 : 0
+
   depends_on = [
     azurerm_cognitive_account.foundry_resource,
     azurerm_search_service.ai_search_foundry
   ]
-  name                 = uuidv5("dns", "${azurerm_search_service.ai_search_foundry.identity[0].principal_id}${azurerm_cognitive_account.foundry_resource.name}openaiuser")
+  name                 = uuidv5("dns", "${azurerm_search_service.ai_search_foundry[0].identity[0].principal_id}${azurerm_cognitive_account.foundry_resource.name}openaiuser")
   scope                = azurerm_cognitive_account.foundry_resource.id
   role_definition_name = "Cognitive Services OpenAI User"
-  principal_id         = azurerm_search_service.ai_search_foundry.identity[0].principal_id
+  principal_id         = azurerm_search_service.ai_search_foundry[0].identity[0].principal_id
 }
 
-## Create an Azure RBAC role assignment on the Foundry resourc granting the AI Search user-assigned managed identity the Cognitive Services User role 
+## RAG DEMO
+## Create an Azure RBAC role assignment on the Foundry resource granting the AI Search user-assigned managed identity the Cognitive Services User role 
 ## This allows it to call other Cognitive Services APIs if needed when using AI Search skillsets
 ##
 resource "azurerm_role_assignment" "cognitive_services_user_ai_search_service" {
+  count = var.deploy_rag_resources ? 1 : 0
+
   depends_on = [
     azurerm_cognitive_account.foundry_resource,
     azurerm_role_assignment.cognitive_services_openai_user_ai_search_service,
     azurerm_search_service.ai_search_foundry
   ]
 
-  name                 = uuidv5("dns", "${azurerm_user_assigned_identity.umi_ai_search.principal_id}${azurerm_cognitive_account.foundry_resource.name}cogservicesuser")
+  name                 = uuidv5("dns", "${azurerm_user_assigned_identity.umi_ai_search[0].principal_id}${azurerm_cognitive_account.foundry_resource.name}cogservicesuser")
   scope                = azurerm_cognitive_account.foundry_resource.id
   role_definition_name = "Cognitive Services User"
-  principal_id         = azurerm_user_assigned_identity.umi_ai_search.principal_id
+  principal_id         = azurerm_user_assigned_identity.umi_ai_search[0].principal_id
 }
 
+## RAG DEMO
 ## Create an Azure RBAC role assignment on the Storage Account granting the AI Search service system-assigned managed identity the Storage Blob Data Reader role
 ## TODO: 12/2025: Switch this to UMI once the limitation of using SMIs for a storage account in the same region is lifted
 ##
 resource "azurerm_role_assignment" "storage_blob_data_reader_ai_search_service" {
+  count = var.deploy_rag_resources ? 1 : 0
+
   depends_on = [
     azurerm_storage_account.storage_account_foundry,
     azurerm_search_service.ai_search_foundry
   ]
 
-  name                 = uuidv5("dns", "${azurerm_search_service.ai_search_foundry.identity[0].principal_id}${azurerm_storage_account.storage_account_foundry.name}blobdatareader")
-  scope                = azurerm_storage_account.storage_account_foundry.id
+  name                 = uuidv5("dns", "${azurerm_search_service.ai_search_foundry[0].identity[0].principal_id}${azurerm_storage_account.storage_account_foundry[0].name}blobdatareader")
+  scope                = azurerm_storage_account.storage_account_foundry[0].id
   role_definition_name = "Storage Blob Data Reader"
-  principal_id         = azurerm_search_service.ai_search_foundry.identity[0].principal_id
+  principal_id         = azurerm_search_service.ai_search_foundry[0].identity[0].principal_id
 }
 
 ########## OPTIONAL: Human role assignments
 ########## Create the necessary role assignments to support using skill sets in AI Search in combination with embedding models in Foundry
 ##########
 
+## RAG DEMO
 ## Create a role assignment granting a user the Search Service Contributor role which will allow the user
 ## to create and manage indexes in the AI Search Service
 resource "azurerm_role_assignment" "aisearch_user_service_contributor" {
+  count = var.deploy_rag_resources ? 1 : 0
+
   depends_on = [
     azurerm_search_service.ai_search_foundry
   ]
 
-  name                 = uuidv5("dns", "${var.user_object_id}${azurerm_search_service.ai_search_foundry.name}servicecont")
-  scope                = azurerm_search_service.ai_search_foundry.id
+  name                 = uuidv5("dns", "${var.user_object_id}${azurerm_search_service.ai_search_foundry[0].name}servicecont")
+  scope                = azurerm_search_service.ai_search_foundry[0].id
   role_definition_name = "Search Service Contributor"
   principal_id         = var.user_object_id
 }
 
+## RAG DEMO
 ## Create a role assignment granting a user the Search Index Data Contributor role which will allow the user
 ## to create new records in existing indexes in an AI Search Service
 resource "azurerm_role_assignment" "aisearch_user_data_contributor" {
+  count = var.deploy_rag_resources ? 1 : 0
+
   depends_on = [
     azurerm_role_assignment.aisearch_user_service_contributor
   ]
-  name                 = uuidv5("dns", "${var.user_object_id}${azurerm_search_service.ai_search_foundry.name}datacont")
-  scope                = azurerm_search_service.ai_search_foundry.id
+  name                 = uuidv5("dns", "${var.user_object_id}${azurerm_search_service.ai_search_foundry[0].name}datacont")
+  scope                = azurerm_search_service.ai_search_foundry[0].id
   role_definition_name = "Search Index Data Contributor"
   principal_id         = var.user_object_id
 }
 
+## RAG DEMO
+## Create an Azure RBAC role assignment on the Storage Account granting a user the Storage Blob Data Contributor role
+## This allows the user to read and write data to the storage account. This can be used to build indexes in AI Search
+## to demonstrate retrieval augmented generation patterns using Foundry
+resource "azurerm_role_assignment" "storage_blob_data_contributor_user" {
+  count = var.deploy_rag_resources ? 1 : 0
+
+  depends_on = [
+    azurerm_storage_account.storage_account_foundry
+  ]
+
+  name                 = uuidv5("dns", "${var.user_object_id}${azurerm_storage_account.storage_account_foundry[0].name}blobdatacontributor")
+  scope                = azurerm_storage_account.storage_account_foundry[0].id
+  role_definition_name = "Storage Blob Data Contributor"
+  principal_id         = var.user_object_id
+}
 
 ########## Create additional human role assignments to allow user to perform commmon tasks at the Foundry-resource level
 ##########

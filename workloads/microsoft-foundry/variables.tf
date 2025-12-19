@@ -1,29 +1,49 @@
+variable "agents" {
+  description = "Set to true if plan to use this Foundry resource with AI Agents"
+  type        = bool
+  default     = false
+}
+
 variable "agent_service_outbound_networking" {
-  description = "Configuration for agent service outbound networking"
+  description = "Configuration for agent service outbound networking if using agents"
   type = object({
     type      = string
     subnet_id = optional(string)
   })
-  
-  validation {
-    condition = contains(["vnet_injection", "managed_virtual_network"], var.agent_service_outbound_networking.type)
-    error_message = "type must be either 'vnet_injection' or 'managed_virtual_network'"
+
+  default = {
+    type = "none"
   }
-  
+
+  validation {
+    condition     = !(var.agent_service_outbound_networking.type != "none" && !var.agents)
+    error_message = "Outbound networking can only be configured when agents are being deployed"
+  }
+
+  validation {
+    condition     = contains(["vnet_injection", "managed_virtual_network", "none"], var.agent_service_outbound_networking.type)
+    error_message = "This must be either 'vnet_injection' or 'managed_virtual_network' or 'none'"
+  }
+
   validation {
     condition = (
-      var.agent_service_outbound_networking.type == "vnet_injection" ? 
-        var.agent_service_outbound_networking.subnet_id != null : 
-        true
+      var.agent_service_outbound_networking.type == "vnet_injection" ?
+      var.agent_service_outbound_networking.subnet_id != null :
+      true
     )
-    error_message = "subnet_id is required when type is 'vnet_injection'"
+    error_message = "The subnet_id variable must be set when type is 'vnet_injection'"
   }
 }
 
-variable "byo_key_vault" {
-  description = "Set to true to create an Azure Key Vault to store secrets for connections created within Foundry resource and projects that use key-based authentication"
+variable "deploy_key_vault_connection_secrets" {
+  description = "Set to true to create an Azure Key Vault to store secrets for connections used by agents created within Foundry resource and projects that use key-based authentication"
   type        = bool
   default     = false
+  ## TODO: 12/2025 Remove this validation if a use case pops up for this feature when not using agents
+  validation {
+    condition     = !(var.deploy_key_vault_connection_secrets && !var.agents)
+    error_message = "Key Vault for connection secrets only makes sense to deploy if agents are also being deployed"
+  }
 }
 
 variable "external_openai" {
@@ -55,6 +75,22 @@ variable "resource_managed_identity_type" {
     condition     = contains(["smi", "umi"], var.resource_managed_identity_type)
     error_message = "Managed identity type must be either 'smi' or 'umi'."
   }
+}
+
+variable "project_managed_identity_type" {
+  description = "The type of managed identity to create for the Foundry project. Use 'smi' for System-assigned and 'umi' for User-assigned managed identity."
+  type        = string
+  default     = "smi"
+  validation {
+    condition     = contains(["smi", "umi"], var.project_managed_identity_type)
+    error_message = "Managed identity type must be either 'smi' or 'umi'."
+  }
+}
+
+variable "deploy_rag_resources" {
+  description = "Set to true if you are not using agents but want to deploy the resources required to demonstrate simple RAG patterns"
+  type        = bool
+  default     = false
 }
 
 variable "region" {

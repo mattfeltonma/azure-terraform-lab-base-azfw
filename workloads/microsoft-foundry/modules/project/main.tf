@@ -2,9 +2,23 @@
 ##########
 ##########
 
+## Create Foundry project user-assigned managed identity if var.project_managed_identity_type is set to 'umi'
+##
+resource "azurerm_user_assigned_identity" "foundry_project_umi" {
+  count = var.project_managed_identity_type == "umi" ? 1 : 0
+
+  name                = "foundryprojumi${var.project_number}"
+  location            = var.region
+  resource_group_name = local.foundry_resource_resource_group_name
+}
+
 ## Create the Foundry project
 ##
 resource "azapi_resource" "foundry_project" {
+  depends_on = [
+    azurerm_user_assigned_identity.foundry_project_umi
+  ]
+
   type                      = "Microsoft.CognitiveServices/accounts/projects@2025-10-01-preview"
   name                      = "sampleproject${var.project_number}"
   parent_id                 = var.foundry_resource_id
@@ -15,8 +29,12 @@ resource "azapi_resource" "foundry_project" {
     sku = {
       name = "S0"
     }
+    # Assigned a system-assigned managed identity or user-assigned managed identity based on variable
     identity = {
-      type = "SystemAssigned"
+      type = var.project_managed_identity_type == "umi" ? "UserAssigned" : "SystemAssigned"
+      userAssignedIdentities = var.project_managed_identity_type == "umi" ? [
+        azurerm_user_assigned_identity.foundry_project_umi[0].id
+      ] : null
     }
 
     properties = {
@@ -32,9 +50,8 @@ resource "azapi_resource" "foundry_project" {
   ]
 }
 
-## Wait 10 seconds for the Foundry project system-assigned managed identity to be created and to replicate
+## Wait 10 seconds for the Foundry project managed identities to be created and to replicate
 ## through Entra ID
-## This is only required if using system-assigned managed identity for the project
 resource "time_sleep" "wait_project_identities" {
   count = var.project_managed_identity_type == "smi" ? 1 : 0
 
@@ -50,9 +67,9 @@ resource "time_sleep" "wait_project_identities" {
 ########## TODO: 12/2025 Move this to main Foundry resource template once PG fixes the issue
 
 ## Create a Foundry resource connection to the Key Vault used to store secrets for connections created within Foundry
-## This is only required if var.byo_key_vault is set to true
+## This is only required if var.deploy_key_vault_connection_secrets is set to true
 resource "azapi_resource" "conn_resource_key_vault_secrets" {
-  count = var.byo_key_vault && var.first_project == true ? 1 : 0
+  count = var.deploy_key_vault_connection_secrets && var.agents && var.first_project == true ? 1 : 0
 
   depends_on = [
     azapi_resource.foundry_project
@@ -82,7 +99,7 @@ resource "azapi_resource" "conn_resource_key_vault_secrets" {
 ## Create a Foundry resoure connection to the Application Insights instance to support tracing. This must be created after the connection to the Key Vault if using BYO Key Vault for secrets
 ##
 resource "azapi_resource" "conn_resource_appins_foundry" {
-  count = var.first_project == true ? 1 : 0
+  count = var.first_project && var.agents ? 1 : 0
 
   depends_on = [
     azapi_resource.conn_resource_key_vault_secrets
@@ -118,6 +135,8 @@ resource "azapi_resource" "conn_resource_appins_foundry" {
 ## Create the Foundry project connection to CosmosDB
 ##
 resource "azapi_resource" "conn_project_cosmosdb_foundry" {
+  count = var.agents ? 1 : 0
+
   depends_on = [
     time_sleep.wait_project_identities,
     azapi_resource.conn_resource_key_vault_secrets
@@ -146,6 +165,8 @@ resource "azapi_resource" "conn_project_cosmosdb_foundry" {
 ## Create the Foundry project connection to Azure Storage Account
 ##
 resource "azapi_resource" "conn_project_storage_foundry" {
+  count = var.agents ? 1 : 0
+
   depends_on = [
     time_sleep.wait_project_identities,
     azapi_resource.conn_resource_key_vault_secrets
@@ -178,6 +199,8 @@ resource "azapi_resource" "conn_project_storage_foundry" {
 ## Create the Foundry project connection to AI Search
 ##
 resource "azapi_resource" "conn_project_ai_search_foundry" {
+  count = var.agents ? 1 : 0
+
   depends_on = [
     time_sleep.wait_project_identities,
     azapi_resource.conn_resource_key_vault_secrets
@@ -246,6 +269,8 @@ resource "azapi_resource" "conn_project_external_openai_foundry" {
 ## Create a Foundry project connection to the Bing Grounding Search instance
 ##
 resource "azapi_resource" "conn_project_bing_grounding_search_foundry" {
+  count = var.agents ? 1 : 0
+
   depends_on = [
     time_sleep.wait_project_identities,
     azapi_resource.conn_resource_key_vault_secrets
@@ -281,54 +306,66 @@ resource "azapi_resource" "conn_project_bing_grounding_search_foundry" {
 ## Create a role assignment granting the CosmosDB Operator RBAC role on the CosmosDB account to the Foundry project system-managed identity
 ##
 resource "azurerm_role_assignment" "cosmosdb_operator_foundry_project" {
+  count = var.agents ? 1 : 0
+
   depends_on = [
+    azapi_resource.foundry_project,
+    azurerm_user_assigned_identity.foundry_project_umi,
     time_sleep.wait_project_identities
   ]
-  name                 = uuidv5("dns", "${local.agent_cosmosdb_account_name}${azapi_resource.foundry_project.output.identity.principalId}cosmosdboperator")
+  name                 = var.project_managed_identity_type == "umi" ? uuidv5("dns", "${local.agent_cosmosdb_account_name}${azurerm_user_assigned_identity.foundry_project_umi[0].principal_id}cosmosdboperator") : uuidv5("dns", "${local.agent_cosmosdb_account_name}${azapi_resource.foundry_project.output.identity.principalId}cosmosdboperator")
   scope                = var.shared_agent_cosmosdb_account_resource_id
   role_definition_name = "Cosmos DB Operator"
-  principal_id         = azapi_resource.foundry_project.output.identity.principalId
+  principal_id         = var.project_managed_identity_type == "umi" ? azurerm_user_assigned_identity.foundry_project_umi[0].principal_id : azapi_resource.foundry_project.output.identity.principalId
 }
 
 ## Create a role assignment granting the Storage Blob Data Contributor RBAC role on the Storage Account to the AI Foundry project managed identity
 ##
 resource "azurerm_role_assignment" "storage_blob_data_contributor_foundry_project" {
+  count = var.agents ? 1 : 0
+
   depends_on = [
     time_sleep.wait_project_identities
   ]
-  name                 = uuidv5("dns", "${local.agent_storage_account_name}${azapi_resource.foundry_project.output.identity.principalId}storageblobdatacontributor")
+  name                 = var.project_managed_identity_type == "umi" ? uuidv5("dns", "${local.agent_storage_account_name}${azurerm_user_assigned_identity.foundry_project_umi[0].principal_id}storageblobdatacontributor") : uuidv5("dns", "${local.agent_storage_account_name}${azapi_resource.foundry_project.output.identity.principalId}storageblobdatacontributor")
   scope                = var.shared_agent_storage_account_resource_id
   role_definition_name = "Storage Blob Data Contributor"
-  principal_id         = azapi_resource.foundry_project.output.identity.principalId
+  principal_id         = var.project_managed_identity_type == "umi" ? azurerm_user_assigned_identity.foundry_project_umi[0].principal_id :   azapi_resource.foundry_project.output.identity.principalId
 }
 
 ## Create a role assignment granting the Search Index Data Contributor RBAC role on the AI Search instance to the AI Foundry project managed identity
 ##
 resource "azurerm_role_assignment" "search_index_data_contributor_foundry_project" {
+  count = var.agents ? 1 : 0
+
   depends_on = [
     time_sleep.wait_project_identities
   ]
-  name                 = uuidv5("dns", "${local.agent_ai_search_name}${azapi_resource.foundry_project.output.identity.principalId}searchindexdatacontributor")
+  name                 = var.project_managed_identity_type == "umi" ? uuidv5("dns", "${local.agent_ai_search_name}${azurerm_user_assigned_identity.foundry_project_umi[0].principal_id}searchindexdatacontributor") : uuidv5("dns", "${local.agent_ai_search_name}${azapi_resource.foundry_project.output.identity.principalId}searchindexdatacontributor")
   scope                = var.shared_agent_ai_search_resource_id
   role_definition_name = "Search Index Data Contributor"
-  principal_id         = azapi_resource.foundry_project.output.identity.principalId
+  principal_id         = var.project_managed_identity_type == "umi" ? azurerm_user_assigned_identity.foundry_project_umi[0].principal_id : azapi_resource.foundry_project.output.identity.principalId
 }
 
 ## Create a role assignment granting the Search Service Contributor RBAC role on the AI Search instance to the AI Foundry project managed identity
 ##
 resource "azurerm_role_assignment" "search_service_contributor_foundry_project" {
+  count = var.agents ? 1 : 0
+
   depends_on = [
     time_sleep.wait_project_identities
   ]
-  name                 = uuidv5("dns", "${local.agent_ai_search_name}${azapi_resource.foundry_project.output.identity.principalId}searchservicecontributor")
+  name                 = var.project_managed_identity_type == "umi" ? uuidv5("dns", "${local.agent_ai_search_name}${azurerm_user_assigned_identity.foundry_project_umi[0].principal_id}searchservicecontributor") : uuidv5("dns", "${local.agent_ai_search_name}${azapi_resource.foundry_project.output.identity.principalId}searchservicecontributor")
   scope                = var.shared_agent_ai_search_resource_id
   role_definition_name = "Search Service Contributor"
-  principal_id         = azapi_resource.foundry_project.output.identity.principalId
+  principal_id         = var.project_managed_identity_type == "umi" ? azurerm_user_assigned_identity.foundry_project_umi[0].principal_id : azapi_resource.foundry_project.output.identity.principalId
 }
 
 ## Wait 120 seconds for the prior role assignments to be created and to replicate through Entra ID
 ##
 resource "time_sleep" "wait_rbac" {
+  count = var.agents ? 1 : 0
+
   depends_on = [
     ## The role assignments created for the system-assigned identity associated to the Foundry project
     azurerm_role_assignment.cosmosdb_operator_foundry_project,
@@ -351,6 +388,8 @@ resource "time_sleep" "wait_rbac" {
 ## Create the Foundry project capability host
 ##
 resource "azapi_resource" "foundry_project_capability_host" {
+  count = var.agents ? 1 : 0
+
   depends_on = [
     # Wait for RBAC role assignments to propagate
     time_sleep.wait_rbac,
@@ -373,13 +412,13 @@ resource "azapi_resource" "foundry_project_capability_host" {
     properties = {
       capabilityHostKind = "Agents"
       vectorStoreConnections = [
-        azapi_resource.conn_project_ai_search_foundry.name
+        azapi_resource.conn_project_ai_search_foundry[0].name
       ]
       storageConnections = [
-        azapi_resource.conn_project_storage_foundry.name
+        azapi_resource.conn_project_storage_foundry[0].name
       ]
       threadStorageConnections = [
-        azapi_resource.conn_project_cosmosdb_foundry.name
+        azapi_resource.conn_project_cosmosdb_foundry[0].name
       ]
 
       # If using an external OpenAI resource, add that connection to the capability host
@@ -395,27 +434,31 @@ resource "azapi_resource" "foundry_project_capability_host" {
 ## Create an Azure RBAC role assignment granting the project system-managed identity the CosmosDB Built-in Data Contributor role
 ## on the CosmosDB account to allow data plane access
 resource "azurerm_cosmosdb_sql_role_assignment" "cosmosdb_db_sql_role_aifp_account" {
+  count = var.agents ? 1 : 0
+
   depends_on = [
     azapi_resource.foundry_project_capability_host
   ]
-  name                = uuidv5("dns", "${local.agent_cosmosdb_account_name}${azapi_resource.foundry_project.output.identity.principalId}cosmosdbdatacontributor")
+  name                = var.project_managed_identity_type == "umi" ? uuidv5("dns", "${local.agent_cosmosdb_account_name}${azurerm_user_assigned_identity.foundry_project_umi[0].principal_id}cosmosdbdatacontributor") : uuidv5("dns", "${local.agent_cosmosdb_account_name}${azapi_resource.foundry_project.output.identity.principalId}cosmosdbdatacontributor")
   resource_group_name = local.agent_cosmosdb_account_resource_group_name
   account_name        = local.agent_cosmosdb_account_name
   scope               = var.shared_agent_cosmosdb_account_resource_id
   role_definition_id  = "${var.shared_agent_cosmosdb_account_resource_id}/sqlRoleDefinitions/00000000-0000-0000-0000-000000000002"
-  principal_id        = azapi_resource.foundry_project.output.identity.principalId
+  principal_id        = var.project_managed_identity_type == "umi" ? azurerm_user_assigned_identity.foundry_project_umi[0].principal_id : azapi_resource.foundry_project.output.identity.principalId
 }
 
 ## Create the necessary data plane role assignments to the Azure Storage Account containers created by the AI Foundry Project
 ##
 resource "azurerm_role_assignment" "storage_blob_data_owner_foundry_project" {
+  count = var.agents ? 1 : 0
+
   depends_on = [
     azapi_resource.foundry_project_capability_host
   ]
-  name                 = uuidv5("dns", "${local.agent_storage_account_name}${azapi_resource.foundry_project.output.identity.principalId}storageblobdataowner")
+  name                 = var.project_managed_identity_type == "umi" ? uuidv5("dns", "${local.agent_storage_account_name}${azurerm_user_assigned_identity.foundry_project_umi[0].principal_id}storageblobdataowner") : uuidv5("dns", "${local.agent_storage_account_name}${azapi_resource.foundry_project.output.identity.principalId}storageblobdataowner")
   scope                = var.shared_agent_storage_account_resource_id
   role_definition_name = "Storage Blob Data Owner"
-  principal_id         = azapi_resource.foundry_project.output.identity.principalId
+  principal_id         = var.project_managed_identity_type == "umi" ? azurerm_user_assigned_identity.foundry_project_umi[0].principal_id : azapi_resource.foundry_project.output.identity.principalId
   condition_version    = "2.0"
   condition            = <<-EOT
   (
