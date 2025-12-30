@@ -143,12 +143,12 @@ resource "azapi_resource" "conn_project_cosmosdb_foundry" {
   ]
 
   type                      = "Microsoft.CognitiveServices/accounts/projects/connections@2025-04-01-preview"
-  name                      = local.agent_cosmosdb_account_name
+  name                      = local.agent_cosmosdb_account_connection_name
   parent_id                 = azapi_resource.foundry_project.id
   schema_validation_enabled = false
 
   body = {
-    name = local.agent_cosmosdb_account_name
+    name = local.agent_cosmosdb_account_connection_name
     properties = {
       category = "CosmosDb"
       target   = var.shared_agent_cosmosdb_account_endpoint
@@ -173,12 +173,12 @@ resource "azapi_resource" "conn_project_storage_foundry" {
   ]
 
   type                      = "Microsoft.CognitiveServices/accounts/projects/connections@2025-04-01-preview"
-  name                      = local.agent_storage_account_name
+  name                      = local.agent_storage_account_connection_name
   parent_id                 = azapi_resource.foundry_project.id
   schema_validation_enabled = false
 
   body = {
-    name = local.agent_storage_account_name
+    name = local.agent_storage_account_connection_name
     properties = {
       category = "AzureStorageAccount"
       target   = var.shared_agent_storage_account_blob_endpoint
@@ -207,12 +207,12 @@ resource "azapi_resource" "conn_project_ai_search_foundry" {
   ]
 
   type                      = "Microsoft.CognitiveServices/accounts/projects/connections@2025-04-01-preview"
-  name                      = local.agent_ai_search_name
+  name                      = local.agent_ai_search_connection_name
   parent_id                 = azapi_resource.foundry_project.id
   schema_validation_enabled = false
 
   body = {
-    name = local.agent_ai_search_name
+    name = local.agent_ai_search_connection_name
     properties = {
       category = "CognitiveSearch"
       target   = "https://${local.agent_ai_search_name}.search.windows.net"
@@ -241,12 +241,12 @@ resource "azapi_resource" "conn_project_external_openai_foundry" {
   ]
 
   type                      = "Microsoft.CognitiveServices/accounts/projects/connections@2025-04-01-preview"
-  name                      = var.shared_external_openai.name
+  name                      = local.agent_external_openai_connection_name
   parent_id                 = azapi_resource.foundry_project.id
   schema_validation_enabled = false
 
   body = {
-    name = var.shared_external_openai.name
+    name = local.agent_external_openai_connection_name
     properties = {
       category = "AzureOpenAI"
       isSharedToAll = true
@@ -277,12 +277,12 @@ resource "azapi_resource" "conn_project_bing_grounding_search_foundry" {
   ]
 
   type                      = "Microsoft.CognitiveServices/accounts/projects/connections@2025-04-01-preview"
-  name                      = local.agent_bing_grounding_search_name
+  name                      = local.agent_bing_grounding_search_connection_name
   parent_id                 = azapi_resource.foundry_project.id
   schema_validation_enabled = false
 
   body = {
-    name = local.agent_bing_grounding_search_name
+    name = local.agent_bing_grounding_search_connection_name
     properties = {
       category = "GroundingWithBingSearch"
       target   = "https://api.bing.microsoft.com/"
@@ -422,7 +422,7 @@ resource "azapi_resource" "foundry_project_capability_host" {
       ]
 
       # If using an external OpenAI resource, add that connection to the capability host
-      aiServicesConnections = var.shared_external_openai != null ? azapi_resource.conn_project_external_openai_foundry[0].name : null
+      aiServicesConnections = var.shared_external_openai != null ? local.agent_external_openai_connection_name : null
     }
   }
 }
