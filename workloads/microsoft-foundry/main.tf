@@ -929,7 +929,7 @@ resource "azurerm_cognitive_account_customer_managed_key" "foundry_cmk" {
   key_vault_key_id     = azurerm_key_vault_key.key_foundry_cmk[0].id
 }
 
-######### Create deployments of models in the Foundry resource
+######### Create deployments I use most frequently for general chat shit
 #########
 #########
 
@@ -959,11 +959,61 @@ resource "azurerm_cognitive_deployment" "deployment_gpt_4o" {
   }
 }
 
+######### Create deploymetns required for Content Understanding
+
+## Create a deployment for OpenAI's GPT-4.1
+##
+resource "azurerm_cognitive_deployment" "deployment_gpt_41" {
+  depends_on = [
+    azurerm_cognitive_deployment.deployment_gpt_4o
+  ]
+
+  count = var.external_openai != null ? 0 : 1
+
+  name                 = "gpt-4.1"
+  cognitive_account_id = azurerm_cognitive_account.foundry_resource.id
+
+  sku {
+    name     = "GlobalStandard"
+    capacity = 100
+  }
+
+  model {
+    format  = "OpenAI"
+    name    = "gpt-4.1"
+    version = "2025-04-14"
+  }
+}
+
+## Create a deployment for OpenAI's GPT-4.1-mini
+##
+resource "azurerm_cognitive_deployment" "deployment_gpt_41_mini" {
+  depends_on = [
+    azurerm_cognitive_deployment.deployment_gpt_41
+  ]
+
+  count = var.external_openai != null ? 0 : 1
+
+  name                 = "gpt-4.1-mini"
+  cognitive_account_id = azurerm_cognitive_account.foundry_resource.id
+
+  sku {
+    name     = "GlobalStandard"
+    capacity = 100
+  }
+
+  model {
+    format  = "OpenAI"
+    name    = "gpt-4.1-mini"
+    version = "2025-04-14"
+  }
+} 
+
 ## Create a deployment for the text-embedding-3-large embededing model
 ##
 resource "azurerm_cognitive_deployment" "deployment_text_embedding_3_large" {
   depends_on = [
-    azurerm_cognitive_deployment.deployment_gpt_4o
+    azurerm_cognitive_deployment.deployment_gpt_41_mini
   ]
 
   name                 = "text-embedding-3-large"
@@ -981,35 +1031,13 @@ resource "azurerm_cognitive_deployment" "deployment_text_embedding_3_large" {
   }
 }
 
-## Create a deployment for the text-embedding-3-small embededing model
-##
-resource "azurerm_cognitive_deployment" "deployment_text_embedding_3_small" {
-  depends_on = [
-    azurerm_cognitive_deployment.deployment_text_embedding_3_large
-  ]
-
-  name                 = "text-embedding-3-small"
-  cognitive_account_id = azurerm_cognitive_account.foundry_resource.id
-
-  sku {
-    name     = "GlobalStandard"
-    capacity = 300
-  }
-
-  model {
-    format  = "OpenAI"
-    name    = "text-embedding-3-small"
-    version = 1
-  }
-}
-
 ## Create Private Endpoint for Foundry resource
 ##
 resource "azurerm_private_endpoint" "pe_foundry_resource" {
   depends_on = [
     azurerm_cognitive_account.foundry_resource,
     azurerm_cognitive_account_customer_managed_key.foundry_cmk,
-    azurerm_cognitive_deployment.deployment_text_embedding_3_small
+    azurerm_cognitive_deployment.deployment_text_embedding_3_large
   ]
 
   name                = "pe${azurerm_cognitive_account.foundry_resource.name}resource"
