@@ -13,17 +13,22 @@
 - [Deployment](#deployment)
 - [Post-Deployment](#post-deployment)
 
+## TODOS
+  * 1/9/2026 Need to get list of required FQDNs through Azure Firewall
+
 ## Updates
 
+### 2026
+* **January 9th, 2026**
+  * Added support for API Management v2 SKUs
+
 ### 2025
+
 * **November 14th, 2025**
   * Initial release
 
-## TODOS
-  * Update lab once Premium v2 SKU is more widely available across regions or be really lazy and wait for Developer v2 SKU.
-
 ## Overview
-This Terraform code provisions an APIM (Azure API Management) instance with the classic SKU into the base lab environment included in this repository to demonstrate the AI Gateway capabilities of APIM. It is deployed to one of the workload spokes using the Classic Developer SKU deployed in [internal mode](https://learn.microsoft.com/en-us/azure/api-management/api-management-using-with-internal-vnet). The base lab includes the necessary NSG (Network Security Group) and Azure Firewall rules required for internal mode deployments.
+This Terraform code provisions an APIM (Azure API Management) into the base lab environment included in this repository to demonstrate the AI Gateway capabilities of APIM. It can deployed to one of the workload spokes using the Classic Developer or Premium SKUs deployed in [internal mode](https://learn.microsoft.com/en-us/azure/api-management/api-management-using-with-internal-vnet). It can also be deployed using the [Premium v2 SKU in internal mode](https://learn.microsoft.com/en-us/azure/api-management/inject-vnet-v2). The base lab includes the necessary NSG (Network Security Group), routes, and Azure Firewall rules required for Classic internal mode API Management instances. Some of these rules and routes are unnecessary with the v2 SKU so ensure you check the latest documentation for specific requirements.
 
 ![AI Gateway Features](./images/lab-ai-gateway-features.svg)
 
@@ -54,7 +59,7 @@ Azure RBAC is configured so multiple types of authentication flows can be tested
 - **Key Vault Integration**: APIM uses certificate sourced from Azure Key Vault for configuration of custom domains
 
 ### Network & Connectivity
-- [Azure Firewall application and network rules](https://learn.microsoft.com/en-us/azure/api-management/virtual-network-reference) and [Network Security Groups](https://learn.microsoft.com/en-us/azure/api-management/api-management-using-with-internal-vnet#configure-nsg-rules) security rules are pre-configured in the base lab to support internal mode APIM deployed to the snet-apim subnet in the workload virtual network. Reference those templates to see the required rules.
+- [Azure Firewall application and network rules](https://learn.microsoft.com/en-us/azure/api-management/virtual-network-reference) and [Network Security Groups](https://learn.microsoft.com/en-us/azure/api-management/api-management-using-with-internal-vnet#configure-nsg-rules) security rules are pre-configured in the base lab to support internal mode APIM deployed to the snet-apim subnet in the workload virtual network. Reference those templates to see the required rules. Note that many of these rules are only required for Classic and not v2. Ensure you review the latest documentation if you want to establish a minimum set of rules.
 - Access to the APIM instance is restricted to the virtual network. You should use the jump host from the base lab to interact with the instance.
 
 ### Monitoring & Logging
@@ -71,6 +76,12 @@ Azure RBAC is configured so multiple types of authentication flows can be tested
    - Network resource provisioning
 
 3. **Base Lab**: You must have already deployed the [base lab](../../README.md).
+
+### V2 SKU Requirements
+1. **Route Table** You will need to remove the user-defined route pointing to ApiManagement with next hop of Internet on the custom route table assigned to snet-apim in the workload virtual network.
+2. **Subnet** You will need to delegate the snet-apim subnet to Microsoft.Web/hostingEnvironments.
+3. **Azure Firewall** You can remove most of the Application and Network rules in the MyWorkloadApimRuleCollectionGroup and MyWorkloadApimRuleCollectionGroup Rule Collection Groups. My testing shows the egress firewall needs to support flows to Azure Monitor and Azure Key Vault. The [documentation states that Azure Storage is also required](https://learn.microsoft.com/en-us/azure/api-management/inject-vnet-v2#network-security-group). Need to confirm with Product Group.
+4. **DNS** The V2 SKU requires the [custom domain you use to be a public DNS namespace](https://learn.microsoft.com/en-us/azure/api-management/configure-custom-domain?tabs=custom#limitation-for-custom-domain-name-in-v2-tiers). This means you'll need to create a split-brain DNS scenarios even for an internal mode APIM. You will also need to create a CNAME pointing to the out-of-the-box FQDN of the API Management to prove ownership.
 
 ### Local Development Environment
 1. **Terraform**: Version 1.8.3 or higher

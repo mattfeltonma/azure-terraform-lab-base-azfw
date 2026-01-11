@@ -133,7 +133,7 @@ resource "azurerm_cognitive_account" "ai_foundry_accounts" {
   name                = "aif${each.value.region_code}${var.random_string}"
   location            = each.value.region
   resource_group_name = azurerm_resource_group.rg_ai_gateway.name
-  tags = var.tags
+  tags = merge(var.tags, { SecurityControl = "Ignore" })
 
   # Create an AI Foundry Account to support Foundry Projects
   kind = "AIServices"
@@ -158,17 +158,17 @@ resource "azurerm_cognitive_account" "ai_foundry_accounts" {
   }
 }
 
-## Deploy GPT 4.1 model to the Foundry accounts
+## Deploy GPT 4o model to the Foundry accounts
 ##
 resource "azurerm_cognitive_deployment" "gpt4o_chat_model_deployments" {
   depends_on = [
     azurerm_cognitive_account.ai_foundry_accounts
   ]
 
-  for_each = azurerm_cognitive_account.ai_foundry_accounts
+  for_each = local.ai_foundry_regions
 
   name                 = "gpt-4o"
-  cognitive_account_id = each.value.id
+  cognitive_account_id = azurerm_cognitive_account.ai_foundry_accounts[each.key].id
 
   sku {
     name     = "GlobalStandard"
@@ -178,6 +178,7 @@ resource "azurerm_cognitive_deployment" "gpt4o_chat_model_deployments" {
   model {
     format = "OpenAI"
     name   = "gpt-4o"
+    version = "2024-08-06"
   }
 }
 
@@ -188,10 +189,10 @@ resource "azurerm_monitor_diagnostic_setting" "diag_aifoundry_accounts" {
     azurerm_cognitive_account.ai_foundry_accounts
   ]
 
-  for_each = azurerm_cognitive_account.ai_foundry_accounts
+  for_each = local.ai_foundry_regions
 
   name                       = "diag-base"
-  target_resource_id         = each.value.id
+  target_resource_id         = azurerm_cognitive_account.ai_foundry_accounts[each.key].id
   log_analytics_workspace_id = azurerm_log_analytics_workspace.log_analytics_workspace_workload.id
 
   enabled_log {
@@ -221,25 +222,25 @@ resource "azurerm_private_endpoint" "pe_aifoundry_accounts" {
     azurerm_cognitive_deployment.gpt4o_chat_model_deployments
   ]
 
-  for_each = azurerm_cognitive_account.ai_foundry_accounts
+  for_each = local.ai_foundry_regions
 
-  name                = "pe${each.value.name}account"
+  name                = "pe${azurerm_cognitive_account.ai_foundry_accounts[each.key].name}account"
   location            = var.region
   resource_group_name = azurerm_resource_group.rg_ai_gateway.name
   tags                = var.tags
   subnet_id           = var.subnet_id_private_endpoints
 
-  custom_network_interface_name = "nic${each.value.name}account"
+  custom_network_interface_name = "nic${azurerm_cognitive_account.ai_foundry_accounts[each.key].name}account"
 
   private_service_connection {
-    name                           = "peconn${each.value.name}account"
-    private_connection_resource_id = each.value.id
+    name                           = "peconn${azurerm_cognitive_account.ai_foundry_accounts[each.key].name}account"
+    private_connection_resource_id = azurerm_cognitive_account.ai_foundry_accounts[each.key].id
     subresource_names              = ["account"]
     is_manual_connection           = false
   }
 
   private_dns_zone_group {
-    name = "zoneconn${each.value.name}account"
+    name = "zoneconn${azurerm_cognitive_account.ai_foundry_accounts[each.key].name}account"
     private_dns_zone_ids = [
       "/subscriptions/${var.subscription_id_infrastructure}/resourceGroups/${var.resource_group_dns}/providers/Microsoft.Network/privateDnsZones/privatelink.services.ai.azure.com",
       "/subscriptions/${var.subscription_id_infrastructure}/resourceGroups/${var.resource_group_dns}/providers/Microsoft.Network/privateDnsZones/privatelink.openai.azure.com",
@@ -262,7 +263,7 @@ resource "azurerm_private_endpoint" "pe_aifoundry_accounts" {
 ## Create a public IP address for API Management instance if customer wishes to manage it in their subscription.
 ## Otherwise the public IP is managed by Microsoft and is not visible in the subscription.
 resource "azurerm_public_ip" "pip_apim" {
-  count = var.customer_managed_public_ip ? 1 : 0
+  count = var.customer_managed_public_ip && var.apim_generation_v2 == false ? 1 : 0
 
   name                = "apim${var.region_code}${var.random_string}"
   location            = var.region
@@ -283,7 +284,7 @@ resource "azurerm_public_ip" "pip_apim" {
 ## Create additional public IP addresses for API Management Gateway instances when using the multi-region gateway feature
 ## if customer wishes to manage it in their subscription. Otherwise the public IP is managed by Microsoft and is not visible in the subscription.
 resource "azurerm_public_ip" "pip_apim_additional_regions" {
-  for_each = var.customer_managed_public_ip ? { for idx, region in var.regions_additional : region.region => region } : {}
+  for_each = var.customer_managed_public_ip && var.apim_generation_v2 == false ? { for idx, region in var.regions_additional : region.region => region } : {}
 
   name                = "apim${each.value.region_code}${var.random_string}"
   location            = each.value.region
@@ -320,19 +321,21 @@ resource "azurerm_api_management" "apim" {
   sku_name        = var.sku
 
   # Assign a customer-managed public IP if requested, otherwise leave null to have Microsoft manage the public IP
-  public_ip_address_id = var.customer_managed_public_ip ? azurerm_public_ip.pip_apim[0].id : null
+  public_ip_address_id = var.customer_managed_public_ip && var.apim_generation_v2 == false ? azurerm_public_ip.pip_apim[0].id : null
 
   # Create an internal-mode API Management instance
   virtual_network_type = "Internal"
 
   # Create multi-region API Management Gateways if additional regions have been specified
+  # TODO: 1/2026 Remove the condition filtering v2 SKUs once v2 supports multi-region gateways
   dynamic "additional_location" {
-    for_each = var.regions_additional != null ? var.regions_additional : []
+    for_each = var.apim_generation_v2 == false && var.regions_additional != null ? var.regions_additional : []
+    iterator = region
     content {
-      location             = each.value.region
-      public_ip_address_id = var.customer_managed_public_ip ? azurerm_public_ip.pip_apim_additional_regions[each.value.region].id : null
+      location             = region.value.region
+      public_ip_address_id = var.customer_managed_public_ip ? azurerm_public_ip.pip_apim_additional_regions[region.value.region].id : null
       virtual_network_configuration {
-        subnet_id = each.value.subnet_id
+        subnet_id = region.value.subnet_id
       }
     }
   }
@@ -425,19 +428,28 @@ resource "azurerm_api_management_custom_domain" "apim_custom_domains" {
     default_ssl_binding      = true
   }
 
-  management {
-    host_name                = "apim-example.management.${var.apim_private_dns_zone_name}"
-    key_vault_certificate_id = var.key_vault_secret_id_versionless
+  dynamic "management" {
+    for_each = var.apim_generation_v2 ? [] : [1]
+    content {
+      host_name                = "apim-example.management.${var.apim_private_dns_zone_name}"
+      key_vault_certificate_id = var.key_vault_secret_id_versionless
+    }
   }
 
-  scm {
-    host_name                = "apim-example.scm.${var.apim_private_dns_zone_name}"
-    key_vault_certificate_id = var.key_vault_secret_id_versionless
+  dynamic "scm" {
+    for_each = var.apim_generation_v2 ? [] : [1]
+    content {
+      host_name                = "apim-example.scm.${var.apim_private_dns_zone_name}"
+      key_vault_certificate_id = var.key_vault_secret_id_versionless
+    }
   }
 
-  developer_portal {
-    host_name                = "apim-example.developer.${var.apim_private_dns_zone_name}"
-    key_vault_certificate_id = var.key_vault_secret_id_versionless
+  dynamic "developer_portal" {
+    for_each = var.apim_generation_v2 ? [] : [1]
+    content {
+      host_name                = "apim-example.developer.${var.apim_private_dns_zone_name}"
+      key_vault_certificate_id = var.key_vault_secret_id_versionless
+    }
   }
 }
 
@@ -453,12 +465,12 @@ module "backend_circuit_breaker_aifoundry_instance" {
     azurerm_cognitive_account.ai_foundry_accounts
   ]
 
-  for_each = azurerm_cognitive_account.ai_foundry_accounts
+  for_each = local.ai_foundry_regions
 
   source       = "./modules/backend-circuit-breaker"
   apim_id      = azurerm_api_management.apim.id
-  backend_name = each.value.name
-  url          = "https://${each.value.name}.openai.azure.com/openai"
+  backend_name = azurerm_cognitive_account.ai_foundry_accounts[each.key].name
+  url          = "https://${azurerm_cognitive_account.ai_foundry_accounts[each.key].name}.openai.azure.com/openai"
 }
 
 ## Create backend pool with AI Foundry backends
@@ -599,7 +611,7 @@ resource "azurerm_api_management_api" "openai_v1" {
   subscription_required = false
   import {
     content_format = "openapi+json"
-    content_value  = file("${path.module}/api-specs/v1-azure-openai.json")
+    content_value  = file("${path.module}/api-specs/azure-v1-v1-generated.json")
   }
 }
 
@@ -936,10 +948,10 @@ resource "azurerm_role_assignment" "apim_perm_aifoundry_accounts_openai_user" {
     azurerm_cognitive_account.ai_foundry_accounts
   ]
 
-  for_each = azurerm_cognitive_account.ai_foundry_accounts
+  for_each = local.ai_foundry_regions
 
-  name                 = uuidv5("dns", "${azurerm_api_management.apim.identity[0].principal_id}${each.value.name}openaiuser")
-  scope                = each.value.id
+  name                 = uuidv5("dns", "${azurerm_api_management.apim.identity[0].principal_id}${azurerm_cognitive_account.ai_foundry_accounts[each.key].name}openaiuser")
+  scope                = azurerm_cognitive_account.ai_foundry_accounts[each.key].id
   role_definition_name = "Cognitive Services OpenAI User"
   principal_id         = azurerm_api_management.apim.identity[0].principal_id
 }
@@ -953,10 +965,10 @@ resource "azurerm_role_assignment" "sp_perm_aifoundry_accounts_openai_user" {
     azurerm_cognitive_account.ai_foundry_accounts
   ]
 
-  for_each = azurerm_cognitive_account.ai_foundry_accounts
+  for_each = local.ai_foundry_regions
 
-  name                 = uuidv5("dns", "${var.service_principal_object_id}${each.value.name}openaiuser")
-  scope                = each.value.id
+  name                 = uuidv5("dns", "${var.service_principal_object_id}${azurerm_cognitive_account.ai_foundry_accounts[each.key].name}openaiuser")
+  scope                = azurerm_cognitive_account.ai_foundry_accounts[each.key].id
   role_definition_name = "Cognitive Services OpenAI User"
   principal_id         = var.service_principal_object_id
 }
@@ -965,7 +977,7 @@ resource "azurerm_role_assignment" "sp_perm_aifoundry_accounts_openai_user" {
 ###########
 ###########
 
-## Create Azure RBAC Role assignment graintg the user the Azure OpenAI User role
+## Create Azure RBAC Role assignment granting the user the Azure OpenAI User role
 ## on the AI Foundry accounts. This can be used to demonstrate the OAuth On-Behalf-Of flow
 resource "azurerm_role_assignment" "user_perm_aifoundry_accounts_openai_user" {
     depends_on = [
@@ -973,10 +985,10 @@ resource "azurerm_role_assignment" "user_perm_aifoundry_accounts_openai_user" {
       azurerm_cognitive_account.ai_foundry_accounts
     ]
   
-    for_each = azurerm_cognitive_account.ai_foundry_accounts
+    for_each = local.ai_foundry_regions
   
-    name                 = uuidv5("dns", "${var.user_object_id}${each.value.name}openaiuser")
-    scope                = each.value.id
+    name                 = uuidv5("dns", "${var.user_object_id}${azurerm_cognitive_account.ai_foundry_accounts[each.key].name}openaiuser")
+    scope                = azurerm_cognitive_account.ai_foundry_accounts[each.key].id
     role_definition_name = "Cognitive Services OpenAI User"
     principal_id         = var.user_object_id
   }

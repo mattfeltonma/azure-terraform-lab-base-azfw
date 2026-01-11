@@ -1,5 +1,9 @@
-apim_private_dns_zone_name = "apim.mycustomapimdomain.com"
+# Classic SKUs only
 customer_managed_public_ip = false
+
+# Both Classic and V2 SKUs
+apim_private_dns_zone_name = "apim.mycustomapimdomain.com"
+apim_generation_v2 = false
 entra_id_tenant_id = "XXXXXXXX-XXXX-XXXX-XXXX-XXXXXXXXXXXX"
 key_vault_id = "/subscriptions/XXXXXXXX-XXXX-XXXX-XXXX-XXXXXXXXXXXX/resourceGroups/rg-centralcredentials/providers/Microsoft.KeyVault/vaults/kvcentraljog"
 key_vault_secret_id_versionless = "https://mykeyvault.vault.azure.net/secrets/apim"
@@ -10,6 +14,7 @@ region = "westus3"
 region_code = "wus3"
 resource_group_dns = "rgshwus326z"
 service_principal_object_id = "XXXXXXXX-XXXX-XXXX-XXXX-XXXXXXXXXXXX"
+# Developer, Premium, and PremiumV2 are supported. If specifying PremiumV2 ensure you set apim_generation_v2 to true
 sku = "Developer_1"
 subnet_id = "/subscriptions/XXXXXXXX-XXXX-XXXX-XXXX-XXXXXXXXXXXX/resourceGroups/rgwlwus326z/providers/Microsoft.Network/virtualNetworks/vnetwl1wus326z/subnets/snet-apim"
 subnet_id_private_endpoints = "/subscriptions/XXXXXXXX-XXXX-XXXX-XXXX-XXXXXXXXXXXX/resourceGroups/rgwlwus326z/providers/Microsoft.Network/virtualNetworks/vnetwl1wus326z/subnets/snet-svc"
