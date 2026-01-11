@@ -3,6 +3,12 @@ variable "apim_private_dns_zone_name" {
   type        = string
 }
 
+variable "apim_generation_v2" {
+  description = "Boolean that can be set to true to deploy API Management v2"
+  type = bool
+  default = false
+}
+
 variable "customer_managed_public_ip" {
   description = "Boolean to indicate if customer managed public IPs are used for the API Management instance. If set to false, the public IP used for the API Management instance will be managed by Microsoft"
   type        = bool
