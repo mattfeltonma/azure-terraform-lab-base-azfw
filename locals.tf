@@ -84,6 +84,7 @@ locals {
 
   ##### Combine regional Private DNS Zones and user-specified zones and filter out secondary environment
   ##### when it isn't present.
+  
   # Construct regional Private DNS Zones
   aks_private_dns_namespace_primary   = "privatelink.${var.environment_details["primary"].region_name}.azmk8s.io"
   aks_private_dns_namespace_secondary = contains(keys(var.environment_details), "secondary") ? "privatelink.${var.environment_details["secondary"].region_name}.azmk8s.io" : null

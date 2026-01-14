@@ -671,6 +671,84 @@ resource "azapi_resource" "diag_openai_v1_api_monitor" {
   }
 }
 
+## Create an API for Foundry AI Model Inference
+##
+resource "azurerm_api_management_api" "ai_model_inference" {
+  depends_on = [
+    azurerm_api_management_api.openai_v1
+  ]
+
+  name                = "ai-model-inference"
+  resource_group_name = azurerm_resource_group.rg_ai_gateway.name
+  api_management_name = azurerm_api_management.apim.name
+  revision            = "1"
+  display_name        = "Foundry AI Model Inference"
+  path                = "models"
+  api_type            = "http"
+  protocols           = ["https"]
+  subscription_required = false
+  import {
+    content_format = "openapi+json"
+    content_value  = file("${path.module}/api-specs/2024-05-01-preview-ai-model-inference.json")
+  }
+}
+
+## Create diagnostic setting for the Foundry AI Model Inference for Application Insights
+##
+resource "azurerm_api_management_api_diagnostic" "diag_ai_model_inference_api_appinsights" {
+  depends_on = [
+    azurerm_api_management_api.ai_model_inference
+  ]
+
+  identifier               = "applicationinsights"
+  resource_group_name      = azurerm_resource_group.rg_ai_gateway.name
+  api_management_name      = azurerm_api_management.apim.name
+  api_name                 = azurerm_api_management_api.ai_model_inference.name
+  api_management_logger_id = azurerm_api_management_logger.apim_logger_appinsights.id
+
+  sampling_percentage = 100
+  always_log_errors   = true
+  log_client_ip       = true
+  verbosity           = "information"
+  http_correlation_protocol = "W3C"
+}
+
+## Create diagnostic setting for the Foundry AI Model Inference for Azure Monitor
+##
+resource "azapi_resource" "diag_ai_model_inference_api_monitor" {
+  depends_on = [
+    azurerm_api_management_api.ai_model_inference
+  ]
+
+  type                      = "Microsoft.ApiManagement/service/apis/diagnostics@2024-05-01"
+  name                      = "azuremonitor"
+  parent_id                 = azurerm_api_management_api.ai_model_inference.id
+  schema_validation_enabled = false
+  body = {
+    properties = {
+      loggerId = "${azurerm_api_management.apim.id}/loggers/azuremonitor"
+      alwaysLog = "allErrors"
+      verbosity = "information"
+      logClientIp = true
+      sampling = {
+        percentage = 100.0
+        samplingType = "fixed"
+      }
+      largeLanguageModel = {
+        logs = "enabled"
+        requests = {
+          maxSizeInBytes = 262144
+          messages = "all"
+        }
+        responses = {
+          maxSizeInBytes = 262144
+          messages = "all"
+        }
+      }
+    }
+  }
+}
+
 ########### Create an API Management Policies
 ###########
 ###########
@@ -769,6 +847,92 @@ XML
 ##
 resource "azurerm_api_management_api_policy" "apim_policy_openai_v1" {
   api_name            = azurerm_api_management_api.openai_v1.name
+  api_management_name = azurerm_api_management.apim.name
+  resource_group_name = azurerm_resource_group.rg_ai_gateway.name
+
+  xml_content = <<XML
+    <policies>
+      <inbound>
+          <base />
+          <!-- Evaluate the JWT and ensure it was issued by the right Entra ID tenant -->
+          <validate-jwt header-name="Authorization" failed-validation-httpcode="403" failed-validation-error-message="Forbidden">
+              <openid-config url="https://login.microsoftonline.com/${var.entra_id_tenant_id}/v2.0/.well-known/openid-configuration" />
+              <issuers>
+                  <issuer>https://sts.windows.net/${var.entra_id_tenant_id}/</issuer>
+              </issuers>
+          </validate-jwt>
+          <!-- Extract the Entra ID application id from the JWT -->
+          <set-variable name="appId" value="@(context.Request.Headers.GetValueOrDefault("Authorization",string.Empty).Split(' ').Last().AsJwt().Claims.GetValueOrDefault("appid", "00000000-0000-0000-0000-000000000000"))" />
+          <!-- Extract the deployment name from the uri path -->
+          <set-variable name="uriPath" value="@(context.Request.OriginalUrl.Path)" />
+          <set-variable name="deploymentName" value="@(System.Text.RegularExpressions.Regex.Match((string)context.Variables["uriPath"], "/deployments/([^/]+)").Groups[1].Value)" />
+          <!-- Set the X-Entra-App-ID header to the Entra ID application ID from the JWT -->
+          <set-header name="X-Entra-App-ID" exists-action="override">
+              <value>@(context.Variables.GetValueOrDefault<string>("appId"))</value>
+          </set-header>
+          <!-- If the request is a ChatCompletion request validate that it contains UserSecurityContext. If it doesn't reject it with status code 400 -->
+          <choose>
+              <when condition="@(context.Operation.Id.ToLower() == "createChatCompletion" &&
+        (
+          context.Request.Body?.As<JObject>(true)?["user_security_context"] == null ||
+          context.Request.Body?.As<JObject>(true)?["user_security_context"]["end_user_id"] == null
+        )
+      )">
+                  <return-response>
+                      <set-status code="400" reason="Bad Request" />
+                      <set-body>@("UserSecurityContext property is required for this operation.")</set-body>
+                  </return-response>
+              </when>
+          </choose>
+          <!-- Throttle token usage based on the appid -->
+          <llm-token-limit counter-key="@(context.Variables.GetValueOrDefault<string>("appId","00000000-0000-0000-0000-000000000000"))" estimate-prompt-tokens="true" tokens-per-minute="10000" remaining-tokens-header-name="x-apim-remaining-token" tokens-consumed-header-name="x-apim-tokens-consumed" />
+          <!-- Emit token metrics to Application Insights -->
+          <llm-emit-token-metric namespace="openai-metrics">
+              <dimension name="model" value="@(context.Variables.GetValueOrDefault<string>("deploymentName","None"))" />
+              <dimension name="client_ip" value="@(context.Request.IpAddress)" />
+              <dimension name="appId" value="@(context.Variables.GetValueOrDefault<string>("appId","00000000-0000-0000-0000-000000000000"))" />
+          </llm-emit-token-metric>
+          <set-backend-service backend-id="${module.backend_pool_aifoundry_instances.name}" />
+      </inbound>
+      <backend>
+          <forward-request />
+      </backend>
+      <outbound>
+          <base />
+      </outbound>
+      <!-- Handle exceptions and customize error responses  -->
+      <on-error>
+          <base />
+          <set-header name="X-OperationName" exists-action="override">
+              <value>@( context.Operation.Name )</value>
+          </set-header>
+          <set-header name="X-OperationMethod" exists-action="override">
+              <value>@( context.Operation.Method )</value>
+          </set-header>
+          <set-header name="X-OperationUrl" exists-action="override">
+              <value>@( context.Operation.UrlTemplate )</value>
+          </set-header>
+          <set-header name="X-ApiName" exists-action="override">
+              <value>@( context.Api.Name )</value>
+          </set-header>
+          <set-header name="X-ApiPath" exists-action="override">
+              <value>@( context.Api.Path )</value>
+          </set-header>
+          <set-header name="X-LastErrorMessage" exists-action="override">
+              <value>@( context.LastError.Message )</value>
+          </set-header>
+          <set-header name="X-Entra-Id" exists-action="override">
+              <value>@( context.Variables.GetValueOrDefault<string>("appId") )</value>
+          </set-header>
+      </on-error>
+  </policies>
+XML
+}
+
+## Create an API Management policy for the Foundry AI Model Inference API
+##
+resource "azurerm_api_management_api_policy" "apim_policy_foundry_ai_model_inference" {
+  api_name            = azurerm_api_management_api.ai_model_inference.name
   api_management_name = azurerm_api_management.apim.name
   resource_group_name = azurerm_resource_group.rg_ai_gateway.name
 

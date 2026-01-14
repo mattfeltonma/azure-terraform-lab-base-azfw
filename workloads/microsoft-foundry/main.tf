@@ -1611,7 +1611,7 @@ module "foundry_project_agents" {
   project_number                     = 1
 
   ## Required info for resource-level connections (Remove once this bug is fixed)
-  shared_byo_key_vault_resource_id      = azurerm_key_vault.key_vault_foundry_secrets[0].id
+  shared_byo_key_vault_resource_id      = var.deploy_key_vault_connection_secrets ? azurerm_key_vault.key_vault_foundry_secrets[0].id : null
   shared_app_insights_resource_id       = azurerm_application_insights.appins_foundry[0].id
   shared_app_insights_connection_string = azurerm_application_insights.appins_foundry[0].connection_string
   deploy_key_vault_connection_secrets   = var.deploy_key_vault_connection_secrets ? true : false
@@ -1655,7 +1655,7 @@ module "foundry_project_rag" {
   foundry_resource_resource_group_id = azurerm_resource_group.rg_foundry.id
   region                             = var.region
   first_project                      = true
-  project_number                     = 1
+  project_number                     = 100
 
   ## Required info for project-level connections
   agents                        = var.agents ? true : false

@@ -43,6 +43,7 @@ variable "private_dns_namespaces" {
     aml_api = "privatelink.api.azureml.ms"
     aml_instances = "instances.azureml.ms"
     aml_notebooks = "privatelink.notebooks.azure.net"
+    apim = "privatelink.azure-api.net"
     azure_sql = "privatelink.database.windows.net"
     azure_postgres = "privatelink.postgres.database.azure.com"
     azure_mysql = "privatelink.mysql.database.azure.com"
