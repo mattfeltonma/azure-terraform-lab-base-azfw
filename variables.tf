@@ -11,7 +11,7 @@ variable "address_space_cloud" {
 variable "environment_details" {
   description = "The environment details including environment name, region name and address space. This should include primary and secondary if multi-region is required"
   type = map(object({
-    region_name = string
+    region_name   = string
     address_space = string
   }))
 }
@@ -20,6 +20,12 @@ variable "key_vault_admin" {
   description = "The object id of the user or service principal to assign the Key Vault Administrator role to"
   type        = string
 
+}
+
+variable "hero_region" {
+  description = "The 'hero' region to deploy a third workload spoke to. This is primarily used for Microsoft Foundry use cases because hero regions tend to get new services first."
+  type        = string
+  default     = "eastus2"
 }
 
 variable "network_watcher_name_prefix" {
@@ -38,39 +44,39 @@ variable "private_dns_namespaces" {
   description = "The private DNS zones to create and link to the shared services virtual network"
   type        = map(string)
   default = {
-    acr = "privatelink.azurecr.io",
-    ai_search = "privatelink.search.windows.net"
-    aml_api = "privatelink.api.azureml.ms"
-    aml_instances = "instances.azureml.ms"
-    aml_notebooks = "privatelink.notebooks.azure.net"
-    apim = "privatelink.azure-api.net"
-    azure_sql = "privatelink.database.windows.net"
-    azure_postgres = "privatelink.postgres.database.azure.com"
-    azure_mysql = "privatelink.mysql.database.azure.com"
-    azure_mariadb = "privatelink.mariadb.database.azure.com"
-    cosmos_sql = "privatelink.documents.azure.com"
-    cosmos_sqlx = "privatelink.sqlx.cosmos.azure.com"
-    cosmos_cassandra = "privatelink.cassandra.cosmos.azure.com"
-    cosmos_gremlin = "privatelink.gremlin.cosmos.azure.com"
-    cosmos_mongo = "privatelink.mongo.cosmos.azure.com"
-    cosmos_table = "privatelink.table.cosmos.azure.com"
-    cosmos_analytics = "privatelink.analytics.cosmos.azure.com"
-    cosmos_postgres = "privatelink.postgres.cosmos.azure.com"
-    event_grid = "privatelink.eventgrid.azure.net"
-    foundry_ai = "privatelink.services.ai.azure.com"
+    acr               = "privatelink.azurecr.io",
+    ai_search         = "privatelink.search.windows.net"
+    aml_api           = "privatelink.api.azureml.ms"
+    aml_instances     = "instances.azureml.ms"
+    aml_notebooks     = "privatelink.notebooks.azure.net"
+    apim              = "privatelink.azure-api.net"
+    azure_sql         = "privatelink.database.windows.net"
+    azure_postgres    = "privatelink.postgres.database.azure.com"
+    azure_mysql       = "privatelink.mysql.database.azure.com"
+    azure_mariadb     = "privatelink.mariadb.database.azure.com"
+    cosmos_sql        = "privatelink.documents.azure.com"
+    cosmos_sqlx       = "privatelink.sqlx.cosmos.azure.com"
+    cosmos_cassandra  = "privatelink.cassandra.cosmos.azure.com"
+    cosmos_gremlin    = "privatelink.gremlin.cosmos.azure.com"
+    cosmos_mongo      = "privatelink.mongo.cosmos.azure.com"
+    cosmos_table      = "privatelink.table.cosmos.azure.com"
+    cosmos_analytics  = "privatelink.analytics.cosmos.azure.com"
+    cosmos_postgres   = "privatelink.postgres.cosmos.azure.com"
+    event_grid        = "privatelink.eventgrid.azure.net"
+    foundry_ai        = "privatelink.services.ai.azure.com"
     foundry_cognitive = "privatelink.cognitiveservices.azure.com"
-    foundry_openai = "privatelink.openai.azure.com"
-    key_vault = "privatelink.vaultcore.azure.net"
-    service_bus = "privatelink.servicebus.windows.net"
-    storage_blob = "privatelink.blob.core.windows.net"
-    storage_dfs = "privatelink.dfs.core.windows.net"
-    storage_file = "privatelink.file.core.windows.net"
-    storage_queue = "privatelink.queue.core.windows.net"
-    storage_table = "privatelink.table.core.windows.net"
-    synapse_main = "privatelink.azuresynapse.net"
-    synapse_dev = "privatelink.dev.azuresynapse.net"
-    synapse_sql = "privatelink.sql.azuresynapse.net"
-    web_app ="privatelink.azurewebsites.net"
+    foundry_openai    = "privatelink.openai.azure.com"
+    key_vault         = "privatelink.vaultcore.azure.net"
+    service_bus       = "privatelink.servicebus.windows.net"
+    storage_blob      = "privatelink.blob.core.windows.net"
+    storage_dfs       = "privatelink.dfs.core.windows.net"
+    storage_file      = "privatelink.file.core.windows.net"
+    storage_queue     = "privatelink.queue.core.windows.net"
+    storage_table     = "privatelink.table.core.windows.net"
+    synapse_main      = "privatelink.azuresynapse.net"
+    synapse_dev       = "privatelink.dev.azuresynapse.net"
+    synapse_sql       = "privatelink.sql.azuresynapse.net"
+    web_app           = "privatelink.azurewebsites.net"
   }
 }
 

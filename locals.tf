@@ -61,21 +61,23 @@ locals {
   regions = [for env in values(var.environment_details) : env.region_name]
 
   # Create the virtual network cidr ranges
-  vnet_cidr_tr_pri = cidrsubnet(var.environment_details["primary"].address_space, 2, 0)
-  vnet_cidr_ss_pri = cidrsubnet(var.environment_details["primary"].address_space, 2, 1)
-  vnet_cidr_wl1_pri = cidrsubnet(var.environment_details["primary"].address_space, 2, 2)
-  vnet_cidr_wl2_pri = cidrsubnet(var.environment_details["primary"].address_space, 2, 3)
+  vnet_cidr_tr_pri = cidrsubnet(var.environment_details["primary"].address_space, 3, 0)
+  vnet_cidr_ss_pri = cidrsubnet(var.environment_details["primary"].address_space, 3, 1)
+  vnet_cidr_wl1_pri = cidrsubnet(var.environment_details["primary"].address_space, 3, 2)
+  vnet_cidr_wl2_pri = cidrsubnet(var.environment_details["primary"].address_space, 3, 3)
+  vnet_cidr_wl3_hero = cidrsubnet(var.environment_details["primary"].address_space, 3, 4)
   primary_region_vnet_cidrs = {
     "ss" = local.vnet_cidr_ss_pri,
     "wl1" = local.vnet_cidr_wl1_pri,
     "wl2" = local.vnet_cidr_wl2_pri,
+    "wl3" = local.vnet_cidr_wl3_hero
   }
 
   # Create the secondary virtual network CIDR ranges if the environment has multiple environments defined
-  vnet_cidr_tr_sec = contains(keys(var.environment_details), "secondary") ? cidrsubnet(var.environment_details["secondary"].address_space, 2, 0) : null
-  vnet_cidr_ss_sec = contains(keys(var.environment_details), "secondary") ? cidrsubnet(var.environment_details["secondary"].address_space, 2, 1) : null
-  vnet_cidr_wl1_sec = contains(keys(var.environment_details), "secondary") ? cidrsubnet(var.environment_details["secondary"].address_space, 2, 2) : null
-  vnet_cidr_wl2_sec = contains(keys(var.environment_details), "secondary") ? cidrsubnet(var.environment_details["secondary"].address_space, 2, 3) : null
+  vnet_cidr_tr_sec = contains(keys(var.environment_details), "secondary") ? cidrsubnet(var.environment_details["secondary"].address_space, 3, 0) : null
+  vnet_cidr_ss_sec = contains(keys(var.environment_details), "secondary") ? cidrsubnet(var.environment_details["secondary"].address_space, 3, 1) : null
+  vnet_cidr_wl1_sec = contains(keys(var.environment_details), "secondary") ? cidrsubnet(var.environment_details["secondary"].address_space, 3, 2) : null
+  vnet_cidr_wl2_sec = contains(keys(var.environment_details), "secondary") ? cidrsubnet(var.environment_details["secondary"].address_space, 3, 3) : null
   secondary_region_vnet_cidrs = contains(keys(var.environment_details), "secondary") ? {
     "ss" = local.vnet_cidr_ss_sec,
     "wl1" = local.vnet_cidr_wl1_sec,

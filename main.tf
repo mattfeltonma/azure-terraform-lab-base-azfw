@@ -109,6 +109,26 @@ module "storage_account_flow_logs" {
   law_resource_id                 = module.law.id
 }
 
+## Create Storage Account for Flow Logs in Hero Region
+##
+module "storage_account_flow_logs_hero" {
+  depends_on = [
+    azurerm_resource_group.rgshared,
+    module.law
+  ]
+
+  source              = "./modules/storage-account"
+  purpose             = "flv"
+  random_string       = random_string.unique.result
+  region              = var.hero_region
+  region_code         = local.region_abbreviations[var.hero_region]
+  resource_group_name = azurerm_resource_group.rgshared["primary"].name
+  tags                = local.tags
+
+  network_trusted_services_bypass = ["AzureServices", "Logging", "Metrics"]
+  law_resource_id                 = module.law.id
+}
+
 ## Create Transit Virtual Networks (Hub)
 ##
 module "vnet_transit" {
@@ -299,7 +319,8 @@ resource "azurerm_private_dns_zone_virtual_network_link" "link" {
   virtual_network_id  = module.vnet_shared[each.value.environment].vnet_shared_services_resource_id
   registration_enabled = false
   # TODO: 12/2025 Remove this condition if DNS fallback ever supports non-Private Link zones
-  resolution_policy = each.value.namespace == "instances.azureml.ms" ? "Default" : "NxDomainRedirect"
+  # resolution_policy is only valid for privatelink zones - use null for non-privatelink zones
+  resolution_policy = startswith(each.value.namespace, "privatelink.") ? "NxDomainRedirect" : null
   tags                = var.tags
 
   lifecycle {
@@ -389,5 +410,49 @@ module "vnet_workload" {
   log_analytics_workspace_region      = module.law.location
 
 
+}
+
+##### Create hero region workload virtual network
+#####
+module "vnet_workload_hero" {
+  depends_on = [
+    null_resource.update_firewall_dns_policy
+  ]
+
+  source              = "./modules/vnet-workload"
+  random_string       = random_string.unique.result
+  workload_number     = 3
+  region              = var.hero_region
+  region_code         = local.region_abbreviations[var.hero_region]
+  resource_group_name = azurerm_resource_group.rgwork["primary"].name
+  resource_group_id   = azurerm_resource_group.rgwork["primary"].id
+  tags                = local.tags
+
+  # Set the address space for the virtual network
+  address_space_vnet = local.vnet_cidr_wl3_hero
+
+  # Set the DNS servers to be used in the virtual network
+  dns_servers = [
+    module.vnet_shared["primary"].private_resolver_inbound_endpoint_ip
+  ]
+
+  # Set the firewall IP address that route tables will point to for egress
+  firewall_private_ip = module.vnet_transit["primary"].azfw_private_ip
+
+  # Pass the properties of the transit virtual network
+  resource_group_name_transit = azurerm_resource_group.rgtran["primary"].name
+  vnet_id_transit             = module.vnet_transit["primary"].vnet_transit_id
+  vnet_name_transit           = module.vnet_transit["primary"].vnet_transit_name
+
+  # Pass the properties of the shared services virtual network
+  resource_group_name_shared_services = azurerm_resource_group.rgshared["primary"].name
+
+  # Pass the details to enable VNet Flow Logs and Traffic Analytics
+  network_watcher_name                = "${var.network_watcher_name_prefix}${var.hero_region}"
+  network_watcher_resource_group_name = var.network_watcher_resource_group_name
+  storage_account_id_flow_logs        = module.storage_account_flow_logs_hero.id
+  log_analytics_workspace_guid        = module.law.workspace_id
+  log_analytics_workspace_resource_id = module.law.id
+  log_analytics_workspace_region      = module.law.location
 }
 
