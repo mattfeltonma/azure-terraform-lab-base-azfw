@@ -1,3 +1,4 @@
+hero_region = eastus2
 environment_details = {
     primary = {
         region_name   = "westus3"
