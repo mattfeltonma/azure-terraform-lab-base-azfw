@@ -151,8 +151,57 @@ locals {
     }
   }
 
+  # AML managed virutal network outbound rules that are required to support batch endpoint
+  user_defined_outbound_batch_pe_rules = {
+    AllowTableDefaultStorage = {
+      category = "UserDefined"
+      type     = "PrivateEndpoint"
+      destination = {
+        serviceResourceId  = azurerm_storage_account.storage_account_aml_workspace.id
+        subresourceTarget  = "table"
+      }
+    }
+    AllowQueueDefaultStorage = {
+      category = "UserDefined"
+      type     = "PrivateEndpoint"
+      destination = {
+        serviceResourceId  = azurerm_storage_account.storage_account_aml_workspace.id
+        subresourceTarget  = "queue"
+      }
+    }
+  }
+
+  # AML managed virutal network outbound rules that are required to the data storage account
+  user_defined_outbound_data_pe_rules = {
+    AllowTableDefaultStorage = {
+      category = "UserDefined"
+      type     = "PrivateEndpoint"
+      destination = {
+        serviceResourceId  = azurerm_storage_account.storage_account_aml_workspace.id
+        subresourceTarget  = "blob"
+      }
+    }
+    AllowQueueDefaultStorage = {
+      category = "UserDefined"
+      type     = "PrivateEndpoint"
+      destination = {
+        serviceResourceId  = azurerm_storage_account.storage_account_aml_workspace.id
+        subresourceTarget  = "file"
+      }
+    }
+    AllowDfsDefaultStorage = {
+      category = "UserDefined"
+      type     = "PrivateEndpoint"
+      destination = {
+        serviceResourceId  = azurerm_storage_account.storage_account_aml_workspace.id
+        subresourceTarget  = "dfs"
+      }
+    }
+  }
+
+
   # AML managed virtual network outbound rules defined in variable for the template
-  user_defined_outbound_pe_rules = {
+  user_defined_outbound_custom_pe_rules = {
     for k, v in var.user_defined_outbound_rules_private_endpoint_resources : 
     k => {
       category = "UserDefined"

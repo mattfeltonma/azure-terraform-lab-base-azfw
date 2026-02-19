@@ -1,12 +1,7 @@
-variable "user_defined_outbound_rules_private_endpoint_resources" {
-  description = "The external resources created outside of this module that are used by this module"
-  type = map(
-    object({
-      serviceResourceId = string
-      subresourceTarget = string
-    })
-  )
-  default = {}
+variable "key_vault_cmk_rbac_enabled" {
+  description = "Sets the Key Vault to either support RBAC or Access Policies."
+  type        = bool
+  default     = false
 }
 
 variable "random_string" {
@@ -54,7 +49,40 @@ variable "trusted_ip" {
   type        = string
 }
 
+variable "user_defined_outbound_rules_private_endpoint_resources" {
+  description = "The external resources created outside of this module that are used by this module"
+  type = map(
+    object({
+      serviceResourceId = string
+      subresourceTarget = string
+    })
+  )
+  default = {}
+}
+
 variable "user_object_id" {
   description = "The user object id of the ML Engineer"
   type        = string
+}
+
+variable "workspace_encryption" {
+  description = "The type of encryption to use for the AML Workspace. Options are 'cmk' or 'pmk'"
+  type        = string
+  default = "pmk"
+  validation {
+    condition     = contains(["cmk", "pmk"], var.workspace_encryption)
+    error_message = "The workspace_encryption variable must be either 'cmk' or 'pmk'."
+  }
+
+}
+
+variable "workspace_managed_identity" {
+  description = "The type of managed identity to create and use for the workspace. Options are 'umi' or 'smi'"
+  type        = string
+  default = "smi"
+  #validation {
+  #  # This condition validates that the value of the variable is either 'umi' or 'smi'. It also validates whether cmk encryption is enabled, as SMI is only supported with CMK encryption. If the condition is not met, an error message is returned.
+  #  condition     = (var.workspace_managed_identity == "umi" || var.workspace_managed_identity == "smi") && !(var.workspace_encryption == "pmk" && var.workspace_managed_identity == "smi")
+  #  error_message = "The workspace_managed_identity variable must be either 'umi' or 'smi' and if using cmk encryption the managed identity must be 'smi'."
+  #}
 }

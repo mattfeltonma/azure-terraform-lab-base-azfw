@@ -12,6 +12,8 @@ terraform.tfstate-backup*
 terraform.tfvars
 terraform.tfvars-backup*
 terraform.tfstate.backup
+terraform.tfvars*
+terraform.tfstate*
 .terraform.lock.hcl
 .terraform.tfstate.lock.info
 remote.conf

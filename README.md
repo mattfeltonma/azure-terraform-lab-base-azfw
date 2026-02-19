@@ -32,6 +32,12 @@ Hope any bit of this code helps save you some time or learn something new!
 
 ## Updates
 
+### 2026
+* **February 19, 2026**
+  * Added third spoke to hub that can be placed in a "hero" region to test new features without having to deploy to that region
+  * Updated [Azure Machine Learning workload](/workloads/aml/aml-managed-vnet/) to support batch endpoint deployment. This included RBAC and networking changes. Also added more options to customize deployment for CMK.
+  * Updated [Microsoft Foundry workload](/workloads/microsoft-foundry/) plugin with support for [private preview managed vnet support](https://learn.microsoft.com/en-us/azure/ai-foundry/how-to/managed-virtual-network?view=foundry-classic). This feature is still private preview, so it may or may not work depending on the day and region.
+
 ### 2025
 * **December 19, 2025**
   * Added updated [Microsoft Foundry workload](/workloads/microsoft-foundry/) plugin
@@ -134,7 +140,8 @@ When both primary and secondary environments are defined in environment details,
 ### Network & Connectivity
 - **Azure Private DNS Resolver**: Centralized DNS resolution
 - **VPN Gateway**: Hybrid connectivity support
-- **Multiple Workload Spokes**: Support multiple workloads in single deployment
+- **Multiple Workload Spokes**: Support multiple workloads in single 
+- **Hero Region Support**: Third workload vnet can be placed in "hero" region to test new features without having to deploy whole new hub
 - **Managed Infra-ready**: Subnets setup with NSGs and Route Tables to support common infrastructure like Application Gateway and APIM
 
 ### Monitoring & Logging
@@ -228,8 +235,8 @@ The solution uses a supernet approach with these defaults:
 | Component | Default CIDR | Purpose |
 |-----------|--------------|---------|
 | Cloud Supernet | `10.0.0.0/8` | Overall address space |
-| Primary Region | `10.0.0.0/20` | Hub and spokes in primary region |
-| Secondary Region | `10.0.16.0/20` | Hub and spokes in secondary region |
+| Primary Region | `10.0.0.0/20` | Hub and spokes in primary region (and hero region spoke attached to primary region) |
+| Secondary Region | `10.0.16.0/20` | Hub and spokes in secondary region (and hero region spoke attached to secondary region) |
 | On-premises | `192.168.0.0/16` | VPN site networks |
 
 ### Subnet Allocation

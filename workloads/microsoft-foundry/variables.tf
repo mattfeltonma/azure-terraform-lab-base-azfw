@@ -27,6 +27,16 @@ variable "agent_service_outbound_networking" {
 
   validation {
     condition = (
+      var.agent_service_outbound_networking.type == "managed_virtual_network" ?
+      var.agent_service_outbound_networking.subnet_id == null :
+      true
+    )
+    error_message = "The subnet_id variable cannot be set when type is 'managed_virtual_network'"
+  }
+
+
+  validation {
+    condition = (
       var.agent_service_outbound_networking.type == "vnet_injection" ?
       var.agent_service_outbound_networking.subnet_id != null :
       true
@@ -88,7 +98,7 @@ variable "project_managed_identity_type" {
 }
 
 variable "deploy_rag_resources" {
-  description = "Set to true if you are not using agents but want to deploy the resources required to demonstrate simple RAG patterns"
+  description = "Set to true if you are not using agents but want to deploy the resources required to demonstrate simple RAG patterns. This is not necessary when deploying agents."
   type        = bool
   default     = false
 }

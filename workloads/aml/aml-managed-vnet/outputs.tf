@@ -8,11 +8,6 @@ output "aml_workspace_resource_id" {
   description = "The resource id of the AML Workspace"
 }
 
-output "aml_workspace_system_assigned_identity_principal_id" {
-  value       = azapi_resource.aml_workspace.output.identity.principalId
-  description = "The principal id of the AML Workspace system assigned identity"
-}
-
 output "aml_workspace_aml_workspace_id" {
   value       = azapi_resource.aml_workspace.output.properties.workspaceId
   description = "The AML workspace id of the AML Workspace the project is deployed to"
