@@ -724,14 +724,125 @@ resource "azurerm_private_endpoint" "pe_key_vault_cmk_foundry" {
 #########
 #########
 
+## TODO: 1/2026 Uncomment and update this once azurerm supports managed vnet with Foundry
+##       Don't forget to update all references back to this resource once that is complete
+##
 ## Create the Foundry account and configure it to use VNet injection to support BYO VNet
 ##
-resource "azurerm_cognitive_account" "foundry_resource" {
+#resource "azurerm_cognitive_account" "foundry_resource" {
+#  depends_on = [
+#    # Wait for user-assigned managed identity creation and permissioning
+#    time_sleep.wait_umi_foundry_resource,
+#    time_sleep.wait_key_vault_secrets_umi_rbac_replication,
+#    time_sleep.wait_key_vault_cmk_umi_rbac_replication,
+#    ## Wait for creation of optional Private Endpoints if using CMK or BYO Key Vault
+#    azurerm_private_endpoint.pe_key_vault_cmk_foundry,
+#    azurerm_private_endpoint.pe_key_vault_secrets_foundry,
+#    ## Wait for creation of optional resources used to support agent tool usage and tracing
+#    time_sleep.wait_appins,
+#    azapi_resource.bing_grounding_search_foundry,
+#    ## Wait for creation of optional Key Vaults and CMK if configured
+#    azurerm_key_vault.key_vault_foundry_secrets,
+#    azurerm_key_vault.key_vault_foundry_cmk,
+#    azapi_resource.assoc_foundry_key_vault_cmk,
+#    #TODO: 12/2025 Uncomment this when the NSP issue is sorted out with this secrets vault
+#    #azapi_resource.assoc_foundry_key_vault_secrets,
+#    azapi_resource.access_rule_foundry_key_vault_secrets_ipprefix,
+#    azapi_resource.access_rule_foundry_key_vault_cmk_subscription
+#  ]
+
+#  name                = "msf${var.region_code}${var.random_string}"
+#  location            = var.region
+#  resource_group_name = azurerm_resource_group.rg_foundry.name
+#  # Adding tag specific to my environment. Not needed outside my environment
+#  tags = merge(var.tags, { SecurityControl = "Ignore" })
+
+#  # Create an AI Foundry resource
+#  kind                       = "AIServices"
+#  sku_name                   = "S0"
+#  project_management_enabled = true
+
+# Assigned a system-assigned managed identity or user-assigned managed identity based on variable
+#  identity {
+#    type = var.resource_managed_identity_type == "umi" ? "UserAssigned" : "SystemAssigned"
+#    identity_ids = var.resource_managed_identity_type == "umi" ? [
+#      azurerm_user_assigned_identity.umi_foundry_resource[0].id
+#    ] : null
+#  }
+
+# Set the Foundry resource to use a CMK if the var.foundry_encryption is set to "cmk"
+#  dynamic "customer_managed_key" {
+#    for_each = var.foundry_encryption == "cmk" && var.resource_managed_identity_type == "umi" ? [1] : []
+
+#    content {
+#      key_vault_key_id   = azurerm_key_vault_key.key_foundry_cmk[0].id
+#      identity_client_id = azurerm_user_assigned_identity.umi_foundry_resource[0].client_id
+#    }
+#  }
+
+# Set custom subdomain name for DNS names created for this Foundry resource
+#  custom_subdomain_name = "msf${var.region_code}${var.random_string}"
+
+# Configure network controls to block all public network access and restrict to Private Endpoints only. Network Security Perimeter will control access over Microsoft public backbone
+#  public_network_access_enabled = false
+
+# TODO: 12/2025 Add option for managed virtual network after more testing
+# Enable VNet injection for Standard Agents if agent_service_outbound_networking.type is set
+#  dynamic "network_injection" {
+#    for_each = var.agent_service_outbound_networking.type != "none" ? [1] : []
+#    content {
+#      scenario  = "agent"
+#      subnet_id = var.agent_service_outbound_networking.subnet_id
+#    }
+#  }
+
+#  lifecycle {
+#    ignore_changes = [
+#      tags["created_date"],
+#      tags["created_by"],
+#      customer_managed_key
+#    ]
+#  }
+#}
+
+## AGENTS + MANAGED VNET DEPLOYMENTS ONLY
+## Create an Azure RBAC role assignment granting the user-assigned managed identity for the Microsoft Foundry resource
+## the Azure AI Enterprise Network Connection Approver role on the resource group to allow approval of private endpoints created in the
+## managed virtual network
+##
+resource "azurerm_role_assignment" "umi_foundry_resource_azure_ai_enterprise_network_connection_approver" {
+  count = var.resource_managed_identity_type == "umi" && var.agent_service_outbound_networking.type == "managed_virtual_network" && var.agents ? 1 : 0
+
+  depends_on = [
+    azurerm_user_assigned_identity.umi_foundry_resource
+  ]
+
+  scope                = azurerm_resource_group.rg_foundry.id
+  role_definition_name = "Azure AI Enterprise Network Connection Approver"
+  principal_id         = azurerm_user_assigned_identity.umi_foundry_resource[0].principal_id
+}
+
+## Sleep for 120 seconds to allow the Application Insights resource to be fully available
+##
+resource "time_sleep" "wait_managed_vnet_permissions_replication" {
+  count = var.resource_managed_identity_type == "umi" && var.agent_service_outbound_networking.type == "managed_virtual_network" && var.agents ? 1 : 0
+
+  depends_on = [
+    azurerm_role_assignment.umi_foundry_resource_azure_ai_enterprise_network_connection_approver
+  ]
+  create_duration = "120s"
+}
+
+## TODO: 1/2026 Remove this section once azurerm supports managed vnet with Foundry
+##
+## Create the Microsoft Foundry resource/account 
+resource "azapi_resource" "foundry_resource" {
   depends_on = [
     # Wait for user-assigned managed identity creation and permissioning
     time_sleep.wait_umi_foundry_resource,
     time_sleep.wait_key_vault_secrets_umi_rbac_replication,
     time_sleep.wait_key_vault_cmk_umi_rbac_replication,
+    time_sleep.wait_managed_vnet_permissions_replication,
     ## Wait for creation of optional Private Endpoints if using CMK or BYO Key Vault
     azurerm_private_endpoint.pe_key_vault_cmk_foundry,
     azurerm_private_endpoint.pe_key_vault_secrets_foundry,
@@ -748,56 +859,67 @@ resource "azurerm_cognitive_account" "foundry_resource" {
     azapi_resource.access_rule_foundry_key_vault_cmk_subscription
   ]
 
-  name                = "msf${var.region_code}${var.random_string}"
-  location            = var.region
-  resource_group_name = azurerm_resource_group.rg_foundry.name
-  # Adding tag specific to my environment. Not needed outside my environment
-  tags = merge(var.tags, { SecurityControl = "Ignore" })
+  type                      = "Microsoft.CognitiveServices/accounts@2025-10-01-preview"
+  name                      = "msf${var.region_code}${var.random_string}"
+  location                  = var.region
+  parent_id                 = azurerm_resource_group.rg_foundry.id
+  schema_validation_enabled = true
 
-  # Create an AI Foundry resource
-  kind                       = "AIServices"
-  sku_name                   = "S0"
-  project_management_enabled = true
-
-  # Assigned a system-assigned managed identity or user-assigned managed identity based on variable
-  identity {
-    type = var.resource_managed_identity_type == "umi" ? "UserAssigned" : "SystemAssigned"
-    identity_ids = var.resource_managed_identity_type == "umi" ? [
-      azurerm_user_assigned_identity.umi_foundry_resource[0].id
-    ] : null
-  }
-
-  # Set the Foundry resource to use a CMK if the var.foundry_encryption is set to "cmk"
-  dynamic "customer_managed_key" {
-    for_each = var.foundry_encryption == "cmk" && var.resource_managed_identity_type == "umi" ? [1] : []
-
-    content {
-      key_vault_key_id   = azurerm_key_vault_key.key_foundry_cmk[0].id
-      identity_client_id = azurerm_user_assigned_identity.umi_foundry_resource[0].client_id
+  body = {
+    kind = "AIServices"
+    sku = {
+      name = "S0"
     }
-  }
-
-  # Set custom subdomain name for DNS names created for this Foundry resource
-  custom_subdomain_name = "msf${var.region_code}${var.random_string}"
-
-  # Configure network controls to block all public network access and restrict to Private Endpoints only. Network Security Perimeter will control access over Microsoft public backbone
-  public_network_access_enabled = false
-
-  # TODO: 12/2025 Add option for managed virtual network after more testing
-  # Enable VNet injection for Standard Agents if agent_service_outbound_networking.type is set
-  dynamic "network_injection" {
-    for_each = var.agent_service_outbound_networking.type != "none" ? [1] : []
-    content {
-      scenario  = "agent"
-      subnet_id = var.agent_service_outbound_networking.subnet_id
+    identity = var.resource_managed_identity_type == "umi" ? {
+      type = "UserAssigned"
+      userAssignedIdentities = {
+        (azurerm_user_assigned_identity.umi_foundry_resource[0].id) = {}
+      }
+      } : {
+      type                   = "SystemAssigned"
+      userAssignedIdentities = null
     }
+    properties = {
+
+      # Specify this is an MS Foundry resource
+      allowProjectManagement = true
+
+      # Set custom subdomain name for DNS names created for this Foundry resource
+      customSubDomainName = "msf${var.region_code}${var.random_string}"
+
+      # Set encryption with CMK if configured other use a PMK
+      encryption = var.foundry_encryption == "cmk" && var.resource_managed_identity_type == "umi" ? {
+        keySource = "Microsoft.KeyVault"
+        keyVaultProperties = {
+          keyName     = azurerm_key_vault_key.key_foundry_cmk[0].name
+          keyVaultUri = azurerm_key_vault.key_vault_foundry_cmk[0].vault_uri
+          keyVersion  = azurerm_key_vault_key.key_foundry_cmk[0].version
+        }
+      } : null
+
+      # Network-related controls
+      # Configure network controls to block all public network access and restrict to Private Endpoints only. Network Security Perimeter will control access over Microsoft public backbone
+      publicNetworkAccess = "Disabled"
+      networkAcls = {
+        defaultAction = "Deny"
+      }
+
+      # For Standard Agents either configure VNet injection or managed virtual network
+      networkInjections = var.agent_service_outbound_networking != null ? [
+        {
+          scenario                   = "agent"
+          subnetArmId                = var.agent_service_outbound_networking.type == "vnet_injection" ? var.agent_service_outbound_networking.subnet_id : null
+          useMicrosoftManagedNetwork = var.agent_service_outbound_networking.type == "managed_virtual_network" ? true : false
+        }
+      ] : null
+    }
+    tags = merge(var.tags, { SecurityControl = "Ignore" })
   }
 
   lifecycle {
     ignore_changes = [
-      tags["created_date"],
-      tags["created_by"],
-      customer_managed_key
+      body["properties"]["tags"]["created_date"],
+      body["properties"]["tags"]["created_by"]
     ]
   }
 }
@@ -806,11 +928,11 @@ resource "azurerm_cognitive_account" "foundry_resource" {
 ##
 resource "azurerm_monitor_diagnostic_setting" "diag_foundry_resource" {
   depends_on = [
-    azurerm_cognitive_account.foundry_resource
+    azapi_resource.foundry_resource
   ]
 
   name                       = "diag"
-  target_resource_id         = azurerm_cognitive_account.foundry_resource.id
+  target_resource_id         = azapi_resource.foundry_resource.id
   log_analytics_workspace_id = azurerm_log_analytics_workspace.log_analytics_workspace_workload.id
 
   enabled_log {
@@ -834,7 +956,7 @@ resource "azurerm_monitor_diagnostic_setting" "diag_foundry_resource" {
 ##
 resource "azapi_resource" "assoc_foundry_resource" {
   depends_on = [
-    azurerm_cognitive_account.foundry_resource,
+    azapi_resource.foundry_resource,
     azapi_resource.profile_nsp_foundry_ai_resources
   ]
 
@@ -848,7 +970,7 @@ resource "azapi_resource" "assoc_foundry_resource" {
     properties = {
       accessMode = "Enforced"
       privateLinkResource = {
-        id = azurerm_cognitive_account.foundry_resource.id
+        id = azapi_resource.foundry_resource.id
       }
       profile = {
         id = azapi_resource.profile_nsp_foundry_ms_foundry.id
@@ -867,7 +989,7 @@ resource "time_sleep" "wait_smi_foundry" {
   count = var.resource_managed_identity_type == "smi" ? 1 : 0
 
   depends_on = [
-    azurerm_cognitive_account.foundry_resource
+    azapi_resource.foundry_resource
   ]
   create_duration = "10s"
 }
@@ -885,7 +1007,7 @@ resource "azurerm_role_assignment" "smi_foundry_secrets_key_vault_secrets_office
 
   scope                = azurerm_key_vault.key_vault_foundry_secrets[0].id
   role_definition_name = "Key Vault Secrets Officer"
-  principal_id         = azurerm_cognitive_account.foundry_resource.identity[0].principal_id
+  principal_id         = azapi_resource.foundry_resource.output.identity.principalId
 }
 
 ## Create an Azure RBAC role assignment granting the AI Foundry system-assigned managed identity 
@@ -900,7 +1022,7 @@ resource "azurerm_role_assignment" "smi_foundry_cmk_key_vault_crypto_user" {
 
   scope                = azurerm_key_vault.key_vault_foundry_cmk[0].id
   role_definition_name = "Key Vault Crypto User"
-  principal_id         = azurerm_cognitive_account.foundry_resource.identity[0].principal_id
+  principal_id         = azapi_resource.foundry_resource.output.identity.principalId
 }
 
 ## Sleep for 120 seconds to allow the Azure RBAC permissions to replicate across Azure
@@ -916,7 +1038,36 @@ resource "time_sleep" "wait_key_vault_secrets_smi_rbac_replication" {
   create_duration = "120s"
 }
 
-## Modify the Foundry resource to use a CMK in Key Vault if var.foundry_encryption is set to "cmk"
+## AGENT + MANAGED VNET DEPLOYMENTS ONLY
+## Create an Azure RBAC role assignment granting the system-assigned managed identity for the AI Found
+## ry resource the Azure AI Enterprise Network Connection Approver role on the resource group to allow approval of private endpoints created in the
+## managed virtual network
+##
+resource "azurerm_role_assignment" "smi_foundry_azure_ai_enterprise_network_connection_approver" {
+  count = var.resource_managed_identity_type == "smi" && var.agent_service_outbound_networking.type == "managed_virtual_network" && var.agents ? 1 : 0
+
+  depends_on = [
+    time_sleep.wait_smi_foundry
+  ]
+
+  scope                = azurerm_resource_group.rg_foundry.id
+  role_definition_name = "Azure AI Enterprise Network Connection Approver"
+  principal_id         = azapi_resource.foundry_resource.output.identity.principalId
+}
+
+## Sleep for 120 seconds to allow the Azure RBAC permissions to replicate across Azure
+##
+resource "time_sleep" "wait_managed_vnet_smi_permissions_replication" {
+  count = var.resource_managed_identity_type == "smi" && var.agent_service_outbound_networking.type == "managed_virtual_network" && var.agents ? 1 : 0
+
+  depends_on = [
+    azurerm_role_assignment.smi_foundry_azure_ai_enterprise_network_connection_approver
+  ]
+
+  create_duration = "120s"
+}
+
+## Modify the Foundry resource to use a CMK in Key Vault if var.foundry_encryption is set to "cmk" and the a system-assigned managed identity is used
 ##
 resource "azurerm_cognitive_account_customer_managed_key" "foundry_cmk" {
   count = var.foundry_encryption == "cmk" && var.resource_managed_identity_type == "smi" ? 1 : 0
@@ -925,7 +1076,7 @@ resource "azurerm_cognitive_account_customer_managed_key" "foundry_cmk" {
     time_sleep.wait_key_vault_secrets_smi_rbac_replication
   ]
 
-  cognitive_account_id = azurerm_cognitive_account.foundry_resource.id
+  cognitive_account_id = azapi_resource.foundry_resource.id
   key_vault_key_id     = azurerm_key_vault_key.key_foundry_cmk[0].id
 }
 
@@ -938,14 +1089,16 @@ resource "azurerm_cognitive_account_customer_managed_key" "foundry_cmk" {
 ##
 resource "azurerm_cognitive_deployment" "deployment_gpt_4o" {
   depends_on = [
-    azurerm_cognitive_account.foundry_resource,
+    azapi_resource.foundry_resource,
     azurerm_cognitive_account_customer_managed_key.foundry_cmk
   ]
 
   count = var.external_openai != null ? 0 : 1
 
   name                 = "gpt-4o"
-  cognitive_account_id = azurerm_cognitive_account.foundry_resource.id
+  cognitive_account_id = azapi_resource.foundry_resource.id
+
+  rai_policy_name = "Microsoft.DefaultV2"
 
   sku {
     name     = "GlobalStandard"
@@ -971,7 +1124,9 @@ resource "azurerm_cognitive_deployment" "deployment_gpt_41" {
   count = var.external_openai != null ? 0 : 1
 
   name                 = "gpt-4.1"
-  cognitive_account_id = azurerm_cognitive_account.foundry_resource.id
+  cognitive_account_id = azapi_resource.foundry_resource.id
+
+  rai_policy_name = "Microsoft.DefaultV2"
 
   sku {
     name     = "GlobalStandard"
@@ -995,7 +1150,9 @@ resource "azurerm_cognitive_deployment" "deployment_gpt_41_mini" {
   count = var.external_openai != null ? 0 : 1
 
   name                 = "gpt-4.1-mini"
-  cognitive_account_id = azurerm_cognitive_account.foundry_resource.id
+  cognitive_account_id = azapi_resource.foundry_resource.id
+
+  rai_policy_name = "Microsoft.DefaultV2"
 
   sku {
     name     = "GlobalStandard"
@@ -1007,7 +1164,7 @@ resource "azurerm_cognitive_deployment" "deployment_gpt_41_mini" {
     name    = "gpt-4.1-mini"
     version = "2025-04-14"
   }
-} 
+}
 
 ## Create a deployment for the text-embedding-3-large embededing model
 ##
@@ -1017,7 +1174,9 @@ resource "azurerm_cognitive_deployment" "deployment_text_embedding_3_large" {
   ]
 
   name                 = "text-embedding-3-large"
-  cognitive_account_id = azurerm_cognitive_account.foundry_resource.id
+  cognitive_account_id = azapi_resource.foundry_resource.id
+
+  rai_policy_name = "Microsoft.DefaultV2"
 
   sku {
     name     = "GlobalStandard"
@@ -1035,28 +1194,28 @@ resource "azurerm_cognitive_deployment" "deployment_text_embedding_3_large" {
 ##
 resource "azurerm_private_endpoint" "pe_foundry_resource" {
   depends_on = [
-    azurerm_cognitive_account.foundry_resource,
+    azapi_resource.foundry_resource,
     azurerm_cognitive_account_customer_managed_key.foundry_cmk,
     azurerm_cognitive_deployment.deployment_text_embedding_3_large
   ]
 
-  name                = "pe${azurerm_cognitive_account.foundry_resource.name}resource"
+  name                = "pe${azapi_resource.foundry_resource.name}resource"
   location            = var.region
   resource_group_name = azurerm_resource_group.rg_foundry.name
   tags                = var.tags
   subnet_id           = var.subnet_id_private_endpoints
 
-  custom_network_interface_name = "nic${azurerm_cognitive_account.foundry_resource.name}resource"
+  custom_network_interface_name = "nic${azapi_resource.foundry_resource.name}resource"
 
   private_service_connection {
-    name                           = "peconn${azurerm_cognitive_account.foundry_resource.name}resource"
-    private_connection_resource_id = azurerm_cognitive_account.foundry_resource.id
+    name                           = "peconn${azapi_resource.foundry_resource.name}resource"
+    private_connection_resource_id = azapi_resource.foundry_resource.id
     subresource_names              = ["account"]
     is_manual_connection           = false
   }
 
   private_dns_zone_group {
-    name = "zoneconn${azurerm_cognitive_account.foundry_resource.name}account"
+    name = "zoneconn${azapi_resource.foundry_resource.name}account"
     private_dns_zone_ids = [
       "/subscriptions/${var.subscription_id_infrastructure}/resourceGroups/${var.resource_group_name_dns}/providers/Microsoft.Network/privateDnsZones/privatelink.services.ai.azure.com",
       "/subscriptions/${var.subscription_id_infrastructure}/resourceGroups/${var.resource_group_name_dns}/providers/Microsoft.Network/privateDnsZones/privatelink.openai.azure.com",
@@ -1137,6 +1296,7 @@ resource "azurerm_monitor_diagnostic_setting" "diag_cosmosdb" {
   name                       = "diag-base"
   target_resource_id         = azurerm_cosmosdb_account.cosmosdb_foundry[0].id
   log_analytics_workspace_id = azurerm_log_analytics_workspace.log_analytics_workspace_workload.id
+  log_analytics_destination_type = "Dedicated"
 
   enabled_log {
     category = "DataPlaneRequests"
@@ -1571,19 +1731,18 @@ resource "azurerm_private_endpoint" "pe_storage_blob_foundry" {
   }
 }
 
-########## Create the Foundry project using the module
+########## Create a managed virtual network and required outbound rules
 ##########
 ##########
 
-## AGENT DEPLOYMENT
-## Create a Foundry project suited for standard agent use cases
-##
-module "foundry_project_agents" {
-  count = var.agents ? 1 : 0
+## AGENTS DEPLOYMENT + MANAGED VNET
+## Create a managed virtual network where the Foundry agents will run
+resource "azapi_resource" "foundry_managed_virtual_network" {
+  count = var.agents && var.agent_service_outbound_networking.type == "managed_virtual_network" ? 1 : 0
 
   depends_on = [
     # Wait for creation of Foundry resource
-    azurerm_cognitive_account.foundry_resource,
+    azapi_resource.foundry_resource,
     azurerm_private_endpoint.pe_foundry_resource,
     azapi_resource.assoc_foundry_resource,
     # Wait for creation of standard agent resource
@@ -1600,11 +1759,99 @@ module "foundry_project_agents" {
     azurerm_private_endpoint.pe_key_vault_secrets_foundry,
     time_sleep.wait_key_vault_secrets_umi_rbac_replication,
     time_sleep.wait_key_vault_secrets_smi_rbac_replication,
+    azapi_resource.access_rule_foundry_key_vault_secrets_ipprefix,
+    time_sleep.wait_managed_vnet_smi_permissions_replication
+  ]
+
+  type                      = "Microsoft.CognitiveServices/accounts/managedNetworks@2025-10-01-preview"
+  name                      = "default"
+  parent_id                 = azapi_resource.foundry_resource.id
+  schema_validation_enabled = false
+
+  body = {
+    properties = {
+      managedNetwork = {
+        # Ensure use of v2 managed virtual network
+        managedNetworkKind = "V2"
+
+        # Restrict all outbound access unless excplicitly allowed via outbound rules
+        isolationMode = "AllowOnlyApprovedOutbound"
+
+        firewallSku = "Standard"
+      }
+    }
+  }
+}
+
+## Create outbound rule for Azure Monitor which is used for Application Insights in the standard agent configuration
+##
+resource "azapi_resource" "managed_vnet_outbound_rule_service_tag_azure_monitor" {
+  count = var.agents && var.agent_service_outbound_networking.type == "managed_virtual_network" ? 1 : 0
+
+  depends_on = [
+    azapi_resource.foundry_managed_virtual_network
+  ]
+
+  type                      = "Microsoft.CognitiveServices/accounts/managedNetworks/outboundRules@2025-10-01-preview"
+  name                      = "AllowAgentAzureMonitor"
+  parent_id                 = azapi_resource.foundry_managed_virtual_network[0].id
+  schema_validation_enabled = false
+
+  body = {
+    properties = {
+      type = "ServiceTag"
+      destination = {
+        action          = "Allow"
+        addressPrefixes = []
+        serviceTag      = "AzureMonitor"
+        protocol        = "TCP"
+        portRanges      = "80, 443"
+      }
+      category = "UserDefined"
+    }
+  }
+}
+
+########## Create the Foundry project using the module
+##########
+##########
+
+## AGENT DEPLOYMENT
+## Create a Foundry project suited for standard agent use cases
+##
+module "foundry_project_agents" {
+  count = var.agents ? 1 : 0
+
+  depends_on = [
+    # Wait for creation of Foundry resource
+    azapi_resource.foundry_resource,
+    azurerm_private_endpoint.pe_foundry_resource,
+    azapi_resource.assoc_foundry_resource,
+    # Wait for creation of standard agent resource
+    azurerm_cosmosdb_account.cosmosdb_foundry,
+    azurerm_search_service.ai_search_foundry,
+    azurerm_storage_account.storage_account_foundry,
+    azurerm_private_endpoint.pe_aisearch_foundry,
+    azurerm_private_endpoint.pe_cosmosdb_foundry,
+    azurerm_private_endpoint.pe_storage_blob_foundry,
+    azapi_resource.bing_grounding_search_foundry,
+    azurerm_application_insights.appins_foundry,
+    # Wait for managed VNet if applicable
+    azapi_resource.foundry_managed_virtual_network,
+    #azapi_resource.managed_vnet_outbound_rule_pe_cosmosdb,
+    #azapi_resource.managed_vnet_outbound_rule_pe_search,
+    #azapi_resource.managed_vnet_outbound_rule_pe_storage_blob,
+    azapi_resource.managed_vnet_outbound_rule_service_tag_azure_monitor,
+    # Wait for conditional resources
+    azurerm_key_vault.key_vault_foundry_secrets,
+    azurerm_private_endpoint.pe_key_vault_secrets_foundry,
+    time_sleep.wait_key_vault_secrets_umi_rbac_replication,
+    time_sleep.wait_key_vault_secrets_smi_rbac_replication,
     azapi_resource.access_rule_foundry_key_vault_secrets_ipprefix
   ]
 
   source                             = "./modules/project"
-  foundry_resource_id                = azurerm_cognitive_account.foundry_resource.id
+  foundry_resource_id                = azapi_resource.foundry_resource.id
   foundry_resource_resource_group_id = azurerm_resource_group.rg_foundry.id
   region                             = var.region
   first_project                      = true
@@ -1640,7 +1887,7 @@ module "foundry_project_rag" {
 
   depends_on = [
     # Wait for creation of Foundry resource
-    azurerm_cognitive_account.foundry_resource,
+    azapi_resource.foundry_resource,
     azurerm_private_endpoint.pe_foundry_resource,
     azapi_resource.assoc_foundry_resource,
     # Wait for resources to support RAG demo
@@ -1651,7 +1898,7 @@ module "foundry_project_rag" {
   ]
 
   source                             = "./modules/project"
-  foundry_resource_id                = azurerm_cognitive_account.foundry_resource.id
+  foundry_resource_id                = azapi_resource.foundry_resource.id
   foundry_resource_resource_group_id = azurerm_resource_group.rg_foundry.id
   region                             = var.region
   first_project                      = true
@@ -1678,11 +1925,11 @@ resource "azurerm_role_assignment" "cognitive_services_openai_user_ai_search_ser
   count = var.deploy_rag_resources ? 1 : 0
 
   depends_on = [
-    azurerm_cognitive_account.foundry_resource,
+    azapi_resource.foundry_resource,
     azurerm_search_service.ai_search_foundry
   ]
-  name                 = uuidv5("dns", "${azurerm_search_service.ai_search_foundry[0].identity[0].principal_id}${azurerm_cognitive_account.foundry_resource.name}openaiuser")
-  scope                = azurerm_cognitive_account.foundry_resource.id
+  name                 = uuidv5("dns", "${azurerm_search_service.ai_search_foundry[0].identity[0].principal_id}${azapi_resource.foundry_resource.name}openaiuser")
+  scope                = azapi_resource.foundry_resource.id
   role_definition_name = "Cognitive Services OpenAI User"
   principal_id         = azurerm_search_service.ai_search_foundry[0].identity[0].principal_id
 }
@@ -1695,13 +1942,13 @@ resource "azurerm_role_assignment" "cognitive_services_user_ai_search_service" {
   count = var.deploy_rag_resources ? 1 : 0
 
   depends_on = [
-    azurerm_cognitive_account.foundry_resource,
+    azapi_resource.foundry_resource,
     azurerm_role_assignment.cognitive_services_openai_user_ai_search_service,
     azurerm_search_service.ai_search_foundry
   ]
 
-  name                 = uuidv5("dns", "${azurerm_user_assigned_identity.umi_ai_search[0].principal_id}${azurerm_cognitive_account.foundry_resource.name}cogservicesuser")
-  scope                = azurerm_cognitive_account.foundry_resource.id
+  name                 = uuidv5("dns", "${azurerm_user_assigned_identity.umi_ai_search[0].principal_id}${azapi_resource.foundry_resource.name}cogservicesuser")
+  scope                = azapi_resource.foundry_resource.id
   role_definition_name = "Cognitive Services User"
   principal_id         = azurerm_user_assigned_identity.umi_ai_search[0].principal_id
 }
@@ -1784,11 +2031,11 @@ resource "azurerm_role_assignment" "storage_blob_data_contributor_user" {
 ## to use the various Playgrounds such as the Speech Playground
 resource "azurerm_role_assignment" "cognitive_services_user" {
   depends_on = [
-    azurerm_cognitive_account.foundry_resource
+    azapi_resource.assoc_foundry_resource
   ]
 
-  name                 = uuidv5("dns", "${var.user_object_id}${azurerm_cognitive_account.foundry_resource.name}cognitiveservicesuser")
-  scope                = azurerm_cognitive_account.foundry_resource.id
+  name                 = uuidv5("dns", "${var.user_object_id}${azapi_resource.foundry_resource.name}cognitiveservicesuser")
+  scope                = azapi_resource.foundry_resource.id
   role_definition_name = "Cognitive Services User"
   principal_id         = var.user_object_id
 }

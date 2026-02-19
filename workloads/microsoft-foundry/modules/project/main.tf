@@ -190,10 +190,6 @@ resource "azapi_resource" "conn_project_storage_foundry" {
       }
     }
   }
-
-  response_export_values = [
-    "identity.principalId"
-  ]
 }
 
 ## Create the Foundry project connection to AI Search
@@ -219,16 +215,11 @@ resource "azapi_resource" "conn_project_ai_search_foundry" {
       authType = "AAD"
       metadata = {
         ApiType    = "Azure"
-        ApiVersion = "2024-05-01-preview"
         ResourceId = var.shared_agent_ai_search_resource_id
         location   = var.region
       }
     }
   }
-
-  response_export_values = [
-    "identity.principalId"
-  ]
 }
 
 ## Create a Foundry resource connection to the external Azure OpenAI Service or Foundry instance if that is specified in the external_openai variable
