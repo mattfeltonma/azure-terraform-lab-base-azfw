@@ -139,7 +139,7 @@ resource "azapi_resource" "conn_project_cosmosdb_foundry" {
 
   depends_on = [
     time_sleep.wait_project_identities,
-    azapi_resource.conn_resource_key_vault_secrets
+    azapi_resource.conn_resource_appins_foundry
   ]
 
   type                      = "Microsoft.CognitiveServices/accounts/projects/connections@2025-04-01-preview"
@@ -169,7 +169,7 @@ resource "azapi_resource" "conn_project_storage_foundry" {
 
   depends_on = [
     time_sleep.wait_project_identities,
-    azapi_resource.conn_resource_key_vault_secrets
+    azapi_resource.conn_project_cosmosdb_foundry
   ]
 
   type                      = "Microsoft.CognitiveServices/accounts/projects/connections@2025-04-01-preview"
@@ -199,7 +199,7 @@ resource "azapi_resource" "conn_project_ai_search_foundry" {
 
   depends_on = [
     time_sleep.wait_project_identities,
-    azapi_resource.conn_resource_key_vault_secrets
+    azapi_resource.conn_project_storage_foundry
   ]
 
   type                      = "Microsoft.CognitiveServices/accounts/projects/connections@2025-04-01-preview"
@@ -228,7 +228,7 @@ resource "azapi_resource" "conn_project_external_openai_foundry" {
   count = var.shared_external_openai != null ? 1 : 0
 
   depends_on = [
-    azapi_resource.conn_resource_key_vault_secrets
+    azapi_resource.conn_project_ai_search_foundry
   ]
 
   type                      = "Microsoft.CognitiveServices/accounts/projects/connections@2025-04-01-preview"
@@ -264,7 +264,7 @@ resource "azapi_resource" "conn_project_bing_grounding_search_foundry" {
 
   depends_on = [
     time_sleep.wait_project_identities,
-    azapi_resource.conn_resource_key_vault_secrets
+    azapi_resource.conn_project_external_openai_foundry
   ]
 
   type                      = "Microsoft.CognitiveServices/accounts/projects/connections@2025-04-01-preview"
