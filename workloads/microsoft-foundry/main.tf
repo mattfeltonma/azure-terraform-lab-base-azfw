@@ -356,9 +356,11 @@ resource "azurerm_key_vault" "key_vault_foundry_secrets" {
   purge_protection_enabled   = true
   soft_delete_retention_days = 7
 
-  # TODO: 12/2025 Uncomment line 350 to block public access and rely on NSP once NSP issue is sorted out with this secrets vault. Also remove network exceptions
-  # Configure network controls to block all public network access and restrict to Private Endpoints only. Network Security Perimeter will control access over Microsoft public backbone
-  #public_network_access_enabled = false
+  # TODO: 2/2026 Modify public network_access_enabled to false and remove network_acls section once NSPs support cross-NSP links to resolve the issue of diagnostic settings delivery of signals being blocked by NSP. 
+  # Also ensure limitation with BYO Key Vault for secrets + NSP is resolved by PG
+  #
+  
+  public_network_access_enabled = true
   network_acls {
     default_action             = "Deny"
     bypass                     = "AzureServices"
@@ -429,7 +431,8 @@ resource "azurerm_role_assignment" "umi_foundry_resource_secrets_key_vault_secre
 
 #  body = {
 #    properties = {
-#      accessMode = "Enforced"
+#.     # TODO: 2/2026 Switch NSP to enforced mode once cross NSP links are introduced. This will resolve diagnostic settings delivery of signals being blocked by NSP
+#      accessMode = "Learning"
 #      privateLinkResource = {
 #        id = azurerm_key_vault.key_vault_foundry_secrets[0].id
 #      }
@@ -483,8 +486,17 @@ resource "azurerm_key_vault" "key_vault_foundry_cmk" {
   purge_protection_enabled   = true
   soft_delete_retention_days = 7
 
-  # Configure network controls to block all public network access and restrict to Private Endpoints only. Network Security Perimeter will control access over Microsoft public backbone
-  public_network_access_enabled = false
+  # TODO: 2/2026 Switch this to false and remove network_acls section to rely on NSP rules once cross NSP links are supported to address the issue of diagnostic settings delivery of signals being blocked by NSP
+  public_network_access_enabled = true
+  network_acls {
+    default_action             = "Deny"
+    bypass                     = "AzureServices"
+    virtual_network_subnet_ids = []
+    # Only required for my lab environment based on its configuration
+    ip_rules = [
+      var.trusted_ip
+    ]
+  }
 
   lifecycle {
     ignore_changes = [
@@ -517,7 +529,7 @@ resource "azurerm_monitor_diagnostic_setting" "diag_key_vault_foundry_cmk" {
 }
 
 ## Associate the Key Vault used to store the CMK with the Network Security Perimeter profile
-##
+## 
 resource "azapi_resource" "assoc_foundry_key_vault_cmk" {
   count = var.foundry_encryption == "cmk" ? 1 : 0
 
@@ -533,7 +545,8 @@ resource "azapi_resource" "assoc_foundry_key_vault_cmk" {
 
   body = {
     properties = {
-      accessMode = "Enforced"
+      # TODO: 2/2026 Switch NSP to enforced mode once cross NSP links are introduced. This will resolve diagnostic settings delivery of signals being blocked by NSP
+      accessMode = "Learning"
       privateLinkResource = {
         id = azurerm_key_vault.key_vault_foundry_cmk[0].id
       }
@@ -783,8 +796,9 @@ resource "azurerm_private_endpoint" "pe_key_vault_cmk_foundry" {
 # Set custom subdomain name for DNS names created for this Foundry resource
 #  custom_subdomain_name = "msf${var.region_code}${var.random_string}"
 
-# Configure network controls to block all public network access and restrict to Private Endpoints only. Network Security Perimeter will control access over Microsoft public backbone
-#  public_network_access_enabled = false
+# TODO: 2/2026 Note here that disabling public network access with network_acls exceptions is done because NSP is enforced. While NSP is enforced, diagnostic settins for Foundry do continue to flow
+# to upstream log analytics workspace. However, it's questionable whether this is end state. Track this
+# public_network_access_enabled = false
 
 # TODO: 12/2025 Add option for managed virtual network after more testing
 # Enable VNet injection for Standard Agents if agent_service_outbound_networking.type is set
@@ -898,11 +912,11 @@ resource "azapi_resource" "foundry_resource" {
       } : null
 
       # Network-related controls
-      # Configure network controls to block all public network access and restrict to Private Endpoints only. Network Security Perimeter will control access over Microsoft public backbone
+
+      # TODO: 2/2026 Note here that disabling public network access with network_acls exceptions is done because NSP is enforced. While NSP is enforced, diagnostic settins for Foundry do continue to flow
+      # to upstream log analytics workspace. However, it's questionable whether this is end state. Track this because if it changes, network_acls will need to be added and likely outobund control rules to limit data
+      # exfiltration risks
       publicNetworkAccess = "Disabled"
-      networkAcls = {
-        defaultAction = "Deny"
-      }
 
       # For Standard Agents either configure VNet injection or managed virtual network
       networkInjections = var.agent_service_outbound_networking != null ? [
@@ -968,6 +982,7 @@ resource "azapi_resource" "assoc_foundry_resource" {
 
   body = {
     properties = {
+      # TODO: 2/2026 Switch NSP to enforced mode once cross NSP links are introduced. This will resolve diagnostic settings delivery of signals being blocked by NSP
       accessMode = "Enforced"
       privateLinkResource = {
         id = azapi_resource.foundry_resource.id
@@ -1375,8 +1390,10 @@ resource "azurerm_search_service" "ai_search_foundry" {
   local_authentication_enabled = true
   authentication_failure_mode  = "http401WithBearerChallenge"
 
-  # Disable public access and restrict to Private Endpoints only. Network Security Perimeter will control access over Microsoft public backbone
+  # TODO: 2/2026 Remove network_acls section to rely on NSP rules once cross NSP links are supported to address the issue of diagnostic settings delivery of signals being blocked by NSP
+  # Disable public network access and rely on Private Endpoints and firewall exception or NSP
   public_network_access_enabled = false
+  network_rule_bypass_option = "AzureServices"
 
   lifecycle {
     ignore_changes = [
@@ -1424,7 +1441,8 @@ resource "azapi_resource" "assoc_foundry_ai_search" {
   body = {
     properties = {
       # TODO: 12/2025 Set this to Learning mode for now due to issue with Search service import data wizard rejecting xms_az_nwpeimid claim. Notified PG and waiting to hear back
-      accessMode = var.deploy_rag_resources ? "Learning" : "Enforced"
+      # TODO: 2/2026 Switch NSP to enforced mode once cross NSP links are introduced. This will resolve diagnostic settings delivery of signals being blocked by NSP
+      accessMode = "Learning"
       privateLinkResource = {
         id = azurerm_search_service.ai_search_foundry[0].id
       }
@@ -1464,8 +1482,13 @@ resource "azurerm_storage_account" "storage_account_foundry" {
   # Disable public access for blob containers
   allow_nested_items_to_be_public = false
 
-  # Disable public access and restrict to Private Endpoints only. Network Security Perimeter will control access over Microsoft public backbone
+  # TODO: 2/2026 Remove network_acls section to rely on NSP rules once cross NSP links are supported to address the issue of diagnostic settings delivery of signals being blocked by NSP
   public_network_access_enabled = false
+
+  network_rules {
+    default_action = "Deny"
+    bypass         = ["AzureServices"]
+  }
 
   lifecycle {
     ignore_changes = [
@@ -1596,7 +1619,8 @@ resource "azapi_resource" "assoc_foundry_storage_account" {
 
   body = {
     properties = {
-      accessMode = "Enforced"
+      # TODO: 2/2026 Switch NSP to enforced mode once cross NSP links are introduced. This will resolve diagnostic settings delivery of signals being blocked by NSP
+      accessMode = "Learning"
       privateLinkResource = {
         id = azurerm_storage_account.storage_account_foundry[0].id
       }

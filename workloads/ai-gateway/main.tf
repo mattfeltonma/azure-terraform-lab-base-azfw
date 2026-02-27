@@ -397,6 +397,7 @@ resource "azurerm_monitor_diagnostic_setting" "diag_apim" {
   name                       = "diag-base"
   target_resource_id         = azurerm_api_management.apim.id
   log_analytics_workspace_id = azurerm_log_analytics_workspace.log_analytics_workspace_workload.id
+  log_analytics_destination_type = "Dedicated"
 
   enabled_log {
     category = "GatewayLogs"
