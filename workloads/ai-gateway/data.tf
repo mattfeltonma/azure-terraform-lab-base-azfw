@@ -8,14 +8,14 @@ data "azurerm_client_config" "identity_config" { }
 ## cli command to retrieve it in base 64 and convert it to PEM
 data "external" "certificate_csr" {
   count = var.provision_certificate ? 1 : 0
-  
+
   depends_on = [
     azurerm_key_vault_certificate.apim_gateway_certificate
   ]
 
   program = ["bash", "-c", <<EOT
     csr=$(az keyvault certificate pending show \
-      --vault-name kvcentraljog \
+      --vault-name ${provider::azurerm::parse_resource_id(var.key_vault_id).resource_name} \
       --name ${azurerm_key_vault_certificate.apim_gateway_certificate[0].name} \
       --query csr -o tsv)
     pem="-----BEGIN CERTIFICATE REQUEST-----\n$csr\n-----END CERTIFICATE REQUEST-----"
