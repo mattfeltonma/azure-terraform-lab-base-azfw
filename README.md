@@ -33,6 +33,12 @@ Hope any bit of this code helps save you some time or learn something new!
 ## Updates
 
 ### 2026
+* **February 28, 2026**
+  * Foundry Workload
+    * Modified NSPs to be learning mode to address diagnostic issues
+  * AI Gateway
+    * Added support for custom domain certificate provisioning through ACME provider 
+
 * **February 19, 2026**
   * Added third spoke to hub that can be placed in a "hero" region to test new features without having to deploy to that region
   * Updated [Azure Machine Learning workload](/workloads/aml/aml-managed-vnet/) to support batch endpoint deployment. This included RBAC and networking changes. Also added more options to customize deployment for CMK.
