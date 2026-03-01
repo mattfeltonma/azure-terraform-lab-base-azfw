@@ -16,6 +16,11 @@ terraform {
       version = "~> 0.13.1"
     }
 
+    acme = {
+      source  = "vancluever/acme"
+      version = "~> 2.45.1"
+    }
+
     null = {
       source  = "hashicorp/null"
       version = "~> 3.2.4"

@@ -5,8 +5,8 @@ variable "apim_private_dns_zone_name" {
 
 variable "apim_generation_v2" {
   description = "Boolean that can be set to true to deploy API Management v2"
-  type = bool
-  default = false
+  type        = bool
+  default     = false
 }
 
 variable "customer_managed_public_ip" {
@@ -20,14 +20,28 @@ variable "entra_id_tenant_id" {
   type        = string
 }
 
+variable "cloudflare_api_token" {
+  description = "The API token for the Cloudflare account to use for DNS validation when requesting a certificate from Let's Encrypt for the API Management instance custom domain"
+  type        = string
+  sensitive   = true
+  default     = null
+}
+
 variable "key_vault_id" {
   description = "The Key Vault resource id of the workload Key Vault."
   type        = string
 }
 
 variable "key_vault_secret_id_versionless" {
-  description = "The versionless Key Vault secret id for the TLS certificate to use for the API Management instance custom domain. This must exist in the workload Key Vault"
+  description = "The versionless secret id of the certificate to be used for the custom domain. This is required if you are not provisioning a certificate using the ACME provider"
   type        = string
+  default     = null
+}
+
+variable "provision_certificate" {
+  description = "Set to true to provision a certificate using the ACME provider. If set to false, the key_vault_secret_id_versionless variable must be set with the versionless secret id of the existing certificate in Key Vault."
+  type        = bool
+  default     = false
 }
 
 variable "publisher_name" {

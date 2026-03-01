@@ -14,11 +14,13 @@
 - [Post-Deployment](#post-deployment)
 
 ## TODOS
-  * 1/9/2026 Need to get list of required FQDNs through Azure Firewall
+  * 1/9/2026 Need to get list of required FQDNs through Azure Firewall for v2 SKUs
 
 ## Updates
 
 ### 2026
+* **February 28th, 2026**
+  * Added the option to automatically provision a custom domain certificate using ACME
 * **January 9th, 2026**
   * Added support for API Management v2 SKUs
 
