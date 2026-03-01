@@ -1,3 +1,109 @@
+########## Create a certificate that will be used by the APIM Gateway
+##########
+##########
+
+## Create a certificate request in Azure Key Vault
+##
+resource "azurerm_key_vault_certificate" "apim_gateway_certificate" {
+  count = var.provision_certificate == true ? 1 : 0
+
+  name         = "apim-gateway-certificate${var.random_string}"
+  key_vault_id = var.key_vault_id
+
+  certificate_policy {
+    issuer_parameters {
+      # Use unknown since it's not Digicert or GlobalSign
+      name = "Unknown" 
+    }
+
+    key_properties {
+      exportable = false  # Private key cannot be exported from Key Vault
+      key_size   = 4096
+      key_type   = "RSA"
+      reuse_key  = false
+    }
+
+    secret_properties {
+      content_type = "application/x-pkcs12"
+    }
+
+    x509_certificate_properties {
+      subject            = "CN=apim-example${var.random_string}.${var.apim_private_dns_zone_name}"
+      validity_in_months = 12
+
+      subject_alternative_names {
+        dns_names = concat(
+          [
+            "apim-example${var.random_string}.${var.apim_private_dns_zone_name}",
+            "apim-example${var.random_string}${var.region_code}.${var.apim_private_dns_zone_name}",
+            "apim-example.management.${var.apim_private_dns_zone_name}",
+            "apim-example.scm.${var.apim_private_dns_zone_name}",
+            "apim-example.developer.${var.apim_private_dns_zone_name}"
+          ],
+          [
+            for region in var.regions_additional : "apim-example${region.region_code}.${var.apim_private_dns_zone_name}"
+          ]
+        )
+      }
+
+      key_usage = [
+        "digitalSignature",
+        "keyEncipherment"
+      ]
+    }
+  }
+}
+
+## Create a registration object
+##
+resource "acme_registration" "apim_gateway_certificate_registration_letsencrypt" {
+    count = var.provision_certificate == true ? 1 : 0
+    
+    email_address = var.publisher_email
+}
+
+## Create a certificate request using Cloudflare for DNS validation
+##
+resource "acme_certificate" "apim_gateway_certificate_request" {
+  count = var.provision_certificate == true ? 1 : 0
+
+  account_key_pem = acme_registration.apim_gateway_certificate_registration_letsencrypt[0].account_key_pem
+  certificate_request_pem =  data.external.certificate_csr[0].result.csr
+
+  dns_challenge {
+    provider = "cloudflare"
+    config = {
+      CLOUDFLARE_DNS_API_TOKEN = var.cloudflare_api_token
+    }
+  }
+}
+
+## Add the signed certificate into Key Vault to complete the CSR process
+##
+resource "null_resource" "merge_certificate" {
+  count = var.provision_certificate == true ? 1 : 0
+
+  depends_on = [
+    acme_certificate.apim_gateway_certificate_request
+  ]
+
+  triggers = {
+    certificate_pem = acme_certificate.apim_gateway_certificate_request[0].certificate_pem
+  }
+
+  provisioner "local-exec" {
+    command = <<EOT
+      echo '${acme_certificate.apim_gateway_certificate_request[0].certificate_pem}' > ${path.module}/signed-cert.pem
+      echo '${acme_certificate.apim_gateway_certificate_request[0].issuer_pem}' >> ${path.module}/signed-cert.pem
+      az keyvault certificate pending merge \
+        --vault-name ${provider::azurerm::parse_resource_id(var.key_vault_id).resource_name} \
+        --name ${azurerm_key_vault_certificate.apim_gateway_certificate[0].name} \
+        --file ${path.module}/signed-cert.pem
+      rm ${path.module}/signed-cert.pem
+    EOT
+  }
+}
+
 ########## Create a resource group for the AML Registries
 ########## 
 ##########
@@ -309,8 +415,10 @@ resource "azurerm_api_management" "apim" {
     azurerm_log_analytics_workspace.log_analytics_workspace_workload,
     azurerm_application_insights.appins_api_management,
     azurerm_public_ip.pip_apim,
-    azurerm_public_ip.pip_apim_additional_regions
+    azurerm_public_ip.pip_apim_additional_regions,
+    null_resource.merge_certificate
   ]
+
   name                = "apim${var.region_code}${var.random_string}"
   location            = var.region
   resource_group_name = azurerm_resource_group.rg_ai_gateway.name
@@ -397,6 +505,7 @@ resource "azurerm_monitor_diagnostic_setting" "diag_apim" {
   name                       = "diag-base"
   target_resource_id         = azurerm_api_management.apim.id
   log_analytics_workspace_id = azurerm_log_analytics_workspace.log_analytics_workspace_workload.id
+  log_analytics_destination_type = "Dedicated"
 
   enabled_log {
     category = "GatewayLogs"
@@ -424,7 +533,7 @@ resource "azurerm_api_management_custom_domain" "apim_custom_domains" {
 
   gateway {
     host_name                = "apim-example.${var.apim_private_dns_zone_name}"
-    key_vault_certificate_id = var.key_vault_secret_id_versionless
+    key_vault_certificate_id = var.provision_certificate == true ? azurerm_key_vault_certificate.apim_gateway_certificate[0].secret_id : var.key_vault_secret_id_versionless
     default_ssl_binding      = true
   }
 
@@ -432,7 +541,7 @@ resource "azurerm_api_management_custom_domain" "apim_custom_domains" {
     for_each = var.apim_generation_v2 ? [] : [1]
     content {
       host_name                = "apim-example.management.${var.apim_private_dns_zone_name}"
-      key_vault_certificate_id = var.key_vault_secret_id_versionless
+      key_vault_certificate_id = var.provision_certificate == true ? azurerm_key_vault_certificate.apim_gateway_certificate[0].secret_id : var.key_vault_secret_id_versionless
     }
   }
 
@@ -440,7 +549,7 @@ resource "azurerm_api_management_custom_domain" "apim_custom_domains" {
     for_each = var.apim_generation_v2 ? [] : [1]
     content {
       host_name                = "apim-example.scm.${var.apim_private_dns_zone_name}"
-      key_vault_certificate_id = var.key_vault_secret_id_versionless
+      key_vault_certificate_id = var.provision_certificate == true ? azurerm_key_vault_certificate.apim_gateway_certificate[0].secret_id : var.key_vault_secret_id_versionless
     }
   }
 
@@ -448,7 +557,7 @@ resource "azurerm_api_management_custom_domain" "apim_custom_domains" {
     for_each = var.apim_generation_v2 ? [] : [1]
     content {
       host_name                = "apim-example.developer.${var.apim_private_dns_zone_name}"
-      key_vault_certificate_id = var.key_vault_secret_id_versionless
+      key_vault_certificate_id = var.provision_certificate == true ? azurerm_key_vault_certificate.apim_gateway_certificate[0].secret_id : var.key_vault_secret_id_versionless
     }
   }
 }

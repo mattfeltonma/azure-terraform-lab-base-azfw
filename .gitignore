@@ -21,6 +21,14 @@ remote.conf
 versions-local.tf
 terraform-debug.log
 
+# Ignore Python artifacts
+__pycache__/
+*.pyc
+*.pyo
+*.pyd
+venv
 
+# Temporary ignores
+apim-connection-setup
 
 
