@@ -54,11 +54,21 @@ resource "azurerm_key_vault_certificate" "apim_gateway_certificate" {
   }
 }
 
+## Create a private key to be used for the ACME certificate request
+## In real production environments this key should be stored in something like Key Vault to ensure that the
+## certificates can be revoked. Here, I just create a random one and if I need a new cert I never revoke the old one
+## just create a new one
+resource "tls_private_key" "acme_account_key" {
+  algorithm = "RSA"
+  rsa_bits  = 4096
+}
+
 ## Create a registration object
 ##
 resource "acme_registration" "apim_gateway_certificate_registration_letsencrypt" {
     count = var.provision_certificate == true ? 1 : 0
     
+    account_key_pem = tls_private_key.acme_account_key.private_key_pem
     email_address = var.publisher_email
 }
 
