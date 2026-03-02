@@ -36,12 +36,12 @@ resource "azurerm_key_vault_certificate" "apim_gateway_certificate" {
           [
             "apim-example${var.random_string}.${var.apim_private_dns_zone_name}",
             "apim-example${var.random_string}${var.region_code}.${var.apim_private_dns_zone_name}",
-            "apim-example.management.${var.apim_private_dns_zone_name}",
-            "apim-example.scm.${var.apim_private_dns_zone_name}",
-            "apim-example.developer.${var.apim_private_dns_zone_name}"
+            "apim-example${var.random_string}.management.${var.apim_private_dns_zone_name}",
+            "apim-example${var.random_string}.scm.${var.apim_private_dns_zone_name}",
+            "apim-example${var.random_string}.developer.${var.apim_private_dns_zone_name}"
           ],
           [
-            for region in var.regions_additional : "apim-example${region.region_code}.${var.apim_private_dns_zone_name}"
+            for region in var.regions_additional : "apim-example${var.random_string}${region.region_code}.${var.apim_private_dns_zone_name}"
           ]
         )
       }
