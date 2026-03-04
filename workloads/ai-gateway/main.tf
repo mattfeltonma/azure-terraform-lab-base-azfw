@@ -7,17 +7,18 @@
 resource "azurerm_key_vault_certificate" "apim_gateway_certificate" {
   count = var.provision_certificate == true ? 1 : 0
 
-  name         = "apim-gateway-certificate${var.random_string}"
+  name         = "apim-gateway-certificate-v2${var.random_string}"
   key_vault_id = var.key_vault_id
 
   certificate_policy {
     issuer_parameters {
       # Use unknown since it's not Digicert or GlobalSign
-      name = "Unknown" 
+      name = "Unknown"
     }
 
     key_properties {
-      exportable = false  # Private key cannot be exported from Key Vault
+      # Private key must be exportable for APIM to pull the PFX into its own store
+      exportable = true
       key_size   = 4096
       key_type   = "RSA"
       reuse_key  = false
@@ -66,10 +67,10 @@ resource "tls_private_key" "acme_account_key" {
 ## Create a registration object
 ##
 resource "acme_registration" "apim_gateway_certificate_registration_letsencrypt" {
-    count = var.provision_certificate == true ? 1 : 0
-    
-    account_key_pem = tls_private_key.acme_account_key.private_key_pem
-    email_address = var.publisher_email
+  count = var.provision_certificate == true ? 1 : 0
+
+  account_key_pem = tls_private_key.acme_account_key.private_key_pem
+  email_address   = var.publisher_email
 }
 
 ## Create a certificate request using Cloudflare for DNS validation
@@ -77,8 +78,8 @@ resource "acme_registration" "apim_gateway_certificate_registration_letsencrypt"
 resource "acme_certificate" "apim_gateway_certificate_request" {
   count = var.provision_certificate == true ? 1 : 0
 
-  account_key_pem = acme_registration.apim_gateway_certificate_registration_letsencrypt[0].account_key_pem
-  certificate_request_pem =  data.external.certificate_csr[0].result.csr
+  account_key_pem         = acme_registration.apim_gateway_certificate_registration_letsencrypt[0].account_key_pem
+  certificate_request_pem = data.external.certificate_csr[0].result.csr
 
   dns_challenge {
     provider = "cloudflare"
@@ -103,15 +104,40 @@ resource "null_resource" "merge_certificate" {
 
   provisioner "local-exec" {
     command = <<EOT
-      echo '${acme_certificate.apim_gateway_certificate_request[0].certificate_pem}' > ${path.module}/signed-cert.pem
-      echo '${acme_certificate.apim_gateway_certificate_request[0].issuer_pem}' >> ${path.module}/signed-cert.pem
-      az keyvault certificate pending merge \
+      # Check if the certificate is still in pending state
+      CERT_STATUS=$(az keyvault certificate pending show \
         --vault-name ${provider::azurerm::parse_resource_id(var.key_vault_id).resource_name} \
         --name ${azurerm_key_vault_certificate.apim_gateway_certificate[0].name} \
-        --file ${path.module}/signed-cert.pem
-      rm ${path.module}/signed-cert.pem
+        --query "status" -o tsv 2>/dev/null || echo "notfound")
+      
+      if [ "$CERT_STATUS" = "inProgress" ]; then
+        echo "Certificate is pending, merging signed certificate..."
+        echo '${acme_certificate.apim_gateway_certificate_request[0].certificate_pem}' > ${path.module}/signed-cert.pem
+        echo '${acme_certificate.apim_gateway_certificate_request[0].issuer_pem}' >> ${path.module}/signed-cert.pem
+        az keyvault certificate pending merge \
+          --vault-name ${provider::azurerm::parse_resource_id(var.key_vault_id).resource_name} \
+          --name ${azurerm_key_vault_certificate.apim_gateway_certificate[0].name} \
+          --file ${path.module}/signed-cert.pem
+        rm ${path.module}/signed-cert.pem
+        echo "Certificate merged successfully."
+      else
+        echo "Certificate is not in pending state (status: $CERT_STATUS), skipping merge."
+      fi
     EOT
   }
+}
+
+## Create the required CNAME record in Cloudfare which is required for v2 APIM custom domain
+##
+resource "cloudflare_dns_record" "custom_domain_cname" {
+  count = var.provision_certificate == true && var.apim_generation_v2 == true ? 1 : 0
+
+  zone_id = var.cloudflare_zone_id
+  name    = "apim-example${var.random_string}.${var.apim_private_dns_zone_name}"
+  content = "apim${var.region_code}${var.random_string}.azure-api.net"
+  ttl     = 60
+  type    = "CNAME"
+
 }
 
 ########## Create a resource group for the AML Registries
@@ -249,11 +275,11 @@ resource "azurerm_cognitive_account" "ai_foundry_accounts" {
   name                = "aif${each.value.region_code}${var.random_string}"
   location            = each.value.region
   resource_group_name = azurerm_resource_group.rg_ai_gateway.name
-  tags = merge(var.tags, { SecurityControl = "Ignore" })
+  tags                = merge(var.tags, { SecurityControl = "Ignore" })
 
   # Create an AI Foundry Account to support Foundry Projects
-  kind = "AIServices"
-  sku_name = "S0"
+  kind                       = "AIServices"
+  sku_name                   = "S0"
   project_management_enabled = true
 
   # Set custom subdomain name for DNS names created for this Foundry resource
@@ -292,8 +318,8 @@ resource "azurerm_cognitive_deployment" "gpt4o_chat_model_deployments" {
   }
 
   model {
-    format = "OpenAI"
-    name   = "gpt-4o"
+    format  = "OpenAI"
+    name    = "gpt-4o"
     version = "2024-08-06"
   }
 }
@@ -426,7 +452,8 @@ resource "azurerm_api_management" "apim" {
     azurerm_application_insights.appins_api_management,
     azurerm_public_ip.pip_apim,
     azurerm_public_ip.pip_apim_additional_regions,
-    null_resource.merge_certificate
+    null_resource.merge_certificate,
+    cloudflare_dns_record.custom_domain_cname
   ]
 
   name                = "apim${var.region_code}${var.random_string}"
@@ -512,9 +539,9 @@ resource "azurerm_monitor_diagnostic_setting" "diag_apim" {
     azurerm_api_management.apim,
   ]
 
-  name                       = "diag-base"
-  target_resource_id         = azurerm_api_management.apim.id
-  log_analytics_workspace_id = azurerm_log_analytics_workspace.log_analytics_workspace_workload.id
+  name                           = "diag-base"
+  target_resource_id             = azurerm_api_management.apim.id
+  log_analytics_workspace_id     = azurerm_log_analytics_workspace.log_analytics_workspace_workload.id
   log_analytics_destination_type = "Dedicated"
 
   enabled_log {
@@ -543,7 +570,7 @@ resource "azurerm_api_management_custom_domain" "apim_custom_domains" {
 
   gateway {
     host_name                = "apim-example.${var.apim_private_dns_zone_name}"
-    key_vault_certificate_id = var.provision_certificate == true ? azurerm_key_vault_certificate.apim_gateway_certificate[0].secret_id : var.key_vault_secret_id_versionless
+    key_vault_certificate_id = var.provision_certificate == true ? data.azurerm_key_vault_certificate.apim_gateway_certificate_completed[0].versionless_secret_id : var.key_vault_secret_id_versionless
     default_ssl_binding      = true
   }
 
@@ -551,7 +578,7 @@ resource "azurerm_api_management_custom_domain" "apim_custom_domains" {
     for_each = var.apim_generation_v2 ? [] : [1]
     content {
       host_name                = "apim-example.management.${var.apim_private_dns_zone_name}"
-      key_vault_certificate_id = var.provision_certificate == true ? azurerm_key_vault_certificate.apim_gateway_certificate[0].secret_id : var.key_vault_secret_id_versionless
+      key_vault_certificate_id = var.provision_certificate == true ? data.azurerm_key_vault_certificate.apim_gateway_certificate_completed[0].versionless_secret_id : var.key_vault_secret_id_versionless
     }
   }
 
@@ -559,7 +586,7 @@ resource "azurerm_api_management_custom_domain" "apim_custom_domains" {
     for_each = var.apim_generation_v2 ? [] : [1]
     content {
       host_name                = "apim-example.scm.${var.apim_private_dns_zone_name}"
-      key_vault_certificate_id = var.provision_certificate == true ? azurerm_key_vault_certificate.apim_gateway_certificate[0].secret_id : var.key_vault_secret_id_versionless
+      key_vault_certificate_id = var.provision_certificate == true ? data.azurerm_key_vault_certificate.apim_gateway_certificate_completed[0].versionless_secret_id : var.key_vault_secret_id_versionless
     }
   }
 
@@ -567,7 +594,7 @@ resource "azurerm_api_management_custom_domain" "apim_custom_domains" {
     for_each = var.apim_generation_v2 ? [] : [1]
     content {
       host_name                = "apim-example.developer.${var.apim_private_dns_zone_name}"
-      key_vault_certificate_id = var.provision_certificate == true ? azurerm_key_vault_certificate.apim_gateway_certificate[0].secret_id : var.key_vault_secret_id_versionless
+      key_vault_certificate_id = var.provision_certificate == true ? data.azurerm_key_vault_certificate.apim_gateway_certificate_completed[0].versionless_secret_id : var.key_vault_secret_id_versionless
     }
   }
 }
@@ -641,14 +668,14 @@ resource "azurerm_api_management_api" "openai_original" {
     module.backend_pool_aifoundry_instances
   ]
 
-  name                = "azure-openai-original"
-  resource_group_name = azurerm_resource_group.rg_ai_gateway.name
-  api_management_name = azurerm_api_management.apim.name
-  revision            = "1"
-  display_name        = "Azure OpenAI Inferencing and Authoring API"
-  path                = "openai"
-  api_type            = "http"
-  protocols           = ["https"]
+  name                  = "azure-openai-original"
+  resource_group_name   = azurerm_resource_group.rg_ai_gateway.name
+  api_management_name   = azurerm_api_management.apim.name
+  revision              = "1"
+  display_name          = "Azure OpenAI Inferencing and Authoring API"
+  path                  = "openai"
+  api_type              = "http"
+  protocols             = ["https"]
   subscription_required = false
   import {
     content_format = "openapi+json"
@@ -669,10 +696,10 @@ resource "azurerm_api_management_api_diagnostic" "diag_openai_original_api_appin
   api_name                 = azurerm_api_management_api.openai_original.name
   api_management_logger_id = azurerm_api_management_logger.apim_logger_appinsights.id
 
-  sampling_percentage = 100
-  always_log_errors   = true
-  log_client_ip       = true
-  verbosity           = "information"
+  sampling_percentage       = 100
+  always_log_errors         = true
+  log_client_ip             = true
+  verbosity                 = "information"
   http_correlation_protocol = "W3C"
 }
 
@@ -689,23 +716,23 @@ resource "azapi_resource" "diag_openai_original_api_monitor" {
   schema_validation_enabled = false
   body = {
     properties = {
-      loggerId = "${azurerm_api_management.apim.id}/loggers/azuremonitor"
-      alwaysLog = "allErrors"
-      verbosity = "information"
+      loggerId    = "${azurerm_api_management.apim.id}/loggers/azuremonitor"
+      alwaysLog   = "allErrors"
+      verbosity   = "information"
       logClientIp = true
       sampling = {
-        percentage = 100.0
+        percentage   = 100.0
         samplingType = "fixed"
       }
       largeLanguageModel = {
         logs = "enabled"
         requests = {
           maxSizeInBytes = 262144
-          messages = "all"
+          messages       = "all"
         }
         responses = {
           maxSizeInBytes = 262144
-          messages = "all"
+          messages       = "all"
         }
       }
     }
@@ -719,14 +746,14 @@ resource "azurerm_api_management_api" "openai_v1" {
     azurerm_api_management_api.openai_original
   ]
 
-  name                = "azure-openai-v1"
-  resource_group_name = azurerm_resource_group.rg_ai_gateway.name
-  api_management_name = azurerm_api_management.apim.name
-  revision            = "1"
-  display_name        = "Azure OpenAI v1 API"
-  path                = "openai-v1"
-  api_type            = "http"
-  protocols           = ["https"]
+  name                  = "azure-openai-v1"
+  resource_group_name   = azurerm_resource_group.rg_ai_gateway.name
+  api_management_name   = azurerm_api_management.apim.name
+  revision              = "1"
+  display_name          = "Azure OpenAI v1 API"
+  path                  = "openai-v1"
+  api_type              = "http"
+  protocols             = ["https"]
   subscription_required = false
   import {
     content_format = "openapi+json"
@@ -747,10 +774,10 @@ resource "azurerm_api_management_api_diagnostic" "diag_openai_v1_api_appinsights
   api_name                 = azurerm_api_management_api.openai_v1.name
   api_management_logger_id = azurerm_api_management_logger.apim_logger_appinsights.id
 
-  sampling_percentage = 100
-  always_log_errors   = true
-  log_client_ip       = true
-  verbosity           = "information"
+  sampling_percentage       = 100
+  always_log_errors         = true
+  log_client_ip             = true
+  verbosity                 = "information"
   http_correlation_protocol = "W3C"
 }
 
@@ -767,23 +794,23 @@ resource "azapi_resource" "diag_openai_v1_api_monitor" {
   schema_validation_enabled = false
   body = {
     properties = {
-      loggerId = "${azurerm_api_management.apim.id}/loggers/azuremonitor"
-      alwaysLog = "allErrors"
-      verbosity = "information"
+      loggerId    = "${azurerm_api_management.apim.id}/loggers/azuremonitor"
+      alwaysLog   = "allErrors"
+      verbosity   = "information"
       logClientIp = true
       sampling = {
-        percentage = 100.0
+        percentage   = 100.0
         samplingType = "fixed"
       }
       largeLanguageModel = {
         logs = "enabled"
         requests = {
           maxSizeInBytes = 262144
-          messages = "all"
+          messages       = "all"
         }
         responses = {
           maxSizeInBytes = 262144
-          messages = "all"
+          messages       = "all"
         }
       }
     }
@@ -797,14 +824,14 @@ resource "azurerm_api_management_api" "ai_model_inference" {
     azurerm_api_management_api.openai_v1
   ]
 
-  name                = "ai-model-inference"
-  resource_group_name = azurerm_resource_group.rg_ai_gateway.name
-  api_management_name = azurerm_api_management.apim.name
-  revision            = "1"
-  display_name        = "Foundry AI Model Inference"
-  path                = "models"
-  api_type            = "http"
-  protocols           = ["https"]
+  name                  = "ai-model-inference"
+  resource_group_name   = azurerm_resource_group.rg_ai_gateway.name
+  api_management_name   = azurerm_api_management.apim.name
+  revision              = "1"
+  display_name          = "Foundry AI Model Inference"
+  path                  = "models"
+  api_type              = "http"
+  protocols             = ["https"]
   subscription_required = false
   import {
     content_format = "openapi+json"
@@ -825,10 +852,10 @@ resource "azurerm_api_management_api_diagnostic" "diag_ai_model_inference_api_ap
   api_name                 = azurerm_api_management_api.ai_model_inference.name
   api_management_logger_id = azurerm_api_management_logger.apim_logger_appinsights.id
 
-  sampling_percentage = 100
-  always_log_errors   = true
-  log_client_ip       = true
-  verbosity           = "information"
+  sampling_percentage       = 100
+  always_log_errors         = true
+  log_client_ip             = true
+  verbosity                 = "information"
   http_correlation_protocol = "W3C"
 }
 
@@ -845,23 +872,23 @@ resource "azapi_resource" "diag_ai_model_inference_api_monitor" {
   schema_validation_enabled = false
   body = {
     properties = {
-      loggerId = "${azurerm_api_management.apim.id}/loggers/azuremonitor"
-      alwaysLog = "allErrors"
-      verbosity = "information"
+      loggerId    = "${azurerm_api_management.apim.id}/loggers/azuremonitor"
+      alwaysLog   = "allErrors"
+      verbosity   = "information"
       logClientIp = true
       sampling = {
-        percentage = 100.0
+        percentage   = 100.0
         samplingType = "fixed"
       }
       largeLanguageModel = {
         logs = "enabled"
         requests = {
           maxSizeInBytes = 262144
-          messages = "all"
+          messages       = "all"
         }
         responses = {
           maxSizeInBytes = 262144
-          messages = "all"
+          messages       = "all"
         }
       }
     }
@@ -1263,15 +1290,15 @@ resource "azurerm_role_assignment" "sp_perm_aifoundry_accounts_openai_user" {
 ## Create Azure RBAC Role assignment granting the user the Azure OpenAI User role
 ## on the AI Foundry accounts. This can be used to demonstrate the OAuth On-Behalf-Of flow
 resource "azurerm_role_assignment" "user_perm_aifoundry_accounts_openai_user" {
-    depends_on = [
-      azurerm_api_management.apim,
-      azurerm_cognitive_account.ai_foundry_accounts
-    ]
-  
-    for_each = local.ai_foundry_regions
-  
-    name                 = uuidv5("dns", "${var.user_object_id}${azurerm_cognitive_account.ai_foundry_accounts[each.key].name}openaiuser")
-    scope                = azurerm_cognitive_account.ai_foundry_accounts[each.key].id
-    role_definition_name = "Cognitive Services OpenAI User"
-    principal_id         = var.user_object_id
-  }
+  depends_on = [
+    azurerm_api_management.apim,
+    azurerm_cognitive_account.ai_foundry_accounts
+  ]
+
+  for_each = local.ai_foundry_regions
+
+  name                 = uuidv5("dns", "${var.user_object_id}${azurerm_cognitive_account.ai_foundry_accounts[each.key].name}openaiuser")
+  scope                = azurerm_cognitive_account.ai_foundry_accounts[each.key].id
+  role_definition_name = "Cognitive Services OpenAI User"
+  principal_id         = var.user_object_id
+}

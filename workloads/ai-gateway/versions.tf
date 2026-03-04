@@ -16,14 +16,21 @@ terraform {
       version = "~> 0.13.1"
     }
 
+    null = {
+      source  = "hashicorp/null"
+      version = "~> 3.2.4"
+    }
+
+    ## Used for my lab only
+    ##
     acme = {
       source  = "vancluever/acme"
       version = "~> 2.45.1"
     }
 
-    null = {
-      source  = "hashicorp/null"
-      version = "~> 3.2.4"
+    cloudflare = {
+      source  = "cloudflare/cloudflare"
+      version = "~> 5"
     }
   }
   required_version = ">= 1.8.3"

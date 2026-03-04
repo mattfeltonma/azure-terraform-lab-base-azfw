@@ -9,6 +9,19 @@ variable "apim_generation_v2" {
   default     = false
 }
 
+variable "cloudflare_api_token" {
+  description = "The API token for the Cloudflare account to use for DNS validation when requesting a certificate from Let's Encrypt for the API Management instance custom domain"
+  type        = string
+  sensitive   = true
+  default     = null
+}
+
+variable "cloudflare_zone_id" {
+  description = "The Cloudflare zone id for the DNS zone to use for DNS validation when requesting a certificate from Let's Encrypt for the API Management instance custom domain"
+  type        = string
+  default     = null
+}
+
 variable "customer_managed_public_ip" {
   description = "Boolean to indicate if customer managed public IPs are used for the API Management instance. If set to false, the public IP used for the API Management instance will be managed by Microsoft"
   type        = bool
@@ -18,13 +31,6 @@ variable "customer_managed_public_ip" {
 variable "entra_id_tenant_id" {
   description = "The Entra ID tenant id where the API Management instance will be created"
   type        = string
-}
-
-variable "cloudflare_api_token" {
-  description = "The API token for the Cloudflare account to use for DNS validation when requesting a certificate from Let's Encrypt for the API Management instance custom domain"
-  type        = string
-  sensitive   = true
-  default     = null
 }
 
 variable "key_vault_id" {

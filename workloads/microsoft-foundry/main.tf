@@ -356,8 +356,9 @@ resource "azurerm_key_vault" "key_vault_foundry_secrets" {
   purge_protection_enabled   = true
   soft_delete_retention_days = 7
 
-  # TODO: 2/2026 Modify public network_access_enabled to false and remove network_acls section once NSPs support cross-NSP links to resolve the issue of diagnostic settings delivery of signals being blocked by NSP. 
-  # Also ensure limitation with BYO Key Vault for secrets + NSP is resolved by PG
+  # TODO: 2/2026 This is set to true for now to allow the IP exception that is specific to my environment. Once NSPs support cross-NSP links (which will address diagnostic log delivery issue)
+  # then this can be set to false and the network_acls section can be removed and instead rely on NSP ruleset.
+  # TODO: 2/2026 BYO Key Vault for Secrets was bugged with NSPs so can't use them as of now until remediated. Follow-up with PG before changing.
   #
   
   public_network_access_enabled = true

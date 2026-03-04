@@ -28,6 +28,9 @@ __pycache__/
 *.pyd
 venv
 
+# Ignore AI Gateway specific artifacts
+signed-cert.pem
+
 # Temporary ignores
 apim-connection-setup
 

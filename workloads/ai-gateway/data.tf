@@ -23,3 +23,17 @@ data "external" "certificate_csr" {
   EOT
   ]
 }
+
+
+## Fetch the completed certificate after it's been issued and merged into Key Vault
+##
+data "azurerm_key_vault_certificate" "apim_gateway_certificate_completed" {
+  count = var.provision_certificate == true ? 1 : 0
+
+  depends_on = [
+    null_resource.merge_certificate
+  ]
+
+  name         = azurerm_key_vault_certificate.apim_gateway_certificate[0].name
+  key_vault_id = var.key_vault_id
+}
