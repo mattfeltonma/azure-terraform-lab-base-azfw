@@ -19,6 +19,10 @@
 ## Updates
 
 ### 2026
+* **March 6, 2026**
+  * Updated OpenAI inferencing and authoring API specs
+  * Added API to demonstrate Foundry model gateway pattern
+  * Added support for OpenAI v1 API
 * **February 28th, 2026**
   * Added the option to automatically provision a custom domain certificate using ACME
 * **January 9th, 2026**
