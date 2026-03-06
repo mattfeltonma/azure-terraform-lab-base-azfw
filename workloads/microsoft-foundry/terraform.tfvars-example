@@ -42,6 +42,42 @@
 
 ## Example of an agent deployment using vnet injection
 #agents = true
+#apim_ai_gateway = [
+#  {
+#    apim_resource_id      = "/subscriptions/XXXXXXXX-XXXX-XXXX-XXXX-XXXXXXXXXXXX/resourceGroups/somerg/providers/Microsoft.ApiManagement/service/someapim"
+#    apim_fqdn             = "someapim.azure-api.net"
+#    api_path              = "openai"
+#    inference_api_version = "2025-03-01-preview"
+#    models = [{
+#      name = "gpt-4o"
+#      properties = {
+#        model = {
+#          name    = "gpt-4o"
+#          version = "2024-08-06"
+#          format  = "OpenAI"
+#        }
+#      }
+#    }]
+#  }
+#]
+
+#model_gateway = [
+#  {
+#    model_gateway_fqdn     = "something.apim.somedomain.com"
+#    model_gateway_api_path = "openai-model-gateway"
+#    inference_api_version  = "2025-03-01-preview"
+#    models = [{
+#      name = "gpt-4o"
+#      properties = {
+#        model = {
+#          name    = "gpt-4o"
+#          version = "2024-08-06"
+#          format  = "OpenAI"
+#        }
+#      }
+#    }]
+#  }
+#]
 #deploy_key_vault_connection_secrets = false
 #deploy_rag_resources = false
 #foundry_encryption = "pmk"

@@ -249,6 +249,7 @@ resource "azapi_resource" "conn_project_apim_ai_gateway_foundry_static" {
         deploymentInPath = "true"
         # Pay attention to case sensitivity with these metadata properties, it does matter
         inferenceAPIVersion = each.value.inference_api_version
+        # Models property must be jsonencoded.
         models = jsonencode(each.value.models)
       }
     }
@@ -317,6 +318,7 @@ resource "azapi_resource" "conn_project_model_gateway_foundry_static" {
         # Pay attention to case sensitivity with these metadata properties, it does matter
         deploymentInPath = "true"
         inferenceAPIVersion = each.value.inference_api_version
+        # Models property must be jsonencoded.
         models = jsonencode(each.value.models)
       }
     }
