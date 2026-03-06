@@ -33,6 +33,19 @@ Hope any bit of this code helps save you some time or learn something new!
 ## Updates
 
 ### 2026
+* **March 5, 2026**
+  * Foundry Workload
+    * Added sample connection objects to demonstrate new AI Gateway connection feature. 
+      includes both model gateway and ApiManagement connections
+  * AI Gateway
+    * Added operations to OpenAI Inference API to support Foundry AI Gateway dynamic
+      model discovery
+    * Modified policies to use headers received from Foundry native projects in token metrics
+      and token throttling
+    * Added a new OpenAI inference API that has a simple policy. This is used to demonstrate
+      model gateway functionality
+    * Converted AppInsights diagnostic settings for API to azapi to support custom metrics   
+      which is required for token metrics policy
 * **February 28, 2026**
   * Foundry Workload
     * Modified NSPs to be learning mode to address diagnostic issues
