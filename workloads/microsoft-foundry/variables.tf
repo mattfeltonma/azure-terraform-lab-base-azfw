@@ -51,7 +51,8 @@ variable "apim_ai_gateway" {
     apim_resource_id      = string
     apim_fqdn             = string
     api_path              = string
-    inference_api_version = optional(string)
+    deployment_in_path    = string
+    inference_api_version = optional(string, null)
     # This is technically optional if you're doing dynamic discovery, but for the purposes of this demo it is required.
     # It simply isn't used when creating the dynamic discovery apim connection in this demonstration
     models = optional(list(object({
@@ -116,9 +117,10 @@ variable "foundry_encryption" {
 variable "model_gateway" {
   description = "Specify the Model Gateway APIs that are hosting the Foundry models. A connection object will be created for each API. These APIs may be the OpenAI legacy API or v1 API."
   type = list(object({
-    model_gateway_fqdn        = string
-    model_gateway_api_path   = string
-    inference_api_version = optional(string)
+    model_gateway_fqdn     = string
+    model_gateway_api_path = string
+    deployment_in_path     = string
+    inference_api_version  = optional(string, null)
     # This is technically optional if you're doing dynamic discovery, but for the purposes of this demo it is required.
     # It simply isn't used when creating the dynamic discovery model gateway connection in this demonstration
     models = optional(list(object({
@@ -132,7 +134,7 @@ variable "model_gateway" {
       })
     })))
   }))
-  default   = null
+  default = null
 }
 
 variable "model_gateway_api_key" {

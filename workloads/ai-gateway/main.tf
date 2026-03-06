@@ -604,9 +604,9 @@ resource "azurerm_api_management_custom_domain" "apim_custom_domains" {
 ###########
 ###########
 
-## Create circuit breaker backends for AI Foundry instances
+## Create circuit breaker backends for AI Foundry instances hosting the models used with the OpenAI classic API
 ##
-module "backend_circuit_breaker_aifoundry_instance" {
+module "backend_circuit_breaker_aifoundry_instance_openai_classic" {
   depends_on = [
     azurerm_api_management.apim,
     azurerm_cognitive_account.ai_foundry_accounts
@@ -616,29 +616,66 @@ module "backend_circuit_breaker_aifoundry_instance" {
 
   source       = "./modules/backend-circuit-breaker"
   apim_id      = azurerm_api_management.apim.id
-  backend_name = azurerm_cognitive_account.ai_foundry_accounts[each.key].name
+  backend_name = "${azurerm_cognitive_account.ai_foundry_accounts[each.key].name}classic"
   url          = "https://${azurerm_cognitive_account.ai_foundry_accounts[each.key].name}.openai.azure.com/openai"
 }
 
 ## Create backend pool with AI Foundry backends
 ##
-module "backend_pool_aifoundry_instances" {
+module "backend_pool_aifoundry_instances_openai_classic" {
   depends_on = [
-    module.backend_circuit_breaker_aifoundry_instance
+    module.backend_circuit_breaker_aifoundry_instance_openai_classic
   ]
 
   source    = "./modules/backend-pool"
-  pool_name = "foundry-pool"
+  pool_name = "foundry-pool-openai-classic"
   apim_id   = azurerm_api_management.apim.id
 
   backends = [
-    for foundry_backend in module.backend_circuit_breaker_aifoundry_instance :
+    for foundry_backend in module.backend_circuit_breaker_aifoundry_instance_openai_classic :
     {
       id       = foundry_backend.id
       priority = 1
     }
   ]
 }
+
+## Create circuit breaker backends for AI Foundry instances hosting the models used with the OpenAI v1 API
+##
+module "backend_circuit_breaker_aifoundry_instance_openai_v1" {
+  depends_on = [
+    azurerm_api_management.apim,
+    azurerm_cognitive_account.ai_foundry_accounts
+  ]
+
+  for_each = local.ai_foundry_regions
+
+  source       = "./modules/backend-circuit-breaker"
+  apim_id      = azurerm_api_management.apim.id
+  backend_name = "${azurerm_cognitive_account.ai_foundry_accounts[each.key].name}v1"
+  url          = "https://${azurerm_cognitive_account.ai_foundry_accounts[each.key].name}.openai.azure.com/openai/v1"
+}
+
+## Create backend pool with AI Foundry backends
+##
+module "backend_pool_aifoundry_instances_openai_v1" {
+  depends_on = [
+    module.backend_circuit_breaker_aifoundry_instance_openai_v1
+  ]
+
+  source    = "./modules/backend-pool"
+  pool_name = "foundry-pool-openai-v1"
+  apim_id   = azurerm_api_management.apim.id
+
+  backends = [
+    for foundry_backend in module.backend_circuit_breaker_aifoundry_instance_openai_v1 :
+    {
+      id       = foundry_backend.id
+      priority = 1
+    }
+  ]
+}
+
 
 ########### Create API Management loggers
 ###########
@@ -666,7 +703,7 @@ resource "azurerm_api_management_logger" "apim_logger_appinsights" {
 resource "azurerm_api_management_api" "openai_original" {
   depends_on = [
     azurerm_api_management_custom_domain.apim_custom_domains,
-    module.backend_pool_aifoundry_instances
+    module.backend_pool_aifoundry_instances_openai_classic
   ]
 
   name                  = "azure-openai-original"
@@ -751,7 +788,8 @@ resource "azapi_resource" "diag_openai_original_api_monitor" {
 ##
 resource "azurerm_api_management_api" "openai_v1" {
   depends_on = [
-    azurerm_api_management_api.openai_original
+    azurerm_api_management_api.openai_original,
+    module.backend_pool_aifoundry_instances_openai_v1
   ]
 
   name                  = "azure-openai-v1"
@@ -913,7 +951,7 @@ resource "azurerm_api_management_api_policy" "apim_policy_openai_original" {
             <authentication-managed-identity resource="https://cognitiveservices.azure.com/" />
             </when>
           </choose>
-          <set-backend-service backend-id="${module.backend_pool_aifoundry_instances.name}" />
+          <set-backend-service backend-id="${module.backend_pool_aifoundry_instances_openai_classic.name}" />
       </inbound>
       <backend>
           <forward-request />
@@ -999,7 +1037,7 @@ resource "azurerm_api_management_api_policy" "apim_policy_openai_v1" {
               <dimension name="client_ip" value="@(context.Request.IpAddress)" />
               <dimension name="appId" value="@(context.Variables.GetValueOrDefault<string>("appId","00000000-0000-0000-0000-000000000000"))" />
           </llm-emit-token-metric>
-          <set-backend-service backend-id="${module.backend_pool_aifoundry_instances.name}" />
+          <set-backend-service backend-id="${module.backend_pool_aifoundry_instances_openai_v1.name}" />
       </inbound>
       <backend>
           <forward-request />
@@ -1046,7 +1084,7 @@ XML
 resource "azurerm_api_management_api" "openai_model_gateway" {
   depends_on = [
     azurerm_api_management_custom_domain.apim_custom_domains,
-    module.backend_pool_aifoundry_instances
+    module.backend_pool_aifoundry_instances_openai_classic
   ]
 
   name                  = "openai-model-gateway"
@@ -1060,7 +1098,7 @@ resource "azurerm_api_management_api" "openai_model_gateway" {
   subscription_required = false
   import {
     content_format = "openapi+json"
-    content_value  = file("${path.module}/api-specs/2024-10-21-openai-inference.json")
+    content_value  = file("${path.module}/api-specs/2025-04-01-preview-aoai-inferencing.json")
   }
 }
 
@@ -1142,7 +1180,7 @@ resource "azurerm_api_management_api_policy" "apim_policy_openai_model_gateway" 
       <inbound>
           <base />
           <authentication-managed-identity resource="https://cognitiveservices.azure.com/" />
-          <set-backend-service backend-id="${module.backend_pool_aifoundry_instances.name}" />
+          <set-backend-service backend-id="${module.backend_pool_aifoundry_instances_openai_classic.name}" />
       </inbound>
       <backend>
           <forward-request />

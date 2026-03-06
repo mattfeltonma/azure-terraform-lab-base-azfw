@@ -13718,9 +13718,7 @@
               },
               "include": {
                 "type": "array",
-                "description": {
-                  "$ref": "#/components/schemas/includable/description"
-                },
+                "description": "Specify additional output data to include in the model response. Currently supported values are: file_search_call.results, message.input_image.image_url, computer_call_output.output.image_url.",
                 "items": {
                   "x-oaiExpandable": true,
                   "$ref": "#/components/schemas/includable"
