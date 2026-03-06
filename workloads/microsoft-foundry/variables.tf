@@ -45,6 +45,36 @@ variable "agent_service_outbound_networking" {
   }
 }
 
+variable "apim_ai_gateway" {
+  description = "Specify the APIM AI Gateway APIs that are hosting the Foundry models. A connection object will be created for each API. These APIs may be the OpenAI legacy API or v1 API."
+  type = list(object({
+    apim_resource_id      = string
+    apim_fqdn             = string
+    api_path              = string
+    inference_api_version = optional(string)
+    # This is technically optional if you're doing dynamic discovery, but for the purposes of this demo it is required.
+    # It simply isn't used when creating the dynamic discovery apim connection in this demonstration
+    models = optional(list(object({
+      name = string
+      properties = object({
+        model = object({
+          name    = string
+          version = string
+          format  = string
+        })
+      })
+    })))
+  }))
+  default = null
+}
+
+variable "apim_ai_gateway_subscription_key" {
+  description = "The subscription key for the APIM AI Gateway APIs. This is only used to demonstrate the model gateway pattern and is not required for Foundry to connect to an APIM instance hosting models. The APIM connection uses the Entra ID authentication using the project's managed identity"
+  type        = string
+  sensitive   = true
+  default     = null
+}
+
 variable "deploy_key_vault_connection_secrets" {
   description = "Set to true to create an Azure Key Vault to store secrets for connections used by agents created within Foundry resource and projects that use key-based authentication"
   type        = bool
@@ -54,6 +84,12 @@ variable "deploy_key_vault_connection_secrets" {
     condition     = !(var.deploy_key_vault_connection_secrets && !var.agents)
     error_message = "Key Vault for connection secrets only makes sense to deploy if agents are also being deployed"
   }
+}
+
+variable "deploy_rag_resources" {
+  description = "Set to true if you are not using agents but want to deploy the resources required to demonstrate simple RAG patterns. This is not necessary when deploying agents."
+  type        = bool
+  default     = false
 }
 
 variable "external_openai" {
@@ -77,14 +113,33 @@ variable "foundry_encryption" {
   }
 }
 
-variable "resource_managed_identity_type" {
-  description = "The type of managed identity to create for the Foundry resource. Use 'smi' for System-assigned and 'umi' for User-assigned managed identity."
+variable "model_gateway" {
+  description = "Specify the Model Gateway APIs that are hosting the Foundry models. A connection object will be created for each API. These APIs may be the OpenAI legacy API or v1 API."
+  type = list(object({
+    model_gateway_fqdn        = string
+    model_gateway_api_path   = string
+    inference_api_version = optional(string)
+    # This is technically optional if you're doing dynamic discovery, but for the purposes of this demo it is required.
+    # It simply isn't used when creating the dynamic discovery model gateway connection in this demonstration
+    models = optional(list(object({
+      name = string
+      properties = object({
+        model = object({
+          name    = string
+          version = string
+          format  = string
+        })
+      })
+    })))
+  }))
+  default   = null
+}
+
+variable "model_gateway_api_key" {
+  description = "The API key for the Model Gateway APIs. This is only used to demonstrate the model gateway pattern and is not required for Foundry to connect to an API Management instance hosting models. The connection uses the Entra ID authentication using the project's managed identity"
   type        = string
-  default     = "umi"
-  validation {
-    condition     = contains(["smi", "umi"], var.resource_managed_identity_type)
-    error_message = "Managed identity type must be either 'smi' or 'umi'."
-  }
+  sensitive   = true
+  default     = null
 }
 
 variable "project_managed_identity_type" {
@@ -97,10 +152,14 @@ variable "project_managed_identity_type" {
   }
 }
 
-variable "deploy_rag_resources" {
-  description = "Set to true if you are not using agents but want to deploy the resources required to demonstrate simple RAG patterns. This is not necessary when deploying agents."
-  type        = bool
-  default     = false
+variable "purpose" {
+  description = "The three character purpose of the resource"
+  type        = string
+}
+
+variable "random_string" {
+  description = "The random string to append to the resource name"
+  type        = string
 }
 
 variable "region" {
@@ -113,19 +172,19 @@ variable "region_code" {
   type        = string
 }
 
-variable "purpose" {
-  description = "The three character purpose of the resource"
-  type        = string
-}
-
-variable "random_string" {
-  description = "The random string to append to the resource name"
-  type        = string
-}
-
 variable "resource_group_name_dns" {
   description = "The name of the resource group where the Private DNS Zones exist"
   type        = string
+}
+
+variable "resource_managed_identity_type" {
+  description = "The type of managed identity to create for the Foundry resource. Use 'smi' for System-assigned and 'umi' for User-assigned managed identity."
+  type        = string
+  default     = "umi"
+  validation {
+    condition     = contains(["smi", "umi"], var.resource_managed_identity_type)
+    error_message = "Managed identity type must be either 'smi' or 'umi'."
+  }
 }
 
 variable "subscription_id_infrastructure" {

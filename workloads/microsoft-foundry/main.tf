@@ -1471,7 +1471,7 @@ resource "azurerm_storage_account" "storage_account_foundry" {
   name                = "stmsf${var.region_code}${var.random_string}"
   resource_group_name = azurerm_resource_group.rg_foundry.name
   location            = var.region
-  tags                = var.tags
+  tags = merge(var.tags, { SecurityControl = "Ignore" })
 
   account_kind             = "StorageV2"
   account_tier             = "Standard"
@@ -1483,11 +1483,15 @@ resource "azurerm_storage_account" "storage_account_foundry" {
   # Disable public access for blob containers
   allow_nested_items_to_be_public = false
 
-  # TODO: 2/2026 Remove network_acls section to rely on NSP rules once cross NSP links are supported to address the issue of diagnostic settings delivery of signals being blocked by NSP
-  public_network_access_enabled = false
+  # TODO: 2/2026 Remove network_acls section and set public access to false to rely on NSP rules once cross NSP links are supported to address the issue of diagnostic settings delivery of signals being blocked by NSP
+  public_network_access_enabled = true
 
   network_rules {
     default_action = "Deny"
+    # This IP rule is only required for my lab environment
+    ip_rules = [
+      var.trusted_ip
+    ]
     bypass         = ["AzureServices"]
   }
 
@@ -1899,6 +1903,12 @@ module "foundry_project_agents" {
   shared_bing_grounding_search_resource_id   = azapi_resource.bing_grounding_search_foundry[0].id
   shared_bing_grounding_search_api_key       = data.azapi_resource_action.bing_api_keys[0].output.key1
   shared_external_openai                     = var.external_openai
+
+  ## Optional info for project-level connections
+  apim_ai_gateway = var.apim_ai_gateway
+  apim_ai_gateway_subscription_key = var.apim_ai_gateway_subscription_key
+  model_gateway = var.model_gateway
+  model_gateway_api_key = var.model_gateway_api_key
 
   # User object id to grant permissions over project
   user_object_id = var.user_object_id

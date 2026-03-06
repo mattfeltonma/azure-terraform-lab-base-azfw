@@ -7,7 +7,7 @@
 resource "azurerm_key_vault_certificate" "apim_gateway_certificate" {
   count = var.provision_certificate == true ? 1 : 0
 
-  name         = "apim-gateway-certificate-v2${var.random_string}"
+  name         = "apim-gateway-certificate-v3${var.random_string}"
   key_vault_id = var.key_vault_id
 
   certificate_policy {
@@ -37,6 +37,7 @@ resource "azurerm_key_vault_certificate" "apim_gateway_certificate" {
           [
             "apim-example${var.random_string}.${var.apim_private_dns_zone_name}",
             "apim-example${var.random_string}${var.region_code}.${var.apim_private_dns_zone_name}",
+            # These additional SANS are only used for classic SKUs and really aren't even used there
             "apim-example${var.random_string}.management.${var.apim_private_dns_zone_name}",
             "apim-example${var.random_string}.scm.${var.apim_private_dns_zone_name}",
             "apim-example${var.random_string}.developer.${var.apim_private_dns_zone_name}"
@@ -192,7 +193,7 @@ resource "time_sleep" "sleep_law_creation" {
 ###########
 ###########
 
-## Create a Private DNS Zone that be the namespace for the API Management instance
+## Create a Private DNS Zone that be the custom domain namespace for the API Management instance
 ##
 resource "azurerm_private_dns_zone" "private_dns_zone_apim" {
   provider = azurerm.subscription_infrastructure
@@ -258,11 +259,11 @@ resource "azurerm_application_insights" "appins_api_management" {
   }
 }
 
-########### Create the AI Foundry Accounts and deploy the gpt4-o model
+########### Create the Foundry Accounts and deploy the gpt4-o model
 ###########
 ###########
 
-## Create AI Foundry accounts to act as the backends for the API Management instance
+## Create Foundry accounts to act as the backends for the API Management instance
 ##
 resource "azurerm_cognitive_account" "ai_foundry_accounts" {
   depends_on = [
@@ -569,7 +570,7 @@ resource "azurerm_api_management_custom_domain" "apim_custom_domains" {
   api_management_id = azurerm_api_management.apim.id
 
   gateway {
-    host_name                = "apim-example.${var.apim_private_dns_zone_name}"
+    host_name                = "apim-example${var.random_string}.${var.apim_private_dns_zone_name}"
     key_vault_certificate_id = var.provision_certificate == true ? data.azurerm_key_vault_certificate.apim_gateway_certificate_completed[0].versionless_secret_id : var.key_vault_secret_id_versionless
     default_ssl_binding      = true
   }
@@ -577,7 +578,7 @@ resource "azurerm_api_management_custom_domain" "apim_custom_domains" {
   dynamic "management" {
     for_each = var.apim_generation_v2 ? [] : [1]
     content {
-      host_name                = "apim-example.management.${var.apim_private_dns_zone_name}"
+      host_name                = "apim-example${var.random_string}.management.${var.apim_private_dns_zone_name}"
       key_vault_certificate_id = var.provision_certificate == true ? data.azurerm_key_vault_certificate.apim_gateway_certificate_completed[0].versionless_secret_id : var.key_vault_secret_id_versionless
     }
   }
@@ -585,7 +586,7 @@ resource "azurerm_api_management_custom_domain" "apim_custom_domains" {
   dynamic "scm" {
     for_each = var.apim_generation_v2 ? [] : [1]
     content {
-      host_name                = "apim-example.scm.${var.apim_private_dns_zone_name}"
+      host_name                = "apim-example${var.random_string}.scm.${var.apim_private_dns_zone_name}"
       key_vault_certificate_id = var.provision_certificate == true ? data.azurerm_key_vault_certificate.apim_gateway_certificate_completed[0].versionless_secret_id : var.key_vault_secret_id_versionless
     }
   }
@@ -593,7 +594,7 @@ resource "azurerm_api_management_custom_domain" "apim_custom_domains" {
   dynamic "developer_portal" {
     for_each = var.apim_generation_v2 ? [] : [1]
     content {
-      host_name                = "apim-example.developer.${var.apim_private_dns_zone_name}"
+      host_name                = "apim-example${var.random_string}.developer.${var.apim_private_dns_zone_name}"
       key_vault_certificate_id = var.provision_certificate == true ? data.azurerm_key_vault_certificate.apim_gateway_certificate_completed[0].versionless_secret_id : var.key_vault_secret_id_versionless
     }
   }
@@ -656,8 +657,8 @@ resource "azurerm_api_management_logger" "apim_logger_appinsights" {
   }
 }
 
-########### Create an APIs in the API Management instance to expose the AI Foundry backends
-###########
+########### Create APIs for the classic OpenAI API, OpenAI v1 API, and the Foundry AI Model Inference API and create
+########### diagnostic settings for both the App Insights Logger and Azure Monitor Logger
 ###########
 
 ## Create an API for the 2024-10-21 OpenAI Inferencing API
@@ -684,23 +685,30 @@ resource "azurerm_api_management_api" "openai_original" {
 }
 
 ## Create diagnostic setting for the OpenAI original API for Application Insights
-##
-resource "azurerm_api_management_api_diagnostic" "diag_openai_original_api_appinsights" {
+## 
+resource "azapi_resource" "diag_openai_original_api_appsinights" {
   depends_on = [
     azurerm_api_management_api.openai_original
   ]
 
-  identifier               = "applicationinsights"
-  resource_group_name      = azurerm_resource_group.rg_ai_gateway.name
-  api_management_name      = azurerm_api_management.apim.name
-  api_name                 = azurerm_api_management_api.openai_original.name
-  api_management_logger_id = azurerm_api_management_logger.apim_logger_appinsights.id
-
-  sampling_percentage       = 100
-  always_log_errors         = true
-  log_client_ip             = true
-  verbosity                 = "information"
-  http_correlation_protocol = "W3C"
+  type                      = "Microsoft.ApiManagement/service/apis/diagnostics@2024-05-01"
+  name                      = "applicationinsights"
+  parent_id                 = azurerm_api_management_api.openai_original.id
+  schema_validation_enabled = false
+  body = {
+    properties = {
+      loggerId    = "${azurerm_api_management.apim.id}/loggers/logger-appinsights"
+      alwaysLog   = "allErrors"
+      verbosity   = "information"
+      logClientIp = true
+      httpCorrelationProtocol = "W3C"
+      metrics = true
+      sampling = {
+        percentage   = 100.0
+        samplingType = "fixed"
+      }
+    }
+  }
 }
 
 ## Create diagnostic setting for the OpenAI original API for Azure Monitor
@@ -761,24 +769,31 @@ resource "azurerm_api_management_api" "openai_v1" {
   }
 }
 
-## Create diagnostic setting for the OpenAI v1 API for Application Insights
-##
-resource "azurerm_api_management_api_diagnostic" "diag_openai_v1_api_appinsights" {
+## Create diagnostic setting for the OpenAI original API for Application Insights
+## 
+resource "azapi_resource" "diag_openai_v1_api_appsinights" {
   depends_on = [
     azurerm_api_management_api.openai_v1
   ]
 
-  identifier               = "applicationinsights"
-  resource_group_name      = azurerm_resource_group.rg_ai_gateway.name
-  api_management_name      = azurerm_api_management.apim.name
-  api_name                 = azurerm_api_management_api.openai_v1.name
-  api_management_logger_id = azurerm_api_management_logger.apim_logger_appinsights.id
-
-  sampling_percentage       = 100
-  always_log_errors         = true
-  log_client_ip             = true
-  verbosity                 = "information"
-  http_correlation_protocol = "W3C"
+  type                      = "Microsoft.ApiManagement/service/apis/diagnostics@2024-05-01"
+  name                      = "applicationinsights"
+  parent_id                 = azurerm_api_management_api.openai_v1.id
+  schema_validation_enabled = false
+  body = {
+    properties = {
+      loggerId    = "${azurerm_api_management.apim.id}/loggers/logger-appinsights"
+      alwaysLog   = "allErrors"
+      verbosity   = "information"
+      logClientIp = true
+      httpCorrelationProtocol = "W3C"
+      metrics = true
+      sampling = {
+        percentage   = 100.0
+        samplingType = "fixed"
+      }
+    }
+  }
 }
 
 ## Create diagnostic setting for the OpenAI v1 API for Azure Monitor
@@ -841,22 +856,29 @@ resource "azurerm_api_management_api" "ai_model_inference" {
 
 ## Create diagnostic setting for the Foundry AI Model Inference for Application Insights
 ##
-resource "azurerm_api_management_api_diagnostic" "diag_ai_model_inference_api_appinsights" {
+resource "azapi_resource" "diag_ai_model_inference_api_appsinights" {
   depends_on = [
     azurerm_api_management_api.ai_model_inference
   ]
 
-  identifier               = "applicationinsights"
-  resource_group_name      = azurerm_resource_group.rg_ai_gateway.name
-  api_management_name      = azurerm_api_management.apim.name
-  api_name                 = azurerm_api_management_api.ai_model_inference.name
-  api_management_logger_id = azurerm_api_management_logger.apim_logger_appinsights.id
-
-  sampling_percentage       = 100
-  always_log_errors         = true
-  log_client_ip             = true
-  verbosity                 = "information"
-  http_correlation_protocol = "W3C"
+  type                      = "Microsoft.ApiManagement/service/apis/diagnostics@2024-05-01"
+  name                      = "applicationinsights"
+  parent_id                 = azurerm_api_management_api.ai_model_inference.id
+  schema_validation_enabled = false
+  body = {
+    properties = {
+      loggerId    = "${azurerm_api_management.apim.id}/loggers/logger-appinsights"
+      alwaysLog   = "allErrors"
+      verbosity   = "information"
+      logClientIp = true
+      httpCorrelationProtocol = "W3C"
+      metrics = true
+      sampling = {
+        percentage   = 100.0
+        samplingType = "fixed"
+      }
+    }
+  }
 }
 
 ## Create diagnostic setting for the Foundry AI Model Inference for Azure Monitor
@@ -895,7 +917,7 @@ resource "azapi_resource" "diag_ai_model_inference_api_monitor" {
   }
 }
 
-########### Create an API Management Policies
+########### Create an API Management Policies for the APIs
 ###########
 ###########
 
@@ -922,7 +944,13 @@ resource "azurerm_api_management_api_policy" "apim_policy_openai_original" {
               </issuers>
           </validate-jwt>
           <!-- Extract the Entra ID application id from the JWT -->
-          <set-variable name="appId" value="@(context.Request.Headers.GetValueOrDefault("Authorization",string.Empty).Split(' ').Last().AsJwt().Claims.GetValueOrDefault("appid", "00000000-0000-0000-0000-000000000000"))" />
+          <set-variable name="appId" value="@(context.Request.Headers.GetValueOrDefault("Authorization",string.Empty).Split(' ').Last().AsJwt().Claims.GetValueOrDefault("appid", "none"))" />
+          <!-- Extract the Agent ID from the x-ms-foundry-agent-id header. This is only relevant for Foundry native agents -->
+          <set-variable name="agentId" value="@(context.Request.Headers.GetValueOrDefault("x-ms-foundry-agent-id", "none"))" />
+          <!-- Extract the project GUID from the x-ms-foundry-project-id header. This is only relevant for Foundry native agents -->
+          <set-variable name="projectId" value="@(context.Request.Headers.GetValueOrDefault("x-ms-foundry-project-id", "none"))" />
+          <!-- Extract the Foundry Project name from the "openai-project" header. This is only relevant for Foundry native agents -->
+          <set-variable name="projectName" value="@(context.Request.Headers.GetValueOrDefault("openai-project", "none"))" />
           <!-- Extract the deployment name from the uri path -->
           <set-variable name="uriPath" value="@(context.Request.OriginalUrl.Path)" />
           <set-variable name="deploymentName" value="@(System.Text.RegularExpressions.Regex.Match((string)context.Variables["uriPath"], "/deployments/([^/]+)").Groups[1].Value)" />
@@ -930,28 +958,46 @@ resource "azurerm_api_management_api_policy" "apim_policy_openai_original" {
           <set-header name="X-Entra-App-ID" exists-action="override">
               <value>@(context.Variables.GetValueOrDefault<string>("appId"))</value>
           </set-header>
-          <!-- If the request is a ChatCompletion request validate that it contains UserSecurityContext. If it doesn't reject it with status code 400 -->
+          <set-header name="X-Foundry-Agent-ID" exists-action="override">
+              <value>@(context.Variables.GetValueOrDefault<string>("agentId"))</value>
+          </set-header>
+          <set-header name="X-Foundry-Project-Name" exists-action="override">
+              <value>@(context.Variables.GetValueOrDefault<string>("projectName"))</value>
+          </set-header>
+          <set-header name="X-Foundry-Project-ID" exists-action="override">
+              <value>@(context.Variables.GetValueOrDefault<string>("projectId"))</value>
+          </set-header>
           <choose>
-            <when condition="@(context.Operation.Id.ToLower() == "chatcompletions_create" &&
-        (
-          context.Request.Body?.As<JObject>(true)?["user_security_context"] == null ||
-          context.Request.Body?.As<JObject>(true)?["user_security_context"]["end_user_id"] == null
-        )
-      )">
-                  <return-response>
-                      <set-status code="400" reason="Bad Request" />
-                      <set-body>@("UserSecurityContext property is required for this operation.")</set-body>
-                  </return-response>
-              </when>
+            <!-- If the request isn't from a Foundry native agent and is instead an application or external agent -->
+            <when condition="@(context.Variables.GetValueOrDefault<string>("agentId") == "none" && context.Variables.GetValueOrDefault<string>("projectId") == "none")">
+              <!-- Throttle token usage based on the appid -->
+              <llm-token-limit counter-key="@(context.Variables.GetValueOrDefault<string>("appId","none"))" estimate-prompt-tokens="true" tokens-per-minute="10000" remaining-tokens-header-name="x-apim-remaining-token" tokens-consumed-header-name="x-apim-tokens-consumed" />
+              <!-- Emit token metrics to Application Insights -->
+              <llm-emit-token-metric namespace="openai-metrics">
+                  <dimension name="model" value="@(context.Variables.GetValueOrDefault<string>("deploymentName","None"))" />
+                  <dimension name="client_ip" value="@(context.Request.IpAddress)" />
+                  <dimension name="appId" value="@(context.Variables.GetValueOrDefault<string>("appId","00000000-0000-0000-0000-000000000000"))" />
+              </llm-emit-token-metric>
+            </when>
+            <!-- If the request is from a Foundry native agent -->
+            <otherwise>
+              <!-- Throttle token usage based on the agentId -->
+              <llm-token-limit counter-key="@($"{context.Variables.GetValueOrDefault<string>("projectId")}_{context.Variables.GetValueOrDefault<string>("agentId")}")" estimate-prompt-tokens="true" tokens-per-minute="10000" remaining-tokens-header-name="x-apim-remaining-token" tokens-consumed-header-name="x-apim-tokens-consumed" />
+              <!-- Emit token metrics to Application Insights -->
+              <llm-emit-token-metric namespace="openai-metrics">
+                  <dimension name="model" value="@(context.Variables.GetValueOrDefault<string>("deploymentName","None"))" />
+                  <dimension name="client_ip" value="@(context.Request.IpAddress)" />
+                  <dimension name="agentId" value="@(context.Variables.GetValueOrDefault<string>("agentId","00000000-0000-0000-0000-000000000000"))" />
+                  <dimension name="projectId" value="@(context.Variables.GetValueOrDefault<string>("projectId","00000000-0000-0000-0000-000000000000"))" />
+              </llm-emit-token-metric>
+            </otherwise>
           </choose>
-          <!-- Throttle token usage based on the appid -->
-          <llm-token-limit counter-key="@(context.Variables.GetValueOrDefault<string>("appId","00000000-0000-0000-0000-000000000000"))" estimate-prompt-tokens="true" tokens-per-minute="10000" remaining-tokens-header-name="x-apim-remaining-token" tokens-consumed-header-name="x-apim-tokens-consumed" />
-          <!-- Emit token metrics to Application Insights -->
-          <llm-emit-token-metric namespace="openai-metrics">
-              <dimension name="model" value="@(context.Variables.GetValueOrDefault<string>("deploymentName","None"))" />
-              <dimension name="client_ip" value="@(context.Request.IpAddress)" />
-              <dimension name="appId" value="@(context.Variables.GetValueOrDefault<string>("appId","00000000-0000-0000-0000-000000000000"))" />
-          </llm-emit-token-metric>
+          <choose>
+            <!-- If the request is from a Foundry native agent -->
+            <when condition="@(context.Variables.GetValueOrDefault<string>("agentId") != "none" && context.Variables.GetValueOrDefault<string>("projectId") != "none")">
+            <authentication-managed-identity resource="https://cognitiveservices.azure.com/" />
+            </when>
+          </choose>
           <set-backend-service backend-id="${module.backend_pool_aifoundry_instances.name}" />
       </inbound>
       <backend>
@@ -1161,6 +1207,439 @@ resource "azurerm_api_management_api_policy" "apim_policy_foundry_ai_model_infer
 XML
 }
 
+########### Create additional APIs for testing the model gateway feature. This APIs will include very basic polciies
+########### since this is simply intended to demonstrate how a 3rd party gateway could work
+###########
+
+## Create an API for the 2024-10-21 OpenAI Inferencing API that will be used to demonstrate the model gateway connection
+##
+resource "azurerm_api_management_api" "openai_model_gateway" {
+  depends_on = [
+    azurerm_api_management_custom_domain.apim_custom_domains,
+    module.backend_pool_aifoundry_instances
+  ]
+
+  name                  = "openai-model-gateway"
+  resource_group_name   = azurerm_resource_group.rg_ai_gateway.name
+  api_management_name   = azurerm_api_management.apim.name
+  revision              = "1"
+  display_name          = "Azure OpenAI Classic - Model Gateway"
+  path                  = "openai-model-gateway"
+  api_type              = "http"
+  protocols             = ["https"]
+  subscription_required = false
+  import {
+    content_format = "openapi+json"
+    content_value  = file("${path.module}/api-specs/2024-10-21-openai-inference.json")
+  }
+}
+
+## Create diagnostic setting for the OpenAI Inference API for Application Insights that will be used to demonstrate the model gateway connection
+##
+resource "azapi_resource" "diag_ai_openai_model_gateway_appsinights" {
+  depends_on = [
+    azurerm_api_management_api.openai_model_gateway
+  ]
+
+  type                      = "Microsoft.ApiManagement/service/apis/diagnostics@2024-05-01"
+  name                      = "applicationinsights"
+  parent_id                 = azurerm_api_management_api.openai_model_gateway.id
+  schema_validation_enabled = false
+  body = {
+    properties = {
+      loggerId    = "${azurerm_api_management.apim.id}/loggers/logger-appinsights"
+      alwaysLog   = "allErrors"
+      verbosity   = "information"
+      logClientIp = true
+      httpCorrelationProtocol = "W3C"
+      metrics = true
+      sampling = {
+        percentage   = 100.0
+        samplingType = "fixed"
+      }
+    }
+  }
+}
+
+## Create diagnostic setting for the OpenAI original API for Azure Monitor that will be used to demonstrate the model gateway connection
+##
+resource "azapi_resource" "diag_openai_model_gateway_api_monitor" {
+  depends_on = [
+    azurerm_api_management_api.openai_model_gateway
+  ]
+
+  type                      = "Microsoft.ApiManagement/service/apis/diagnostics@2024-05-01"
+  name                      = "azuremonitor"
+  parent_id                 = azurerm_api_management_api.openai_model_gateway.id
+  schema_validation_enabled = false
+  body = {
+    properties = {
+      loggerId    = "${azurerm_api_management.apim.id}/loggers/azuremonitor"
+      alwaysLog   = "allErrors"
+      verbosity   = "information"
+      logClientIp = true
+      sampling = {
+        percentage   = 100.0
+        samplingType = "fixed"
+      }
+      largeLanguageModel = {
+        logs = "enabled"
+        requests = {
+          maxSizeInBytes = 262144
+          messages       = "all"
+        }
+        responses = {
+          maxSizeInBytes = 262144
+          messages       = "all"
+        }
+      }
+    }
+  }
+}
+
+## Create an API Management policy for the OpenAI original API that will be used to demonstrate the model gateway connection. 
+## This is a very basic policy
+resource "azurerm_api_management_api_policy" "apim_policy_openai_model_gateway" {
+  depends_on = [
+    azurerm_api_management_api.openai_model_gateway
+  ]
+  api_name            = azurerm_api_management_api.openai_model_gateway.name
+  api_management_name = azurerm_api_management.apim.name
+  resource_group_name = azurerm_resource_group.rg_ai_gateway.name
+
+  xml_content = <<XML
+    <policies>
+      <inbound>
+          <base />
+          <authentication-managed-identity resource="https://cognitiveservices.azure.com/" />
+          <set-backend-service backend-id="${module.backend_pool_aifoundry_instances.name}" />
+      </inbound>
+      <backend>
+          <forward-request />
+      </backend>
+      <outbound>
+          <base />
+      </outbound>
+  </policies>
+XML
+}
+
+########### Create additional operations and policies that are required to support dynamic model enumeration with
+########### Foundry APIM and model gateway integrations
+###########
+
+## Create an operation to support getting a specific deployment by name when using the Foundry APIM connection
+##
+resource "azurerm_api_management_api_operation" "apim_operation_openai_original_get_deployment_by_name" {
+  depends_on = [
+    azurerm_api_management_api.openai_original
+  ]
+
+  operation_id        = "get-deployment-by-name"
+  api_name            = azurerm_api_management_api.openai_original.name
+  api_management_name = azurerm_api_management.apim.name
+  resource_group_name = azurerm_resource_group.rg_ai_gateway.name
+  display_name        = "Get Deployment by Name"
+  method              = "GET"
+  url_template        = "/deployments/{deploymentName}"
+
+  template_parameter {
+    name     = "deploymentName"
+    required = true
+    type     = "string"
+  }
+}
+
+## Create an policy for the get deployment by name operation to route to the Foundry APIM connection
+##
+resource "azurerm_api_management_api_operation_policy" "apim_policy_openai_original_get_deployment_by_name" {
+  depends_on = [
+    azurerm_api_management_api_operation.apim_operation_openai_original_get_deployment_by_name,
+  ]
+
+  api_name            = azurerm_api_management_api.openai_original.name
+  operation_id        = azurerm_api_management_api_operation.apim_operation_openai_original_get_deployment_by_name.operation_id
+  api_management_name = azurerm_api_management.apim.name
+  resource_group_name = azurerm_resource_group.rg_ai_gateway.name
+
+  xml_content = <<XML
+    <policies>
+      <inbound>
+        <authentication-managed-identity resource="https://management.azure.com/" />
+        <rewrite-uri template="/deployments/{deploymentName}?api-version=${local.ai_services_arm_api_version}" copy-unmatched-params="false" />
+        <!--Specify a Foundry deployment that has the models deployed -->
+        <set-backend-service base-url="https://management.azure.com${azurerm_cognitive_account.ai_foundry_accounts[keys(local.ai_foundry_regions)[0]].id}" />
+      </inbound>
+      <backend>
+        <base />
+      </backend>
+      <outbound>
+        <base />
+      </outbound>
+      <on-error>
+        <base />
+      </on-error>
+    </policies>
+  XML
+}
+
+## Create an operation to support enumerating deployments when using the Foundry APIM connection
+##
+resource "azurerm_api_management_api_operation" "apim_operation_openai_original_list_deployments_by_name" {
+  depends_on = [
+    azurerm_api_management_api_operation_policy.apim_policy_openai_original_get_deployment_by_name
+  ]
+
+  operation_id        = "list-deployments"
+  api_name            = azurerm_api_management_api.openai_original.name
+  api_management_name = azurerm_api_management.apim.name
+  resource_group_name = azurerm_resource_group.rg_ai_gateway.name
+  display_name        = "List Deployments"
+  method              = "GET"
+  url_template        = "/deployments"
+}
+
+## Create an policy for the list deployments operation to route to the Foundry APIM connection
+##
+resource "azurerm_api_management_api_operation_policy" "apim_policy_openai_original_list_deployments_by_name" {
+  depends_on = [
+    azurerm_api_management_api_operation.apim_operation_openai_original_list_deployments_by_name
+  ]
+
+  api_name            = azurerm_api_management_api.openai_original.name
+  operation_id        = azurerm_api_management_api_operation.apim_operation_openai_original_list_deployments_by_name.operation_id
+  api_management_name = azurerm_api_management.apim.name
+  resource_group_name = azurerm_resource_group.rg_ai_gateway.name
+
+  xml_content = <<XML
+    <policies>
+      <inbound>
+        <authentication-managed-identity resource="https://management.azure.com/" />
+        <rewrite-uri template="/deployments?api-version=${local.ai_services_arm_api_version}" copy-unmatched-params="false" />
+        <!--Azure Resource Manager-->
+        <set-backend-service base-url="https://management.azure.com${azurerm_cognitive_account.ai_foundry_accounts[keys(local.ai_foundry_regions)[0]].id}" />
+      </inbound>
+      <backend>
+        <base />
+      </backend>
+      <outbound>
+        <base />
+      </outbound>
+      <on-error>
+        <base />
+      </on-error>
+    </policies>
+  XML
+}
+
+## Create an operation to support enumerating deployments when using the Foundry APIM connection
+##
+resource "azurerm_api_management_api_operation" "apim_operation_openai_v1_get_deployment_by_name" {
+  depends_on = [
+    azurerm_api_management_api.openai_v1
+  ]
+
+  operation_id        = "get-deployment-by-name"
+  api_name            = azurerm_api_management_api.openai_v1.name
+  api_management_name = azurerm_api_management.apim.name
+  resource_group_name = azurerm_resource_group.rg_ai_gateway.name
+  display_name        = "Get Deployment by Name"
+  method              = "GET"
+  url_template        = "/deployments/{deploymentName}"
+
+  template_parameter {
+    name     = "deploymentName"
+    required = true
+    type     = "string"
+  }
+}
+
+## Create an policy for the get deployment by name operation to route to the Foundry APIM connection
+##
+resource "azurerm_api_management_api_operation_policy" "apim_policy_openai_v1_get_deployment_by_name" {
+  depends_on = [
+    azurerm_api_management_api_operation.apim_operation_openai_v1_get_deployment_by_name
+  ]
+
+  api_name            = azurerm_api_management_api.openai_v1.name
+  operation_id        = azurerm_api_management_api_operation.apim_operation_openai_v1_get_deployment_by_name.operation_id
+  api_management_name = azurerm_api_management.apim.name
+  resource_group_name = azurerm_resource_group.rg_ai_gateway.name
+
+  xml_content = <<XML
+    <policies>
+      <inbound>
+        <authentication-managed-identity resource="https://management.azure.com/" />
+        <rewrite-uri template="/deployments/{deploymentName}?api-version=${local.ai_services_arm_api_version}" copy-unmatched-params="false" />
+        <!--Azure Resource Manager-->
+        <set-backend-service base-url="https://management.azure.com${azurerm_cognitive_account.ai_foundry_accounts[keys(local.ai_foundry_regions)[0]].id}" />
+      </inbound>
+      <backend>
+        <base />
+      </backend>
+      <outbound>
+        <base />
+      </outbound>
+      <on-error>
+        <base />
+      </on-error>
+    </policies>
+  XML
+}
+
+## Create an operation to support enumerating deployments when using the Foundry APIM connection
+##
+resource "azurerm_api_management_api_operation" "apim_operation_openai_v1_list_deployments_by_name" {
+  depends_on = [
+    azurerm_api_management_api_operation_policy.apim_policy_openai_v1_get_deployment_by_name
+  ]
+
+  operation_id        = "list-deployments"
+  api_name            = azurerm_api_management_api.openai_v1.name
+  api_management_name = azurerm_api_management.apim.name
+  resource_group_name = azurerm_resource_group.rg_ai_gateway.name
+  display_name        = "List Deployments"
+  method              = "GET"
+  url_template        = "/deployments"
+}
+
+## Create an policy for the list deployments operation to route to the Foundry APIM connection
+##
+resource "azurerm_api_management_api_operation_policy" "apim_policy_openai_v1_list_deployments_by_name" {
+  depends_on = [
+    azurerm_api_management_api_operation.apim_operation_openai_v1_list_deployments_by_name
+  ]
+
+  api_name            = azurerm_api_management_api.openai_v1.name
+  operation_id        = azurerm_api_management_api_operation.apim_operation_openai_v1_list_deployments_by_name.operation_id
+  api_management_name = azurerm_api_management.apim.name
+  resource_group_name = azurerm_resource_group.rg_ai_gateway.name
+
+  xml_content = <<XML
+    <policies>
+      <inbound>
+        <authentication-managed-identity resource="https://management.azure.com/" />
+        <rewrite-uri template="/deployments?api-version=${local.ai_services_arm_api_version}" copy-unmatched-params="false" />
+        <!--Azure Resource Manager-->
+        <set-backend-service base-url="https://management.azure.com${azurerm_cognitive_account.ai_foundry_accounts[keys(local.ai_foundry_regions)[0]].id}" />
+      </inbound>
+      <backend>
+        <base />
+      </backend>
+      <outbound>
+        <base />
+      </outbound>
+      <on-error>
+        <base />
+      </on-error>
+    </policies>
+  XML
+}
+
+## Create an operation to support enumerating deployments when using the Foundry APIM connection
+##
+resource "azurerm_api_management_api_operation" "apim_operation_openai_model_gateway_get_deployment_by_name" {
+  depends_on = [
+    azurerm_api_management_api.openai_model_gateway
+  ]
+
+  operation_id        = "get-deployment-by-name"
+  api_name            = azurerm_api_management_api.openai_model_gateway.name
+  api_management_name = azurerm_api_management.apim.name
+  resource_group_name = azurerm_resource_group.rg_ai_gateway.name
+  display_name        = "Get Deployment by Name"
+  method              = "GET"
+  url_template        = "/deployments/{deploymentName}"
+
+  template_parameter {
+    name     = "deploymentName"
+    required = true
+    type     = "string"
+  }
+}
+
+## Create an policy for the get deployment by name operation to route to the Foundry APIM connection
+##
+resource "azurerm_api_management_api_operation_policy" "apim_policy_openai_model_gateway_get_deployment_by_name" {
+  depends_on = [
+    azurerm_api_management_api_operation.apim_operation_openai_model_gateway_get_deployment_by_name
+  ]
+
+  api_name            = azurerm_api_management_api.openai_model_gateway.name
+  operation_id        = azurerm_api_management_api_operation.apim_operation_openai_model_gateway_get_deployment_by_name.operation_id
+  api_management_name = azurerm_api_management.apim.name
+  resource_group_name = azurerm_resource_group.rg_ai_gateway.name
+
+  xml_content = <<XML
+    <policies>
+      <inbound>
+        <authentication-managed-identity resource="https://management.azure.com/" />
+        <rewrite-uri template="/deployments/{deploymentName}?api-version=${local.ai_services_arm_api_version}" copy-unmatched-params="false" />
+        <!--Azure Resource Manager-->
+        <set-backend-service base-url="https://management.azure.com${azurerm_cognitive_account.ai_foundry_accounts[keys(local.ai_foundry_regions)[0]].id}" />
+      </inbound>
+      <backend>
+        <base />
+      </backend>
+      <outbound>
+        <base />
+      </outbound>
+      <on-error>
+        <base />
+      </on-error>
+    </policies>
+  XML
+}
+
+## Create an operation to support enumerating deployments when using the Foundry APIM connection
+##
+resource "azurerm_api_management_api_operation" "apim_operation_openai_model_gateway_list_deployments_by_name" {
+  depends_on = [
+    azurerm_api_management_api_operation_policy.apim_policy_openai_model_gateway_get_deployment_by_name
+  ]
+
+  operation_id        = "list-deployments"
+  api_name            = azurerm_api_management_api.openai_model_gateway.name
+  api_management_name = azurerm_api_management.apim.name
+  resource_group_name = azurerm_resource_group.rg_ai_gateway.name
+  display_name        = "List Deployments"
+  method              = "GET"
+  url_template        = "/deployments"
+}
+
+## Create an policy for the list deployments operation to route to the Foundry APIM connection
+##
+resource "azurerm_api_management_api_operation_policy" "apim_policy_openai_model_gateway_list_deployments_by_name" {
+  depends_on = [
+    azurerm_api_management_api_operation.apim_operation_openai_model_gateway_list_deployments_by_name
+  ]
+
+  api_name            = azurerm_api_management_api.openai_model_gateway.name
+  operation_id        = azurerm_api_management_api_operation.apim_operation_openai_model_gateway_list_deployments_by_name.operation_id
+  api_management_name = azurerm_api_management.apim.name
+  resource_group_name = azurerm_resource_group.rg_ai_gateway.name
+
+  xml_content = <<XML
+    <policies>
+      <inbound>
+        <authentication-managed-identity resource="https://management.azure.com/" />
+        <rewrite-uri template="/deployments?api-version=${local.ai_services_arm_api_version}" copy-unmatched-params="false" />
+        <!--Azure Resource Manager-->
+        <set-backend-service base-url="https://management.azure.com${azurerm_cognitive_account.ai_foundry_accounts[keys(local.ai_foundry_regions)[0]].id}" />
+      </inbound>
+      <backend>
+        <base />
+      </backend>
+      <outbound>
+        <base />
+      </outbound>
+      <on-error>
+        <base />
+      </on-error>
+    </policies>
+  XML
+}
+
 ########### Create A records for the API Management instance in the Private DNS Zone
 ###########
 ###########
@@ -1175,7 +1654,7 @@ resource "azurerm_private_dns_a_record" "dns_a_record_apim_gateway" {
     azurerm_private_dns_zone_virtual_network_link.dns_vnet_link_apim
   ]
 
-  name                = "apim-example"
+  name                = "apim-example${var.random_string}"
   zone_name           = azurerm_private_dns_zone.private_dns_zone_apim.name
   resource_group_name = var.resource_group_dns
   ttl                 = 10
@@ -1195,7 +1674,9 @@ resource "azurerm_private_dns_a_record" "dns_a_record_apim_management" {
     azurerm_private_dns_zone_virtual_network_link.dns_vnet_link_apim
   ]
 
-  name                = "apim-example.management"
+  count = var.apim_generation_v2 ? 0 : 1
+
+  name                = "apim-example${var.random_string}.management"
   zone_name           = azurerm_private_dns_zone.private_dns_zone_apim.name
   resource_group_name = var.resource_group_dns
   ttl                 = 10
@@ -1215,7 +1696,7 @@ resource "azurerm_private_dns_a_record" "dns_a_record_apim_developer_portal" {
     azurerm_private_dns_zone_virtual_network_link.dns_vnet_link_apim
   ]
 
-  name                = "apim-example.developer"
+  name                = "apim-example${var.random_string}.developer"
   zone_name           = azurerm_private_dns_zone.private_dns_zone_apim.name
   resource_group_name = var.resource_group_dns
   ttl                 = 10
@@ -1235,8 +1716,30 @@ resource "azurerm_private_dns_a_record" "dns_a_record_apim_source_control_manage
     azurerm_private_dns_zone_virtual_network_link.dns_vnet_link_apim
   ]
 
-  name                = "apim-example.scm"
+  count = var.apim_generation_v2 ? 0 : 1
+
+  name                = "apim-example${var.random_string}.scm"
   zone_name           = azurerm_private_dns_zone.private_dns_zone_apim.name
+  resource_group_name = var.resource_group_dns
+  ttl                 = 10
+
+  records = [
+    azurerm_api_management.apim.private_ip_addresses[0]
+  ]
+}
+
+## Create A record for the API Management split brain DNS zone to support use of the default name
+## Only required if you care about that
+resource "azurerm_private_dns_a_record" "dns_a_record_apim_split_brain" {
+  provider = azurerm.subscription_infrastructure
+
+  depends_on = [
+    azurerm_api_management_custom_domain.apim_custom_domains,
+    azurerm_private_dns_zone_virtual_network_link.dns_vnet_link_apim
+  ]
+
+  name                = "apim-example${var.random_string}${var.region_code}"
+  zone_name           = "azure-api.net"
   resource_group_name = var.resource_group_dns
   ttl                 = 10
 
@@ -1266,9 +1769,26 @@ resource "azurerm_role_assignment" "apim_perm_aifoundry_accounts_openai_user" {
   principal_id         = azurerm_api_management.apim.identity[0].principal_id
 }
 
+## Create Azure RBAC Role assignment granting the API Management managed identity
+## the Cognitive Services User role on the AI Foundry accounts. This is required to 
+## list the deployments of the models to supoort the added operations for the APIM connection
+resource "azurerm_role_assignment" "apim_perm_aifoundry_accounts_cognitive_services_user" {
+  depends_on = [
+    azurerm_api_management.apim,
+    azurerm_cognitive_account.ai_foundry_accounts
+  ]
+
+  for_each = local.ai_foundry_regions
+
+  name                 = uuidv5("dns", "${azurerm_api_management.apim.identity[0].principal_id}${azurerm_cognitive_account.ai_foundry_accounts[each.key].name}cognitiveservicesuser")
+  scope                = azurerm_cognitive_account.ai_foundry_accounts[each.key].id
+  role_definition_name = "Cognitive Services User"
+  principal_id         = azurerm_api_management.apim.identity[0].principal_id
+}
+
 ## Create Azure RBAC Role assignment granting the user provided service principal
-## the Azure OpenAI User role on the AI Foundry accounts. This can be used to demonstrate
-## the OAuth client credentials flow
+## the Azure OpenAI User role on the AI Foundry accounts. This is only needed if 
+## you are mucking with OBO and have created the appropriate app registration
 resource "azurerm_role_assignment" "sp_perm_aifoundry_accounts_openai_user" {
   depends_on = [
     azurerm_api_management.apim,
@@ -1282,6 +1802,7 @@ resource "azurerm_role_assignment" "sp_perm_aifoundry_accounts_openai_user" {
   role_definition_name = "Cognitive Services OpenAI User"
   principal_id         = var.service_principal_object_id
 }
+
 
 ########### Create human role-assignments
 ###########

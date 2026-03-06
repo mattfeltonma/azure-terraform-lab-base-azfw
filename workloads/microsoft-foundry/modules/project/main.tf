@@ -32,9 +32,9 @@ resource "azapi_resource" "foundry_project" {
     # Assigned a system-assigned managed identity or user-assigned managed identity based on variable
     identity = {
       type = var.project_managed_identity_type == "umi" ? "UserAssigned" : "SystemAssigned"
-      userAssignedIdentities = var.project_managed_identity_type == "umi" ? [
-        azurerm_user_assigned_identity.foundry_project_umi[0].id
-      ] : null
+      userAssignedIdentities = var.project_managed_identity_type == "umi" ? {
+        (azurerm_user_assigned_identity.foundry_project_umi[0].id) = {}
+      } : null
     }
 
     properties = {
@@ -82,11 +82,11 @@ resource "azapi_resource" "conn_resource_key_vault_secrets" {
 
   body = {
     properties = {
-      category = "AzureKeyVault"
+      category      = "AzureKeyVault"
       isSharedToAll = true
-      target   = "https://${local.resource_byo_key_vault_name}.vault.azure.net/"
-      authType = "AccountManagedIdentity"
-      credentials = {}
+      target        = "https://${local.resource_byo_key_vault_name}.vault.azure.net/"
+      authType      = "AccountManagedIdentity"
+      credentials   = {}
       metadata = {
         ApiType    = "Azure"
         ResourceId = var.shared_byo_key_vault_resource_id
@@ -104,7 +104,7 @@ resource "azapi_resource" "conn_resource_appins_foundry" {
   depends_on = [
     azapi_resource.conn_resource_key_vault_secrets
   ]
-    
+
   type                      = "Microsoft.CognitiveServices/accounts/connections@2025-10-01-preview"
   name                      = "${local.resource_app_insights_name}1"
   parent_id                 = var.foundry_resource_id
@@ -112,10 +112,10 @@ resource "azapi_resource" "conn_resource_appins_foundry" {
 
   body = {
     properties = {
-      category = "AppInsights"
+      category      = "AppInsights"
       isSharedToAll = true
-      target   = var.shared_app_insights_resource_id
-      authType = "ApiKey"
+      target        = var.shared_app_insights_resource_id
+      authType      = "ApiKey"
 
       credentials = {
         key = var.shared_app_insights_connection_string
@@ -222,13 +222,154 @@ resource "azapi_resource" "conn_project_ai_search_foundry" {
   }
 }
 
+## Create the Foundry project connections for APIM AI Gateway to demonstration static models
+##
+resource "azapi_resource" "conn_project_apim_ai_gateway_foundry_static" {
+  for_each = var.agents && var.apim_ai_gateway != null ? { for gw in var.apim_ai_gateway : gw.api_path => gw } : {}
+
+  depends_on = [
+    time_sleep.wait_project_identities,
+    azapi_resource.conn_project_ai_search_foundry
+  ]
+
+  type                      = "Microsoft.CognitiveServices/accounts/projects/connections@2025-10-01-preview"
+  name                      = "${local.project_ai_gateway_apim_static_model_connection_name}${each.value.api_path}"
+  parent_id                 = azapi_resource.foundry_project.id
+  schema_validation_enabled = false
+
+  body = {
+    name = "${local.project_ai_gateway_apim_static_model_connection_name}${each.value.api_path}"
+    properties = {
+      category      = "ApiManagement"
+      target        = "https://${each.value.apim_fqdn}/${each.value.api_path}"
+      authType      = "ProjectManagedIdentity"
+      audience      = "https://cognitiveservices.azure.com"
+      isSharedToAll = false
+      metadata = {
+        deploymentInPath = "true"
+        # Pay attention to case sensitivity with these metadata properties, it does matter
+        inferenceAPIVersion = each.value.inference_api_version
+        models = jsonencode(each.value.models)
+      }
+    }
+  }
+}
+
+## Create the Foundry project connections for APIM AI Gateway to demonstrate dynamic models
+##
+resource "azapi_resource" "conn_project_apim_ai_gateway_foundry_dynamic" {
+  for_each = var.agents && var.apim_ai_gateway != null ? { for gw in var.apim_ai_gateway : gw.api_path => gw } : {}
+
+  depends_on = [
+    time_sleep.wait_project_identities,
+    azapi_resource.conn_project_apim_ai_gateway_foundry_static
+  ]
+
+  type                      = "Microsoft.CognitiveServices/accounts/projects/connections@2025-10-01-preview"
+  name                      = "${local.project_ai_gateway_apim_dynamic_model_connection_name}${each.value.api_path}"
+  parent_id                 = azapi_resource.foundry_project.id
+  schema_validation_enabled = false
+
+  body = {
+    name = "${local.project_ai_gateway_apim_dynamic_model_connection_name}${each.value.api_path}"
+    properties = {
+      category      = "ApiManagement"
+      target        = "https://${each.value.apim_fqdn}/${each.value.api_path}"
+      authType      = "ProjectManagedIdentity"
+      audience      = "https://cognitiveservices.azure.com"
+      isSharedToAll = false
+      metadata = {
+        # Pay attention to case sensitivity with these metadata properties, it does matter
+        deploymentInPath = "true"
+        inferenceAPIVersion = each.value.inference_api_version
+        deploymentAPIVersion = "2024-10-01"
+      }
+    }
+  }
+}
+
+## Create the Foundry project connections for the APIM which is emulating a model gateway to demonstrate static models
+##
+resource "azapi_resource" "conn_project_model_gateway_foundry_static" {
+  for_each = var.agents && var.model_gateway != null ? { for gw in var.model_gateway : gw.model_gateway_api_path => gw } : {}
+
+  depends_on = [
+    time_sleep.wait_project_identities,
+    azapi_resource.conn_project_apim_ai_gateway_foundry_dynamic
+  ]
+
+  type                      = "Microsoft.CognitiveServices/accounts/projects/connections@2025-10-01-preview"
+  name                      = "${local.project_model_gateway_static_model_connection_name}${each.value.model_gateway_api_path}"
+  parent_id                 = azapi_resource.foundry_project.id
+  schema_validation_enabled = false
+
+  body = {
+    name = "${local.project_model_gateway_static_model_connection_name}${each.value.model_gateway_api_path}"
+    properties = {
+      category      = "ModelGateway"
+      target        = "https://${each.value.model_gateway_fqdn}/${each.value.model_gateway_api_path}"
+      authType      = "ApiKey"
+      isSharedToAll = false
+      credentials = {
+        key = var.model_gateway_api_key
+      }
+      metadata = {
+        # Pay attention to case sensitivity with these metadata properties, it does matter
+        deploymentInPath = "true"
+        inferenceAPIVersion = each.value.inference_api_version
+        models = jsonencode(each.value.models)
+      }
+    }
+  }
+}
+
+## Create the Foundry project connections for the APIM which is emulating a model gateway to demonstrate dynamic models
+##
+resource "azapi_resource" "conn_project_model_gateway_foundry_dynamic" {
+  for_each = var.agents && var.model_gateway != null ? { for gw in var.model_gateway : gw.model_gateway_api_path => gw } : {}
+
+  depends_on = [
+    time_sleep.wait_project_identities,
+    azapi_resource.conn_project_model_gateway_foundry_static
+  ]
+
+  type                      = "Microsoft.CognitiveServices/accounts/projects/connections@2025-10-01-preview"
+  name                      = "${local.project_model_gateway_dynamic_model_connection_name}${each.value.model_gateway_api_path}"
+  parent_id                 = azapi_resource.foundry_project.id
+  schema_validation_enabled = false
+
+  body = {
+    name = "${local.project_model_gateway_dynamic_model_connection_name}${each.value.model_gateway_api_path}"
+    properties = {
+      category      = "ModelGateway"
+      target        = "https://${each.value.model_gateway_fqdn}/${each.value.model_gateway_api_path}"
+      authType      = "ApiKey"
+      isSharedToAll = false
+      credentials = {
+        key = var.model_gateway_api_key
+      }
+      metadata = {
+        deploymentInPath = "true"
+        inferenceAPIVersion = each.value.inference_api_version
+        deploymentAPIVersion = "2024-10-01"
+        modelDiscovery = jsonencode({
+          listModelsEndpoint = "/deployments"
+          getModelEndpoint = "/deployments/{deploymentName}"
+          deploymentProvider = "AzureOpenAI"
+        }) 
+      }
+    }
+  }
+}
+
+
 ## Create a Foundry resource connection to the external Azure OpenAI Service or Foundry instance if that is specified in the external_openai variable
 ##
 resource "azapi_resource" "conn_project_external_openai_foundry" {
   count = var.shared_external_openai != null ? 1 : 0
 
   depends_on = [
-    azapi_resource.conn_project_ai_search_foundry
+    azapi_resource.conn_project_model_gateway_foundry_dynamic
   ]
 
   type                      = "Microsoft.CognitiveServices/accounts/projects/connections@2025-04-01-preview"
@@ -239,10 +380,10 @@ resource "azapi_resource" "conn_project_external_openai_foundry" {
   body = {
     name = local.agent_external_openai_connection_name
     properties = {
-      category = "AzureOpenAI"
+      category      = "AzureOpenAI"
       isSharedToAll = true
-      target   = var.shared_external_openai.endpoint
-      authType = "AAD"
+      target        = var.shared_external_openai.endpoint
+      authType      = "AAD"
       metadata = {
         ApiType    = "Azure"
         ResourceId = var.shared_external_openai.resource_id
@@ -290,7 +431,7 @@ resource "azapi_resource" "conn_project_bing_grounding_search_foundry" {
   }
 }
 
-########## Create required non-human role assignments for the Foundry project system-managed identity to provision the project capability host
+########## Create required non-human role assignments for the Foundry project system-managed identity or user-assigned managed identity to provision the project capability host
 ##########
 ##########
 
@@ -321,7 +462,7 @@ resource "azurerm_role_assignment" "storage_blob_data_contributor_foundry_projec
   name                 = var.project_managed_identity_type == "umi" ? uuidv5("dns", "${local.agent_storage_account_name}${azurerm_user_assigned_identity.foundry_project_umi[0].principal_id}storageblobdatacontributor") : uuidv5("dns", "${local.agent_storage_account_name}${azapi_resource.foundry_project.output.identity.principalId}storageblobdatacontributor")
   scope                = var.shared_agent_storage_account_resource_id
   role_definition_name = "Storage Blob Data Contributor"
-  principal_id         = var.project_managed_identity_type == "umi" ? azurerm_user_assigned_identity.foundry_project_umi[0].principal_id :   azapi_resource.foundry_project.output.identity.principalId
+  principal_id         = var.project_managed_identity_type == "umi" ? azurerm_user_assigned_identity.foundry_project_umi[0].principal_id : azapi_resource.foundry_project.output.identity.principalId
 }
 
 ## Create a role assignment granting the Search Index Data Contributor RBAC role on the AI Search instance to the AI Foundry project managed identity
