@@ -937,7 +937,7 @@ resource "azurerm_api_management_api_policy" "apim_policy_openai_original" {
               <!-- Throttle token usage based on the agentId -->
               <llm-token-limit counter-key="@($"{context.Variables.GetValueOrDefault<string>("projectId")}_{context.Variables.GetValueOrDefault<string>("agentId")}")" estimate-prompt-tokens="true" tokens-per-minute="10000" remaining-tokens-header-name="x-apim-remaining-token" tokens-consumed-header-name="x-apim-tokens-consumed" />
               <!-- Emit token metrics to Application Insights -->
-              <llm-emit-token-metric namespace="openai-metrics">
+              <llm-emit-token-metric namespace="llm-metrics">
                   <dimension name="model" value="@(context.Variables.GetValueOrDefault<string>("deploymentName","None"))" />
                   <dimension name="client_ip" value="@(context.Request.IpAddress)" />
                   <dimension name="agentId" value="@(context.Variables.GetValueOrDefault<string>("agentId","00000000-0000-0000-0000-000000000000"))" />
@@ -959,31 +959,6 @@ resource "azurerm_api_management_api_policy" "apim_policy_openai_original" {
       <outbound>
           <base />
       </outbound>
-      <!-- Handle exceptions and customize error responses  -->
-      <on-error>
-          <base />
-          <set-header name="X-OperationName" exists-action="override">
-              <value>@( context.Operation.Name )</value>
-          </set-header>
-          <set-header name="X-OperationMethod" exists-action="override">
-              <value>@( context.Operation.Method )</value>
-          </set-header>
-          <set-header name="X-OperationUrl" exists-action="override">
-              <value>@( context.Operation.UrlTemplate )</value>
-          </set-header>
-          <set-header name="X-ApiName" exists-action="override">
-              <value>@( context.Api.Name )</value>
-          </set-header>
-          <set-header name="X-ApiPath" exists-action="override">
-              <value>@( context.Api.Path )</value>
-          </set-header>
-          <set-header name="X-LastErrorMessage" exists-action="override">
-              <value>@( context.LastError.Message )</value>
-          </set-header>
-          <set-header name="X-Entra-Id" exists-action="override">
-              <value>@( context.Variables.GetValueOrDefault<string>("appId") )</value>
-          </set-header>
-      </on-error>
   </policies>
 XML
 }
@@ -994,7 +969,6 @@ resource "azurerm_api_management_api_policy" "apim_policy_openai_v1" {
   api_name            = azurerm_api_management_api.openai_v1.name
   api_management_name = azurerm_api_management.apim.name
   resource_group_name = azurerm_resource_group.rg_ai_gateway.name
-
   xml_content = <<XML
     <policies>
       <inbound>
@@ -1007,7 +981,13 @@ resource "azurerm_api_management_api_policy" "apim_policy_openai_v1" {
               </issuers>
           </validate-jwt>
           <!-- Extract the Entra ID application id from the JWT -->
-          <set-variable name="appId" value="@(context.Request.Headers.GetValueOrDefault("Authorization",string.Empty).Split(' ').Last().AsJwt().Claims.GetValueOrDefault("appid", "00000000-0000-0000-0000-000000000000"))" />
+          <set-variable name="appId" value="@(context.Request.Headers.GetValueOrDefault("Authorization",string.Empty).Split(' ').Last().AsJwt().Claims.GetValueOrDefault("appid", "none"))" />
+          <!-- Extract the Agent ID from the x-ms-foundry-agent-id header. This is only relevant for Foundry native agents -->
+          <set-variable name="agentId" value="@(context.Request.Headers.GetValueOrDefault("x-ms-foundry-agent-id", "none"))" />
+          <!-- Extract the project GUID from the x-ms-foundry-project-id header. This is only relevant for Foundry native agents -->
+          <set-variable name="projectId" value="@(context.Request.Headers.GetValueOrDefault("x-ms-foundry-project-id", "none"))" />
+          <!-- Extract the Foundry Project name from the "openai-project" header. This is only relevant for Foundry native agents -->
+          <set-variable name="projectName" value="@(context.Request.Headers.GetValueOrDefault("openai-project", "none"))" />
           <!-- Extract the deployment name from the uri path -->
           <set-variable name="uriPath" value="@(context.Request.OriginalUrl.Path)" />
           <set-variable name="deploymentName" value="@(System.Text.RegularExpressions.Regex.Match((string)context.Variables["uriPath"], "/deployments/([^/]+)").Groups[1].Value)" />
@@ -1015,28 +995,46 @@ resource "azurerm_api_management_api_policy" "apim_policy_openai_v1" {
           <set-header name="X-Entra-App-ID" exists-action="override">
               <value>@(context.Variables.GetValueOrDefault<string>("appId"))</value>
           </set-header>
-          <!-- If the request is a ChatCompletion request validate that it contains UserSecurityContext. If it doesn't reject it with status code 400 -->
+          <set-header name="X-Foundry-Agent-ID" exists-action="override">
+              <value>@(context.Variables.GetValueOrDefault<string>("agentId"))</value>
+          </set-header>
+          <set-header name="X-Foundry-Project-Name" exists-action="override">
+              <value>@(context.Variables.GetValueOrDefault<string>("projectName"))</value>
+          </set-header>
+          <set-header name="X-Foundry-Project-ID" exists-action="override">
+              <value>@(context.Variables.GetValueOrDefault<string>("projectId"))</value>
+          </set-header>
           <choose>
-              <when condition="@(context.Operation.Id.ToLower() == "createChatCompletion" &&
-        (
-          context.Request.Body?.As<JObject>(true)?["user_security_context"] == null ||
-          context.Request.Body?.As<JObject>(true)?["user_security_context"]["end_user_id"] == null
-        )
-      )">
-                  <return-response>
-                      <set-status code="400" reason="Bad Request" />
-                      <set-body>@("UserSecurityContext property is required for this operation.")</set-body>
-                  </return-response>
-              </when>
+            <!-- If the request isn't from a Foundry native agent and is instead an application or external agent -->
+            <when condition="@(context.Variables.GetValueOrDefault<string>("agentId") == "none" && context.Variables.GetValueOrDefault<string>("projectId") == "none")">
+              <!-- Throttle token usage based on the appid -->
+              <llm-token-limit counter-key="@(context.Variables.GetValueOrDefault<string>("appId","none"))" estimate-prompt-tokens="true" tokens-per-minute="10000" remaining-tokens-header-name="x-apim-remaining-token" tokens-consumed-header-name="x-apim-tokens-consumed" />
+              <!-- Emit token metrics to Application Insights -->
+              <llm-emit-token-metric namespace="openai-metrics">
+                  <dimension name="model" value="@(context.Variables.GetValueOrDefault<string>("deploymentName","None"))" />
+                  <dimension name="client_ip" value="@(context.Request.IpAddress)" />
+                  <dimension name="appId" value="@(context.Variables.GetValueOrDefault<string>("appId","00000000-0000-0000-0000-000000000000"))" />
+              </llm-emit-token-metric>
+            </when>
+            <!-- If the request is from a Foundry native agent -->
+            <otherwise>
+              <!-- Throttle token usage based on the agentId -->
+              <llm-token-limit counter-key="@($"{context.Variables.GetValueOrDefault<string>("projectId")}_{context.Variables.GetValueOrDefault<string>("agentId")}")" estimate-prompt-tokens="true" tokens-per-minute="10000" remaining-tokens-header-name="x-apim-remaining-token" tokens-consumed-header-name="x-apim-tokens-consumed" />
+              <!-- Emit token metrics to Application Insights -->
+              <llm-emit-token-metric namespace="llm-metrics">
+                  <dimension name="model" value="@(context.Variables.GetValueOrDefault<string>("deploymentName","None"))" />
+                  <dimension name="client_ip" value="@(context.Request.IpAddress)" />
+                  <dimension name="agentId" value="@(context.Variables.GetValueOrDefault<string>("agentId","00000000-0000-0000-0000-000000000000"))" />
+                  <dimension name="projectId" value="@(context.Variables.GetValueOrDefault<string>("projectId","00000000-0000-0000-0000-000000000000"))" />
+              </llm-emit-token-metric>
+            </otherwise>
           </choose>
-          <!-- Throttle token usage based on the appid -->
-          <llm-token-limit counter-key="@(context.Variables.GetValueOrDefault<string>("appId","00000000-0000-0000-0000-000000000000"))" estimate-prompt-tokens="true" tokens-per-minute="10000" remaining-tokens-header-name="x-apim-remaining-token" tokens-consumed-header-name="x-apim-tokens-consumed" />
-          <!-- Emit token metrics to Application Insights -->
-          <llm-emit-token-metric namespace="openai-metrics">
-              <dimension name="model" value="@(context.Variables.GetValueOrDefault<string>("deploymentName","None"))" />
-              <dimension name="client_ip" value="@(context.Request.IpAddress)" />
-              <dimension name="appId" value="@(context.Variables.GetValueOrDefault<string>("appId","00000000-0000-0000-0000-000000000000"))" />
-          </llm-emit-token-metric>
+          <choose>
+            <!-- If the request is from a Foundry native agent -->
+            <when condition="@(context.Variables.GetValueOrDefault<string>("agentId") != "none" && context.Variables.GetValueOrDefault<string>("projectId") != "none")">
+            <authentication-managed-identity resource="https://cognitiveservices.azure.com/" />
+            </when>
+          </choose>
           <set-backend-service backend-id="${module.backend_pool_aifoundry_instances_openai_v1.name}" />
       </inbound>
       <backend>
@@ -1045,31 +1043,6 @@ resource "azurerm_api_management_api_policy" "apim_policy_openai_v1" {
       <outbound>
           <base />
       </outbound>
-      <!-- Handle exceptions and customize error responses  -->
-      <on-error>
-          <base />
-          <set-header name="X-OperationName" exists-action="override">
-              <value>@( context.Operation.Name )</value>
-          </set-header>
-          <set-header name="X-OperationMethod" exists-action="override">
-              <value>@( context.Operation.Method )</value>
-          </set-header>
-          <set-header name="X-OperationUrl" exists-action="override">
-              <value>@( context.Operation.UrlTemplate )</value>
-          </set-header>
-          <set-header name="X-ApiName" exists-action="override">
-              <value>@( context.Api.Name )</value>
-          </set-header>
-          <set-header name="X-ApiPath" exists-action="override">
-              <value>@( context.Api.Path )</value>
-          </set-header>
-          <set-header name="X-LastErrorMessage" exists-action="override">
-              <value>@( context.LastError.Message )</value>
-          </set-header>
-          <set-header name="X-Entra-Id" exists-action="override">
-              <value>@( context.Variables.GetValueOrDefault<string>("appId") )</value>
-          </set-header>
-      </on-error>
   </policies>
 XML
 }
