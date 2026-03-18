@@ -1906,7 +1906,6 @@ module "foundry_project_agents" {
 
   ## Optional info for project-level connections
   apim_ai_gateway = var.apim_ai_gateway
-  apim_ai_gateway_subscription_key = var.apim_ai_gateway_subscription_key
   model_gateway = var.model_gateway
   model_gateway_api_key = var.model_gateway_api_key
 

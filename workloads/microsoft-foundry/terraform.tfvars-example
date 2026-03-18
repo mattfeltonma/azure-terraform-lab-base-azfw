@@ -1,5 +1,7 @@
 
-## Example of a stand alone deployment
+########## Example of a stand alone deployment
+##########
+##########
 #agents = false
 ##deploy_key_vault_connection_secrets = false
 #deploy_rag_resources = false
@@ -19,7 +21,9 @@
 #}
 #trusted_ip = "X.X.X.X"
 
-## Example of a deployment used to demonstrate simple RAG patterns
+########## Example of a deployment used to demonstrate simple RAG patterns
+##########
+##########
 #agents = false
 #deploy_key_vault_connection_secrets = false
 #deploy_rag_resources = true
@@ -40,44 +44,10 @@
 #trusted_ip = "X.X.X.X"
 
 
-## Example of an agent deployment using vnet injection
+########## Example of an agent deployment using vnet injection
+##########
+##########
 #agents = true
-#apim_ai_gateway = [
-#  {
-#    apim_resource_id      = "/subscriptions/XXXXXXXX-XXXX-XXXX-XXXX-XXXXXXXXXXXX/resourceGroups/somerg/providers/Microsoft.ApiManagement/service/someapim"
-#    apim_fqdn             = "someapim.azure-api.net"
-#    api_path              = "openai"
-#    inference_api_version = "2025-03-01-preview"
-#    models = [{
-#      name = "gpt-4o"
-#      properties = {
-#        model = {
-#          name    = "gpt-4o"
-#          version = "2024-08-06"
-#          format  = "OpenAI"
-#        }
-#      }
-#    }]
-#  }
-#]
-
-#model_gateway = [
-#  {
-#    model_gateway_fqdn     = "something.apim.somedomain.com"
-#    model_gateway_api_path = "openai-model-gateway"
-#    inference_api_version  = "2025-03-01-preview"
-#    models = [{
-#      name = "gpt-4o"
-#      properties = {
-#        model = {
-#          name    = "gpt-4o"
-#          version = "2024-08-06"
-#          format  = "OpenAI"
-#        }
-#      }
-#    }]
-#  }
-#]
 #deploy_key_vault_connection_secrets = false
 #deploy_rag_resources = false
 #foundry_encryption = "pmk"
@@ -100,7 +70,52 @@
 #}
 #trusted_ip = "X.X.X.X"
 
-## Example of an agent deployment using managed vnet
+##### Uncomment these to add support for APIM / model gateway connctions
+#####
+#####
+#apim_ai_gateway = [
+#  {
+#    apim_resource_id      = "/subscriptions/XXXXXXXX-XXXX-XXXX-XXXX-XXXXXXXXXXXX/resourceGroups/somerg/providers/Microsoft.ApiManagement/service/someapim"
+#    apim_fqdn             = "someapim.azure-api.net"
+#    api_path              = "openai-v1"
+#    deployment_in_path    = "false"
+#    models = [{
+#      name = "gpt-4o"
+#      properties = {
+#        model = {
+#          name    = "gpt-4o"
+#          version = "2024-08-06"
+#          format  = "OpenAI"
+#        }
+#      }
+#    }]
+#  }
+#]
+
+#model_gateway = [
+#  {
+#    model_gateway_fqdn     = "someapim.somedomain.com"
+#    model_gateway_api_path = "openai-model-gateway"
+#    deployment_in_path     = "true"
+#    inference_api_version  = "2025-04-01-preview"
+#    models = [{
+#      name = "gpt-4o"
+#      properties = {
+#        model = {
+#          name    = "gpt-4o"
+#          version = "2024-08-06"
+#          format  = "OpenAI"
+#        }
+#      }
+#    }]
+#  }
+#]
+#model_gateway_api_key               = "YOUR_API_KEY"
+
+
+########## Example of an agent deployment using managed vnet
+##########
+##########
 agents = true
 deploy_key_vault_connection_secrets = false
 deploy_rag_resources = false
@@ -123,7 +138,9 @@ tags = {
 }
 trusted_ip = "X.X.X.X"
 
-## Example of connecting to an external Azure OpenAI resource
+########## Example of connecting to an external Azure OpenAI resource
+##########
+##########
 #external_openai = {
 #  name = "jogopenai"
 #  endpoint = "https://jogopenai.openai.azure.com/"

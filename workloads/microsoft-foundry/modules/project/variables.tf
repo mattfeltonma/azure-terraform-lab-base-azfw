@@ -28,13 +28,6 @@ variable "apim_ai_gateway" {
   default = null
 }
 
-variable "apim_ai_gateway_subscription_key" {
-  description = "The subscription key for the APIM AI Gateway APIs. This is only used to demonstrate the model gateway pattern and is not required for Foundry to connect to an APIM instance hosting models. The APIM connection uses the Entra ID authentication using the project's managed identity"
-  type        = string
-  sensitive   = true
-  default     = null
-}
-
 variable "deploy_key_vault_connection_secrets" {
   description = "Specify whether BYO Key Vault will be used to store secrets for connections created within Foundry resource and projects that use key-based authentication"
   type        = bool
