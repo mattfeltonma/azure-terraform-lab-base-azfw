@@ -1806,7 +1806,10 @@ resource "azapi_resource" "foundry_managed_virtual_network" {
         # Restrict all outbound access unless excplicitly allowed via outbound rules
         isolationMode = "AllowOnlyApprovedOutbound"
 
-        firewallSku = "Standard"
+        #firewallSku = "Standard"
+
+        provisionNetworkNow = true
+
       }
     }
   }

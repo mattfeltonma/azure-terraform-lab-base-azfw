@@ -19,6 +19,8 @@
 ## Updates
 
 ### 2026
+* **March 31, 2026**
+  * Updated lab image
 * **March 6, 2026**
   * Updated OpenAI inferencing and authoring API specs
   * Added API to demonstrate Foundry model gateway pattern
