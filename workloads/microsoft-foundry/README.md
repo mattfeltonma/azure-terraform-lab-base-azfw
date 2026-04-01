@@ -23,6 +23,8 @@ AI was used to help with the format of this README file so if there is an issue 
 - [Usage](#usage)
 
 ## Updates
+* **3/31/2026**
+  * Added required property for managed vnet provisioning
 * **3/6/2026**
   * Added connections for AI Gateway
   * Added support for managed virtual network

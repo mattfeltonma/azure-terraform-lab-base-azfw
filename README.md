@@ -287,7 +287,6 @@ For basic single-region deployment:
 terraform apply -parallelism=3
 ```
 
-
 ### Custom Parallelism
 Azure ARM API has rate limits. Adjust parallelism based on your needs:
 ```bash
