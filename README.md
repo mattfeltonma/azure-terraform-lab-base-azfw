@@ -35,7 +35,7 @@ Hope any bit of this code helps save you some time or learn something new!
 ### 2026
 * **March 31, 2026**
   * ACA
-    * Added workload module for private ACA Environment
+    * Added [workload module for private ACA Environment](./workloads/azure-container-apps/)
   * Foundry
     * Updated Terraform to work with new managed vnet preview; added new required property
   * AI Gateway

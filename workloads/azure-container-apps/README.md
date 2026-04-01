@@ -112,7 +112,7 @@ If you want to dynamically provision a certificate for a custom domain, setup th
 | `aca_environment_domain_name` | `string` | `null` | Populate this attribute if you're provisioning the Azure Container Apps Environment with a custom domain using the workflow built into this template|
 | `cloudflare_api_token` | `string` | `null` | The API token for your Cloudflare account that can modify DNS records in the custom domain you are using the Azure Container Apps Environment|
 | `letsencrypt_account_key` | `object` | `null` | The Key Vault resource secret id that contains the PEM encoded private key to use for the Let's Encrypt account |
-| `letsencrypt_account_email` | `bool` | `false` | The email address to use for the Let's Encrypt account |
+| `letsencrypt_account_email` | `string` | `null` | The email address to use for the Let's Encrypt account |
 
 ## Quick Start
 
