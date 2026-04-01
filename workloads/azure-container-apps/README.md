@@ -78,8 +78,7 @@ The items pictured below in blue are deployed as part of this lab.
 ### Required Information
 Before deployment gather the following:
 
-1. The subnet in the workload virtual network that will be delegated to the Azure Container Apps Environment.
-
+1. The subnet in the workload virtual network that will be delegated to the Azure Container Apps Environment. This subnet must be delegated to Microsoft.App/environments.
 2. The subnet in the workload virtual network that where Private Endpoints will be created.
 
 ### Optional Information
