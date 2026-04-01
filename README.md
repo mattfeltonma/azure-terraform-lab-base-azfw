@@ -33,6 +33,13 @@ Hope any bit of this code helps save you some time or learn something new!
 ## Updates
 
 ### 2026
+* **March 31, 2026**
+  * ACA
+    * Added workload module for private ACA Environment
+  * Foundry
+    * Updated Terraform to work with new managed vnet preview; added new required property
+  * AI Gateway
+    * Updated image to reflect APIs deployed to support APIM/model gateway integration
 * **March 5, 2026**
   * Foundry Workload
     * Added sample connection objects to demonstrate new AI Gateway connection feature. 
