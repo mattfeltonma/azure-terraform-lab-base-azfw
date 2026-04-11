@@ -1,6 +1,41 @@
-variable "apim_private_dns_zone_name" {
-  description = "The name of the Private DNS Zone to create for the API Management instance"
+variable "apim_injection_subnet_id" {
+  description = "The subnet resource id to deploy the primary gateway to when using classic internal mode or v2 with VNet injection. The subnet must be delegated to Microsoft.Web/hostingEnvironments if using v2."
   type        = string
+  default = null
+  validation {
+    condition     = var.networking_model_v2 == "vnet_injected" || var.apim_generation_v2 == false ? var.apim_injection_subnet_id != null : true
+    error_message = "The apim_injection_subnet_id variable must be set when using classic internal mode or v2 with VNet injection."
+  }
+}
+
+variable "apim_integration_subnet_id" {
+  description = "The subnet resource id to use for regional VNet integration when using the v2 SKU with VNet integration. The subnet must be delegated to Microsoft.Web/serverFarms"
+  type        = string
+  default = null
+  validation {
+    condition     = var.networking_model_v2 == "vnet_integrated" ? var.apim_integration_subnet_id != null : true
+    error_message = "The apim_integration_subnet_id variable must be set when using the v2 SKU with VNet integration"
+  }
+}
+
+variable "apim_pe_subnet_id" {
+  description = "The subnet resource id to deploy the Private Endpoints to when using the v2 SKU with VNet integration."
+  type        = string
+  default = null
+  validation {
+    condition     = var.networking_model_v2 == "vnet_integrated" ? var.apim_pe_subnet_id != null : true
+    error_message = "The apim_pe_subnet_id variable must be set when using the v2 SKU with VNet integration"
+  }
+}
+
+variable "apim_private_dns_zone_name" {
+  description = "The name of the Private DNS Zone to create for the API Management instance. This is only required when provisioning a certificate for a custom domain."
+  type        = string
+  default = null
+  validation {
+    condition     = var.provision_certificate == true ? var.apim_private_dns_zone_name != null : true
+    error_message = "The apim_private_dns_zone_name variable must be set when provision_certificate is set to true"
+  }
 }
 
 variable "apim_generation_v2" {
@@ -33,15 +68,37 @@ variable "entra_id_tenant_id" {
   type        = string
 }
 
-variable "key_vault_id" {
-  description = "The Key Vault resource id of the workload Key Vault."
-  type        = string
+variable "letsencrypt_account_key" {
+  description = "This is optional. The Key Vault secret id that contains the PEM encoded private key to use for the Let's Encrypt account"
+  type = object({
+    key_vault_resource_id = string
+    secret_name           = string
+  })
+  default = null
+  validation {
+    condition     = var.provision_certificate == true ? var.letsencrypt_account_key != null : true
+    error_message = "The letsencrypt_account_key variable must be set when provision_certificate is set to true"
+  }
 }
 
-variable "key_vault_secret_id_versionless" {
-  description = "The versionless secret id of the certificate to be used for the custom domain. This is required if you are not provisioning a certificate using the ACME provider"
+variable "letsencrypt_account_email" {
+  description = "This is optional. The email address to use for the Let's Encrypt account"
   type        = string
   default     = null
+  validation {
+    condition     = var.provision_certificate == true ? var.letsencrypt_account_email != null : true
+    error_message = "The letsencrypt_account_email variable must be set when provision_certificate is set to true"
+  }
+}
+
+variable "networking_model_v2" {
+  description = "The networking model for the APIM if using v2. This can be set to VNet injection or VNet integration. If set to VNet integration an additional private endpoint will be created."
+  type        = string
+  default     = "vnet_injected"
+  validation {
+    condition     = !var.apim_generation_v2 || contains(["vnet_injected", "vnet_integrated"], var.networking_model_v2)
+    error_message = "The networking_model_v2 variable must be set to either vnet_injected or vnet_integrated"
+  }
 }
 
 variable "provision_certificate" {
@@ -102,11 +159,6 @@ variable "service_principal_object_id" {
   type        = string
 }
 
-variable "subnet_id" {
-  description = "The subnet id to deploy the primary API Gateway to"
-  type        = string
-}
-
 variable "subnet_id_private_endpoints" {
   description = "The subnet id to deploy the Private Endpoints to"
   type        = string
@@ -120,6 +172,11 @@ variable "subscription_id_infrastructure" {
 variable "tags" {
   description = "The tags to apply to the resource"
   type        = map(string)
+}
+
+variable "trusted_ip" {
+  description = "The trusted IP address or CIDR block to allow access to the Front Door"
+  type        = string
 }
 
 variable "user_object_id" {
