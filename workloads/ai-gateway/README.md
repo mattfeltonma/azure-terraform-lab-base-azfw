@@ -19,6 +19,9 @@
 ## Updates
 
 ### 2026
+* **April 10, 2026**
+  * Added support for VNet integration + Private Endpoint model
+  * Added Hello World API
 * **March 31, 2026**
   * Updated lab image
 * **March 6, 2026**
