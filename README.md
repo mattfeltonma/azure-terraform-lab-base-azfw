@@ -33,6 +33,10 @@ Hope any bit of this code helps save you some time or learn something new!
 ## Updates
 
 ### 2026
+* **April 10, 2026**
+  * AI Gateway
+    * Added support for [v2 VNet integration and private endpoint](https://learn.microsoft.com/en-us/azure/api-management/integrate-vnet-outbound)
+    * Added a hello world API for testing
 * **March 31, 2026**
   * ACA
     * Added [workload module for private ACA Environment](./workloads/azure-container-apps/)
