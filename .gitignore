@@ -27,6 +27,8 @@ __pycache__/
 *.pyo
 *.pyd
 venv
+.venv
+.env*
 
 # Ignore AI Gateway specific artifacts
 signed-cert.pem

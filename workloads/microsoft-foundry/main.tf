@@ -360,7 +360,7 @@ resource "azurerm_key_vault" "key_vault_foundry_secrets" {
   # then this can be set to false and the network_acls section can be removed and instead rely on NSP ruleset.
   # TODO: 2/2026 BYO Key Vault for Secrets was bugged with NSPs so can't use them as of now until remediated. Follow-up with PG before changing.
   #
-  
+
   public_network_access_enabled = true
   network_acls {
     default_action             = "Deny"
@@ -914,10 +914,19 @@ resource "azapi_resource" "foundry_resource" {
 
       # Network-related controls
 
-      # TODO: 2/2026 Note here that disabling public network access with network_acls exceptions is done because NSP is enforced. While NSP is enforced, diagnostic settins for Foundry do continue to flow
-      # to upstream log analytics workspace. However, it's questionable whether this is end state. Track this because if it changes, network_acls will need to be added and likely outobund control rules to limit data
-      # exfiltration risks
-      publicNetworkAccess = "Disabled"
+      # TODO: 4/2026 Update this to disable public network access and remove network_acls section and rely on NSP once cross-NSP links are supported to 
+      # resolve the issue of diagnostic settings delivery of signals being blocked by NSP
+      publicNetworkAccess = "Enabled"
+      networkAcls = {
+        defaultAction = "Deny"
+        bypass        = "AzureServices"
+        ipRules = [
+          {
+            value = var.trusted_ip
+          }
+        ]
+        virtualNetworkRules = []
+      }
 
       # For Standard Agents either configure VNet injection or managed virtual network
       networkInjections = var.agent_service_outbound_networking != null ? [
@@ -984,7 +993,7 @@ resource "azapi_resource" "assoc_foundry_resource" {
   body = {
     properties = {
       # TODO: 2/2026 Switch NSP to enforced mode once cross NSP links are introduced. This will resolve diagnostic settings delivery of signals being blocked by NSP
-      accessMode = "Enforced"
+      accessMode = "Learning"
       privateLinkResource = {
         id = azapi_resource.foundry_resource.id
       }
@@ -1262,7 +1271,7 @@ resource "azurerm_cosmosdb_account" "cosmosdb_foundry" {
     azurerm_log_analytics_workspace.log_analytics_workspace_workload
   ]
 
-  name                = "cosdbmsf${var.region_code}${var.random_string}"
+  name = "cosdbmsf${var.region_code}${var.random_string}"
   location            = var.region
   resource_group_name = azurerm_resource_group.rg_foundry.name
   tags                = var.tags
@@ -1309,9 +1318,9 @@ resource "azurerm_monitor_diagnostic_setting" "diag_cosmosdb" {
     azurerm_cosmosdb_account.cosmosdb_foundry
   ]
 
-  name                       = "diag-base"
-  target_resource_id         = azurerm_cosmosdb_account.cosmosdb_foundry[0].id
-  log_analytics_workspace_id = azurerm_log_analytics_workspace.log_analytics_workspace_workload.id
+  name                           = "diag-base"
+  target_resource_id             = azurerm_cosmosdb_account.cosmosdb_foundry[0].id
+  log_analytics_workspace_id     = azurerm_log_analytics_workspace.log_analytics_workspace_workload.id
   log_analytics_destination_type = "Dedicated"
 
   enabled_log {
@@ -1370,7 +1379,7 @@ resource "azurerm_search_service" "ai_search_foundry" {
   name                = "aismsf${var.region_code}${var.random_string}"
   resource_group_name = azurerm_resource_group.rg_foundry.name
   location            = var.region
-  tags                = var.tags
+  tags     = var.tags
 
   # Associate the AI Search instance with the user-assigned managed identity created earlier
   identity {
@@ -1394,7 +1403,7 @@ resource "azurerm_search_service" "ai_search_foundry" {
   # TODO: 2/2026 Remove network_acls section to rely on NSP rules once cross NSP links are supported to address the issue of diagnostic settings delivery of signals being blocked by NSP
   # Disable public network access and rely on Private Endpoints and firewall exception or NSP
   public_network_access_enabled = false
-  network_rule_bypass_option = "AzureServices"
+  network_rule_bypass_option    = "AzureServices"
 
   lifecycle {
     ignore_changes = [
@@ -1470,8 +1479,8 @@ resource "azurerm_storage_account" "storage_account_foundry" {
 
   name                = "stmsf${var.region_code}${var.random_string}"
   resource_group_name = azurerm_resource_group.rg_foundry.name
-  location            = var.region
-  tags = merge(var.tags, { SecurityControl = "Ignore" })
+  location = var.region
+  tags     = merge(var.tags, { SecurityControl = "Ignore" })
 
   account_kind             = "StorageV2"
   account_tier             = "Standard"
@@ -1492,7 +1501,7 @@ resource "azurerm_storage_account" "storage_account_foundry" {
     ip_rules = [
       var.trusted_ip
     ]
-    bypass         = ["AzureServices"]
+    bypass = ["AzureServices"]
   }
 
   lifecycle {
@@ -1844,6 +1853,30 @@ resource "azapi_resource" "managed_vnet_outbound_rule_service_tag_azure_monitor"
   }
 }
 
+resource "azapi_resource" "managed_vnet_outbound_rule_apim" {
+  count = var.agents && var.agent_service_outbound_networking.type == "managed_virtual_network" && var.apim_ai_gateway != null ? 1 : 0
+
+  depends_on = [
+    azapi_resource.managed_vnet_outbound_rule_service_tag_azure_monitor
+  ]
+
+  type                      = "Microsoft.CognitiveServices/accounts/managedNetworks/outboundRules@2025-10-01-preview"
+  name                      = "AllowAIGateway"
+  parent_id                 = azapi_resource.foundry_managed_virtual_network[0].id
+  schema_validation_enabled = false
+
+  body = {
+    properties = {
+      type = "PrivateEndpoint"
+      destination = {
+        serviceResourceId = var.apim_ai_gateway[0].apim_resource_id
+        subresourceTarget = "Gateway"
+      }
+      category = "UserDefined"
+    }
+  }
+}
+
 ########## Create the Foundry project using the module
 ##########
 ##########
@@ -1874,6 +1907,7 @@ module "foundry_project_agents" {
     #azapi_resource.managed_vnet_outbound_rule_pe_search,
     #azapi_resource.managed_vnet_outbound_rule_pe_storage_blob,
     azapi_resource.managed_vnet_outbound_rule_service_tag_azure_monitor,
+    azapi_resource.managed_vnet_outbound_rule_apim,
     # Wait for conditional resources
     azurerm_key_vault.key_vault_foundry_secrets,
     azurerm_private_endpoint.pe_key_vault_secrets_foundry,
@@ -1908,8 +1942,8 @@ module "foundry_project_agents" {
   shared_external_openai                     = var.external_openai
 
   ## Optional info for project-level connections
-  apim_ai_gateway = var.apim_ai_gateway
-  model_gateway = var.model_gateway
+  apim_ai_gateway       = var.apim_ai_gateway
+  model_gateway         = var.model_gateway
   model_gateway_api_key = var.model_gateway_api_key
 
   # User object id to grant permissions over project

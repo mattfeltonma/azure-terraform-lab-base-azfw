@@ -375,12 +375,12 @@ resource "azurerm_key_vault_certificate" "aca_env_certificate" {
     }
 
     x509_certificate_properties {
-      subject            = "CN=*.ace.${var.aca_environment_domain_name}"
+      subject            = "CN=*.${var.aca_environment_domain_name}"
       validity_in_months = 12
 
       subject_alternative_names {
         dns_names = [
-          "*.ace.${var.aca_environment_domain_name}"
+          "*.${var.aca_environment_domain_name}"
         ]
       }
 
@@ -401,6 +401,7 @@ resource "acme_registration" "aca_env_certificate_registration_letsencrypt" {
 
   count = var.aca_environment_domain_name != null ? 1 : 0
 
+  # Replaces \r\n with newlines to account for the way Key Vault butchers the PEM
   account_key_pem = replace(
   replace(
     data.azurerm_key_vault_secret.letsencrypt_account_key[0].value,
@@ -411,6 +412,11 @@ resource "acme_registration" "aca_env_certificate_registration_letsencrypt" {
   "\n"
   )
   email_address   = var.letsencrypt_account_email
+
+  # Preserve account key so it can be reused
+  lifecycle {
+    prevent_destroy = true
+  }
 }
 
 ## Create a certificate request using Cloudflare for DNS validation
@@ -431,6 +437,8 @@ resource "acme_certificate" "aca_env_certificate_request" {
       CLOUDFLARE_DNS_API_TOKEN = var.cloudflare_api_token
     }
   }
+  # Don't revoke certs on destroy since they are revoked every 90 days and I may want to redeploy
+  revoke_certificate_on_destroy = false
 }
 
 ## Add the signed certificate into Key Vault to complete the CSR process
@@ -594,7 +602,7 @@ resource "time_sleep" "wait_umi_aca_env" {
 }
 
 ## Create an Azure RBAC role assignment granting the user-assigned managed identity for Container Apps Environment
-## the Key Vault Certificate User role on the Key Vault instance holding the certificate for the Container Apps Environment custom domain
+## the Key Vault Secrets User role on the Key Vault instance holding the certificate for the Container Apps Environment custom domain
 ##
 resource "azurerm_role_assignment" "umi_aca_env_key_vault_certificate_user" {
   depends_on = [
@@ -605,7 +613,7 @@ resource "azurerm_role_assignment" "umi_aca_env_key_vault_certificate_user" {
   count = var.aca_environment_domain_name != null ? 1 : 0
 
   scope                = azurerm_key_vault.key_vault_aca_env_custom_domain[0].id
-  role_definition_name = "Key Vault Certificate User"
+  role_definition_name = "Key Vault Secrets User"
   principal_id         = azurerm_user_assigned_identity.umi_aca_env.principal_id
 }
 
@@ -627,7 +635,8 @@ resource "time_sleep" "wait_umi_aca_env_permissions" {
 resource "azapi_resource" "container_app_environment" {
   depends_on = [
     null_resource.wait_for_app_insights_aca,
-    time_sleep.wait_umi_aca_env_permissions
+    time_sleep.wait_umi_aca_env_permissions,
+    null_resource.merge_certificate
   ]
 
   type      = "Microsoft.App/managedEnvironments@2025-07-01"
@@ -677,9 +686,13 @@ resource "azapi_resource" "container_app_environment" {
           workloadProfileType = "D4"
           maximumCount = 2
           minimumCount = 1
-        }
+        },
+        # This profile is automatically created but this keeps Terraform state standard
+        {
+          name = "Consumption",
+          workloadProfileType = "Consumption"      }
       ]
-      
+
       # Disable zone redundancy to mitigate capacity issues
       zoneRedundant = false
     }
