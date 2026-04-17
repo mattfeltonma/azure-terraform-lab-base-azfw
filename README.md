@@ -33,6 +33,13 @@ Hope any bit of this code helps save you some time or learn something new!
 ## Updates
 
 ### 2026
+* **April 17, 2026**
+  * AI Gateway
+    * Separate sample notebook into connection setup/test
+  * Microsoft Foundry
+    * Put NSPs into Learning mode to allow diagnostic logs to be delivered to LAW. This addresses current limitation with NSPs and will be remediated with NSP linking in the future
+  * Container Apps
+    * Modified SANs on cert to make the domain name simpler
 * **April 10, 2026**
   * AI Gateway
     * Added support for [v2 VNet integration and private endpoint](https://learn.microsoft.com/en-us/azure/api-management/integrate-vnet-outbound)
