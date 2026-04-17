@@ -1,0 +1,4 @@
+# You must rename this file to .env
+
+PROJECT_ENDPOINT=https://FOUNDRY_ACCOUNT_NAME.services.ai.azure.com/api/projects/PROJECT_NAME
+MODEL_DEPLOYMENT_NAME=mygatewayconnection/gpt-4o

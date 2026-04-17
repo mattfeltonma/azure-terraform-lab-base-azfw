@@ -47,7 +47,7 @@ variable "resource_group_name_dns" {
 }
 
 variable "subnet_id_aca" {
-  description = "The subnet id that has been delegated to be used by Azure Container Apps Environment"
+  description = "The subnet id that has been delegated to be used by Azure Container Apps Environment. The subnet must be delegated to Microsoft.App/environments"
   type        = string
 }
 
