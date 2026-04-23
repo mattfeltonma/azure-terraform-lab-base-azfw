@@ -427,6 +427,11 @@ resource "acme_registration" "apim_gateway_certificate_registration_letsencrypt"
   "\n"
   )
   email_address   = var.letsencrypt_account_email
+
+  # Preserve account key so it can be reused
+  lifecycle {
+    prevent_destroy = true
+  }
 }
 
 ## Create a certificate request using Cloudflare for DNS validation
@@ -443,6 +448,8 @@ resource "acme_certificate" "apim_gateway_certificate_request" {
       CLOUDFLARE_DNS_API_TOKEN = var.cloudflare_api_token
     }
   }
+  # Don't revoke certs on destroy since they are revoked every 90 days and I may want to redeploy
+  revoke_certificate_on_destroy = false
 }
 
 ## Add the signed certificate into Key Vault to complete the CSR process

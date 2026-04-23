@@ -94,11 +94,13 @@ If you want to dynamically provision a certificate for a custom domain, setup th
 
 | Variable | Type | Description |
 |----------|------|-------------|
-| `region` | `string` | The name of the Azure region to provision the resources to |
-| `region_code` | `string` | The code of the Azure region to provision the resources to |
+
+| `edicated_workload_profile` | `bool` | Setting this to true creates a dedicated workload profile in addition to the consumption workload profile |
 | `purpose` | `string` | The three character purpose of the resource |
 | `random_string` | `string` | The random string to append to the resource name (alphanumeric, 6 characters or less) |
 | `resource_group_name_dns` | `string` | The name of the resource group where the Private DNS Zones exist |
+| `region` | `string` | The name of the Azure region to provision the resources to |
+| `region_code` | `string` | The code of the Azure region to provision the resources to |
 | `subnet_id_aca` | `string` | The resource id of the subnet that has been delegated for Azure Container Environments |
 | `subnet_id_svc` | `string` | The resource id of the subnet where Private Endpoints will be deployed |
 | `subscription_id_infrastructure` | `string` | The subscription where the Private DNS Zones are located |

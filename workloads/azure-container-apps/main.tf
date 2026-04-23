@@ -680,18 +680,23 @@ resource "azapi_resource" "container_app_environment" {
       }
 
       # Create a dedicated workload profile
-      workloadProfiles =[
-        {
-          name = "dedicated"
-          workloadProfileType = "D4"
-          maximumCount = 2
-          minimumCount = 1
-        },
-        # This profile is automatically created but this keeps Terraform state standard
-        {
-          name = "Consumption",
-          workloadProfileType = "Consumption"      }
-      ]
+      workloadProfiles = concat(
+        var.dedicated_workload_profile ? [
+          {
+            name = "dedicated"
+            workloadProfileType = "D4"
+            maximumCount = 2
+            minimumCount = 1
+          }
+        ] : [],
+        [
+          # This profile is automatically created but this keeps Terraform state standard
+          {
+            name = "Consumption",
+            workloadProfileType = "Consumption"      
+          }
+        ]
+      ) 
 
       # Disable zone redundancy to mitigate capacity issues
       zoneRedundant = false

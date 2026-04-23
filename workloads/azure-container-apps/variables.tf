@@ -11,6 +11,12 @@ variable "cloudflare_api_token" {
   default     = null
 }
 
+variable "dedicated_workload_profile" {
+  description = "Optionally provision a dedicated workload profile in addition to the default consumption workload profile."
+  type        = bool
+  default     = false
+}
+
 variable "letsencrypt_account_key" {
   description = "This is optional. The Key Vault secret id that contains the PEM encoded private key to use for the Let's Encrypt account"
   type = object({
