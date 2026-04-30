@@ -84,9 +84,34 @@ locals {
     "wl2" = local.vnet_cidr_wl2_sec
   } : {}
 
-  ##### Combine regional Private DNS Zones and user-specified zones and filter out secondary environment
+  ##### Combine these default zones, regional Private DNS Zones and user-specified zones and filter out secondary environment
   ##### when it isn't present.
-  
+
+  default_private_dns_namespaces = {
+    acr               = "privatelink.azurecr.io"
+    ai_search         = "privatelink.search.windows.net"
+    aml_api           = "privatelink.api.azureml.ms"
+    aml_notebooks     = "privatelink.notebooks.azure.net"
+    apim_private      = "privatelink.azure-api.net"
+    azure_sql         = "privatelink.database.windows.net"
+    azure_postgres    = "privatelink.postgres.database.azure.com"
+    cosmos_sql        = "privatelink.documents.azure.com"
+    cosmos_mongo      = "privatelink.mongo.cosmos.azure.com"
+    cosmos_table      = "privatelink.table.cosmos.azure.com"
+    event_grid        = "privatelink.eventgrid.azure.net"
+    foundry_ai        = "privatelink.services.ai.azure.com"
+    foundry_cognitive = "privatelink.cognitiveservices.azure.com"
+    foundry_openai    = "privatelink.openai.azure.com"
+    key_vault         = "privatelink.vaultcore.azure.net"
+    service_bus       = "privatelink.servicebus.windows.net"
+    storage_blob      = "privatelink.blob.core.windows.net"
+    storage_dfs       = "privatelink.dfs.core.windows.net"
+    storage_file      = "privatelink.file.core.windows.net"
+    storage_queue     = "privatelink.queue.core.windows.net"
+    storage_table     = "privatelink.table.core.windows.net"
+    web_app           = "privatelink.azurewebsites.net"
+  }
+
   # Construct regional Private DNS Zones
   aks_private_dns_namespace_primary   = "privatelink.${var.environment_details["primary"].region_name}.azmk8s.io"
   aks_private_dns_namespace_secondary = contains(keys(var.environment_details), "secondary") ? "privatelink.${var.environment_details["secondary"].region_name}.azmk8s.io" : null
@@ -109,8 +134,9 @@ locals {
 
   # Merge the user-specified zones with the regional zones
   private_dns_namespaces_with_regional_zones = merge(
-    var.private_dns_namespaces,
-    local.regional_private_dns_namespaces_map
+    local.default_private_dns_namespaces,
+    local.regional_private_dns_namespaces_map,
+    var.private_dns_namespaces
   )
 
   # Filter out null values when secondary environment isn't present

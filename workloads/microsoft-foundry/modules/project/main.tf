@@ -564,7 +564,7 @@ resource "azapi_resource" "foundry_project_capability_host" {
 ########## 
 ##########
 
-## Create an Azure RBAC role assignment granting the project system-managed identity the CosmosDB Built-in Data Contributor role
+## Create an Azure RBAC role assignment granting the project managed identity the CosmosDB Built-in Data Contributor role
 ## on the CosmosDB account to allow data plane access
 resource "azurerm_cosmosdb_sql_role_assignment" "cosmosdb_db_sql_role_aifp_account" {
   count = var.agents ? 1 : 0

@@ -186,8 +186,11 @@ resource "azurerm_public_ip" "pip_vpn_gateway" {
   sku                 = "Standard"
   tags                = var.tags
 
-  # As of 9/2025 public IPs are deployed as zone redundant by default even if you don't specify zones
-  # https://azure.microsoft.com/en-us/blog/azure-public-ips-are-now-zone-redundant-by-default/
+  # As of 4/2026 public IPs are deployed as zone redundant by default even if you don't specify zones
+  # https://azure.microsoft.com/en-us/blog/azure-public-ips-are-now-zone-redundant-by-default/ however VPN Gateway
+  # requires you specify the zones
+
+  zones = ["1", "2", "3"]
 
   lifecycle {
     ignore_changes = [
@@ -233,7 +236,7 @@ resource "azurerm_virtual_network_gateway" "vgw_vpn" {
   resource_group_name = var.resource_group_name
   type                = "Vpn"
   vpn_type            = "RouteBased"
-  sku                 = "VpnGw1"
+  sku                 = "VpnGw1AZ"
 
   active_active = true
   enable_bgp    = true

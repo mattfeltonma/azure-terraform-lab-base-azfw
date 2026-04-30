@@ -929,7 +929,7 @@ resource "azapi_resource" "foundry_resource" {
       }
 
       # For Standard Agents either configure VNet injection or managed virtual network
-      networkInjections = var.agent_service_outbound_networking != null ? [
+      networkInjections = var.agent_service_outbound_networking.type != "none" ? [
         {
           scenario                   = "agent"
           subnetArmId                = var.agent_service_outbound_networking.type == "vnet_injection" ? var.agent_service_outbound_networking.subnet_id : null

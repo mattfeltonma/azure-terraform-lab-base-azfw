@@ -780,7 +780,8 @@ resource "azurerm_api_management" "apim" {
   resource_group_name = azurerm_resource_group.rg_ai_gateway.name
   tags                = var.tags
 
-  public_network_access_enabled = false
+  # TODO: As of 4/2026 API throws an error if this is set to false at creation
+  public_network_access_enabled = true
 
   publisher_name  = var.publisher_name
   publisher_email = var.publisher_email
@@ -968,6 +969,25 @@ resource "azurerm_private_endpoint" "pe_apim_vnet_integrated" {
       tags["created_date"],
       tags["created_by"]
     ]
+  }
+}
+
+## Patch the Azure API Management service instance to disable public network access
+## For a v2 instance this can only be done after a Private Endpoint is created
+resource "azapi_update_resource" "apim_disable_public_network_access" {
+  depends_on = [
+    azurerm_private_endpoint.pe_apim_vnet_integrated
+  ]
+
+  count = var.apim_generation_v2 == true && var.networking_model_v2 == "vnet_integrated" ? 1 : 0
+
+  type        = "Microsoft.ApiManagement/service@2024-05-01"
+  resource_id = azurerm_api_management.apim.id
+
+  body = {
+    properties = {
+      publicNetworkAccess = "Disabled"
+    }
   }
 }
 
