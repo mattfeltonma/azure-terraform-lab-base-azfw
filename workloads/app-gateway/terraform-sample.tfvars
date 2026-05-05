@@ -1,19 +1,21 @@
-aca_environment_domain_name = "ace.somedomain.com"
-dedicated_workload_profile = false
-letsencrypt_account_email = "someone@email.com"
+app_gateway_domain_name = "agw.example.com"
+letsencrypt_account_email = "admin@example.com"
 letsencrypt_account_key = {
-  key_vault_resource_id = "/subscriptions/XXXXXXXX-XXXX-XXXX-XXXX-XXXXXXXXXXXX/resourceGroups/rg-centralcredentials/providers/Microsoft.KeyVault/vaults/kvcentraljog"
+  key_vault_resource_id = "/subscriptions/00000000-0000-0000-0000-000000000000/resourceGroups/rg-centralcredentials/providers/Microsoft.KeyVault/vaults/kvcentral"
   secret_name           = "letsencryptaccountkey"
 }
+private_ip_address = "10.0.8.10"
+public_listener = true
 region = "westus3"
 region_code = "wus3"
-random_string = "1gq"
-resource_group_name_dns = "rgshwus31gq"
-subnet_id_aca = "/subscriptions/XXXXXXXX-XXXX-XXXX-XXXX-XXXXXXXXXXXX/resourceGroups/rgwlwus31gq/providers/Microsoft.Network/virtualNetworks/vnetwl2wus31gq/subnets/snet-vint"
-subnet_id_svc = "/subscriptions/XXXXXXXX-XXXX-XXXX-XXXX-XXXXXXXXXXXX/resourceGroups/rgwlwus31gq/providers/Microsoft.Network/virtualNetworks/vnetwl2wus31gq/subnets/snet-svc"
-subscription_id_infrastructure = "XXXXXXXX-XXXX-XXXX-XXXX-XXXXXXXXXXXX"
+random_string = "abc123"
+resource_group_name_dns = "rgshwus3abc"
+subnet_id_app_gateway = "/subscriptions/00000000-0000-0000-0000-000000000000/resourceGroups/rgwlwus3abc/providers/Microsoft.Network/virtualNetworks/vnetwl1wus3abc/subnets/snet-agw"
+subnet_id_svc = "/subscriptions/00000000-0000-0000-0000-000000000000/resourceGroups/rgwlwus3abc/providers/Microsoft.Network/virtualNetworks/vnetwl1wus3abc/subnets/snet-svc"
+subscription_id_infrastructure = "00000000-0000-0000-0000-000000000000"
 tags = {
   environment = "lab"
-  product     = "aca"
+  product     = "agw"
 }
-trusted_ip = "X.X.X.X"
+tcp_port = 3389
+trusted_ip = "0.0.0.0"
