@@ -2,7 +2,7 @@
 ##########
 ##########
 
-###Create resource group the resources in this deployment will be deployed to
+### Create resource group the resources in this deployment will be deployed to
 ##
 resource "azurerm_resource_group" "rg_foundry" {
   name     = "rgmsf${var.region_code}${var.random_string}"
@@ -418,31 +418,31 @@ resource "azurerm_role_assignment" "umi_foundry_resource_secrets_key_vault_secre
 
 ## Associate the Key Vault used to store secrets for connections with the Network Security Perimeter profile
 ## TODO: 12/2025 Uncomment this when the NSP issue is sorted out with this secrets vault
-#resource "azapi_resource" "assoc_foundry_key_vault_secrets" {
-#  count = var.deploy_key_vault_connection_secrets && var.agents ? 1 : 0
-#  depends_on = [
-#    azurerm_key_vault.key_vault_foundry_secrets
-#  ]
-#
-#  type                      = "Microsoft.Network/networkSecurityPerimeters/resourceAssociations@2024-07-01"
-#  name                      = "rapkvfoundrysecrets"
-#  location                  = var.region
-#  parent_id                 = azapi_resource.nsp_ai_resources.id
-#  schema_validation_enabled = false
+resource "azapi_resource" "assoc_foundry_key_vault_secrets" {
+  count = var.deploy_key_vault_connection_secrets && var.agents ? 1 : 0
+  depends_on = [
+    azurerm_key_vault.key_vault_foundry_secrets
+  ]
 
-#  body = {
-#    properties = {
-#.     # TODO: 2/2026 Switch NSP to enforced mode once cross NSP links are introduced. This will resolve diagnostic settings delivery of signals being blocked by NSP
-#      accessMode = "Learning"
-#      privateLinkResource = {
-#        id = azurerm_key_vault.key_vault_foundry_secrets[0].id
-#      }
-#      profile = {
-#        id = azapi_resource.profile_nsp_foundry_key_vault_secrets[0].id
-#      }
-#    }
-#  }
-#}
+  type                      = "Microsoft.Network/networkSecurityPerimeters/resourceAssociations@2024-07-01"
+  name                      = "rapkvfoundrysecrets"
+  location                  = var.region
+  parent_id                 = azapi_resource.nsp_ai_resources.id
+  schema_validation_enabled = false
+
+  body = {
+    properties = {
+      # TODO: 2/2026 Switch NSP to enforced mode once cross NSP links are introduced. This will resolve diagnostic settings delivery of signals being blocked by NSP
+      accessMode = "Learning"
+      privateLinkResource = {
+        id = azurerm_key_vault.key_vault_foundry_secrets[0].id
+      }
+      profile = {
+        id = azapi_resource.profile_nsp_foundry_key_vault_secrets[0].id
+      }
+    }
+  }
+}
 
 ## Sleep for 120 seconds to allow the Azure RBAC permissions to replicate across Azure
 ##
@@ -738,93 +738,12 @@ resource "azurerm_private_endpoint" "pe_key_vault_cmk_foundry" {
 #########
 #########
 
-## TODO: 1/2026 Uncomment and update this once azurerm supports managed vnet with Foundry
-##       Don't forget to update all references back to this resource once that is complete
-##
-## Create the Foundry account and configure it to use VNet injection to support BYO VNet
-##
-#resource "azurerm_cognitive_account" "foundry_resource" {
-#  depends_on = [
-#    # Wait for user-assigned managed identity creation and permissioning
-#    time_sleep.wait_umi_foundry_resource,
-#    time_sleep.wait_key_vault_secrets_umi_rbac_replication,
-#    time_sleep.wait_key_vault_cmk_umi_rbac_replication,
-#    ## Wait for creation of optional Private Endpoints if using CMK or BYO Key Vault
-#    azurerm_private_endpoint.pe_key_vault_cmk_foundry,
-#    azurerm_private_endpoint.pe_key_vault_secrets_foundry,
-#    ## Wait for creation of optional resources used to support agent tool usage and tracing
-#    time_sleep.wait_appins,
-#    azapi_resource.bing_grounding_search_foundry,
-#    ## Wait for creation of optional Key Vaults and CMK if configured
-#    azurerm_key_vault.key_vault_foundry_secrets,
-#    azurerm_key_vault.key_vault_foundry_cmk,
-#    azapi_resource.assoc_foundry_key_vault_cmk,
-#    #TODO: 12/2025 Uncomment this when the NSP issue is sorted out with this secrets vault
-#    #azapi_resource.assoc_foundry_key_vault_secrets,
-#    azapi_resource.access_rule_foundry_key_vault_secrets_ipprefix,
-#    azapi_resource.access_rule_foundry_key_vault_cmk_subscription
-#  ]
-
-#  name                = "msf${var.region_code}${var.random_string}"
-#  location            = var.region
-#  resource_group_name = azurerm_resource_group.rg_foundry.name
-#  # Adding tag specific to my environment. Not needed outside my environment
-#  tags = merge(var.tags, { SecurityControl = "Ignore" })
-
-#  # Create an AI Foundry resource
-#  kind                       = "AIServices"
-#  sku_name                   = "S0"
-#  project_management_enabled = true
-
-# Assigned a system-assigned managed identity or user-assigned managed identity based on variable
-#  identity {
-#    type = var.resource_managed_identity_type == "umi" ? "UserAssigned" : "SystemAssigned"
-#    identity_ids = var.resource_managed_identity_type == "umi" ? [
-#      azurerm_user_assigned_identity.umi_foundry_resource[0].id
-#    ] : null
-#  }
-
-# Set the Foundry resource to use a CMK if the var.foundry_encryption is set to "cmk"
-#  dynamic "customer_managed_key" {
-#    for_each = var.foundry_encryption == "cmk" && var.resource_managed_identity_type == "umi" ? [1] : []
-
-#    content {
-#      key_vault_key_id   = azurerm_key_vault_key.key_foundry_cmk[0].id
-#      identity_client_id = azurerm_user_assigned_identity.umi_foundry_resource[0].client_id
-#    }
-#  }
-
-# Set custom subdomain name for DNS names created for this Foundry resource
-#  custom_subdomain_name = "msf${var.region_code}${var.random_string}"
-
-# TODO: 2/2026 Note here that disabling public network access with network_acls exceptions is done because NSP is enforced. While NSP is enforced, diagnostic settins for Foundry do continue to flow
-# to upstream log analytics workspace. However, it's questionable whether this is end state. Track this
-# public_network_access_enabled = false
-
-# TODO: 12/2025 Add option for managed virtual network after more testing
-# Enable VNet injection for Standard Agents if agent_service_outbound_networking.type is set
-#  dynamic "network_injection" {
-#    for_each = var.agent_service_outbound_networking.type != "none" ? [1] : []
-#    content {
-#      scenario  = "agent"
-#      subnet_id = var.agent_service_outbound_networking.subnet_id
-#    }
-#  }
-
-#  lifecycle {
-#    ignore_changes = [
-#      tags["created_date"],
-#      tags["created_by"],
-#      customer_managed_key
-#    ]
-#  }
-#}
-
 ## AGENTS + MANAGED VNET DEPLOYMENTS ONLY
 ## Create an Azure RBAC role assignment granting the user-assigned managed identity for the Microsoft Foundry resource
 ## the Azure AI Enterprise Network Connection Approver role on the resource group to allow approval of private endpoints created in the
 ## managed virtual network
 ##
+
 resource "azurerm_role_assignment" "umi_foundry_resource_azure_ai_enterprise_network_connection_approver" {
   count = var.resource_managed_identity_type == "umi" && var.agent_service_outbound_networking.type == "managed_virtual_network" && var.agents ? 1 : 0
 
@@ -848,9 +767,12 @@ resource "time_sleep" "wait_managed_vnet_permissions_replication" {
   create_duration = "120s"
 }
 
-## TODO: 1/2026 Remove this section once azurerm supports managed vnet with Foundry
-##
-## Create the Microsoft Foundry resource/account 
+######### Create Foundry resource, diagnostic settings, and associate with Network Security Perimeter
+######### 
+######### TODO: 5/2026 Switch to AzureRm when it fully supports all required options
+
+## Create the Microsoft Foundry resource/account
+## 
 resource "azapi_resource" "foundry_resource" {
   depends_on = [
     # Wait for user-assigned managed identity creation and permissioning
@@ -1271,7 +1193,7 @@ resource "azurerm_cosmosdb_account" "cosmosdb_foundry" {
     azurerm_log_analytics_workspace.log_analytics_workspace_workload
   ]
 
-  name = "cosdbmsf${var.region_code}${var.random_string}"
+  name                = "cosdbmsf${var.region_code}${var.random_string}"
   location            = var.region
   resource_group_name = azurerm_resource_group.rg_foundry.name
   tags                = var.tags
@@ -1379,7 +1301,7 @@ resource "azurerm_search_service" "ai_search_foundry" {
   name                = "aismsf${var.region_code}${var.random_string}"
   resource_group_name = azurerm_resource_group.rg_foundry.name
   location            = var.region
-  tags     = var.tags
+  tags                = var.tags
 
   # Associate the AI Search instance with the user-assigned managed identity created earlier
   identity {
@@ -1479,8 +1401,8 @@ resource "azurerm_storage_account" "storage_account_foundry" {
 
   name                = "stmsf${var.region_code}${var.random_string}"
   resource_group_name = azurerm_resource_group.rg_foundry.name
-  location = var.region
-  tags     = merge(var.tags, { SecurityControl = "Ignore" })
+  location            = var.region
+  tags                = merge(var.tags, { SecurityControl = "Ignore" })
 
   account_kind             = "StorageV2"
   account_tier             = "Standard"
@@ -1645,6 +1567,57 @@ resource "azapi_resource" "assoc_foundry_storage_account" {
   }
 }
 
+## AGENTS DEPLOYMENT
+## Create Azure Container Registry to store container images for Foundry hosted agents
+##
+resource "azurerm_container_registry" "acr_foundry" {
+  count = var.agents ? 1 : 0
+
+  depends_on = [
+    azurerm_resource_group.rg_foundry,
+    azurerm_log_analytics_workspace.log_analytics_workspace_workload
+  ]
+
+  name                = "acrmsf${var.region_code}${var.random_string}"
+  resource_group_name = azurerm_resource_group.rg_foundry.name
+  location            = var.region
+  tags                = var.tags
+
+  # Use Premium SKU to support PEs and Network Rule Set
+  sku           = "Premium"
+  admin_enabled = false
+
+  # TODO: 5/2026 Modify this to disabled once hosted agents supports a private ACR
+  public_network_access_enabled = true
+
+  lifecycle {
+    ignore_changes = [
+      tags["created_date"],
+      tags["created_by"]
+    ]
+  }
+}
+
+## Create diagnostic settings for the Container Registry
+##
+resource "azurerm_monitor_diagnostic_setting" "diag_acr_foundry" {
+  count = var.agents ? 1 : 0
+  depends_on = [
+    azurerm_container_registry.acr_foundry
+  ]
+
+  name                       = "diag-base"
+  target_resource_id         = azurerm_container_registry.acr_foundry[0].id
+  log_analytics_workspace_id = azurerm_log_analytics_workspace.log_analytics_workspace_workload.id
+
+  enabled_log {
+    category = "ContainerRegistryRepositoryEvents"
+  }
+  enabled_log {
+    category = "ContainerRegistryLoginEvents"
+  }
+}
+
 ########## Create Private Endpoints for resources used by Standard Agents or in RAG DEMO
 ##########
 ##########
@@ -1769,6 +1742,43 @@ resource "azurerm_private_endpoint" "pe_storage_blob_foundry" {
   }
 }
 
+## Create Private Endpoint for the Azure Container Registry used for hosted agents
+##
+resource "azurerm_private_endpoint" "pe_acr_foundry" {
+  count = var.agents ? 1 : 0
+  depends_on = [
+    azurerm_container_registry.acr_foundry
+  ]
+
+  name                = "pe${azurerm_container_registry.acr_foundry[0].name}acr"
+  location            = var.region
+  resource_group_name = azurerm_resource_group.rg_foundry.name
+  tags                = var.tags
+  subnet_id           = var.subnet_id_private_endpoints
+
+  custom_network_interface_name = "nic${azurerm_container_registry.acr_foundry[0].name}acr"
+  private_service_connection {
+    name                           = "peconn${azurerm_container_registry.acr_foundry[0].name}acr"
+    private_connection_resource_id = azurerm_container_registry.acr_foundry[0].id
+    subresource_names              = ["registry"]
+    is_manual_connection           = false
+  }
+
+  private_dns_zone_group {
+    name = "zoneconn${azurerm_container_registry.acr_foundry[0].name}acr"
+    private_dns_zone_ids = [
+      "/subscriptions/${var.subscription_id_infrastructure}/resourceGroups/${var.resource_group_name_dns}/providers/Microsoft.Network/privateDnsZones/privatelink.azurecr.io"
+    ]
+  }
+
+  lifecycle {
+    ignore_changes = [
+      tags["created_date"],
+      tags["created_by"]
+    ]
+  }
+}
+
 ########## Create a managed virtual network and required outbound rules
 ##########
 ##########
@@ -1787,9 +1797,11 @@ resource "azapi_resource" "foundry_managed_virtual_network" {
     azurerm_cosmosdb_account.cosmosdb_foundry,
     azurerm_search_service.ai_search_foundry,
     azurerm_storage_account.storage_account_foundry,
+    azurerm_container_registry.acr_foundry,
     azurerm_private_endpoint.pe_aisearch_foundry,
     azurerm_private_endpoint.pe_cosmosdb_foundry,
     azurerm_private_endpoint.pe_storage_blob_foundry,
+    azurerm_private_endpoint.pe_acr_foundry,
     azapi_resource.bing_grounding_search_foundry,
     azurerm_application_insights.appins_foundry,
     # Wait for conditional resources
@@ -1896,9 +1908,11 @@ module "foundry_project_agents" {
     azurerm_cosmosdb_account.cosmosdb_foundry,
     azurerm_search_service.ai_search_foundry,
     azurerm_storage_account.storage_account_foundry,
+    azurerm_container_registry.acr_foundry,
     azurerm_private_endpoint.pe_aisearch_foundry,
     azurerm_private_endpoint.pe_cosmosdb_foundry,
     azurerm_private_endpoint.pe_storage_blob_foundry,
+    azurerm_private_endpoint.pe_acr_foundry,
     azapi_resource.bing_grounding_search_foundry,
     azurerm_application_insights.appins_foundry,
     # Wait for managed VNet if applicable
@@ -1923,6 +1937,10 @@ module "foundry_project_agents" {
   first_project                      = true
   project_number                     = 1
 
+  # Basic settings
+  agents                                     = var.agents ? true : false
+  project_managed_identity_type              = var.project_managed_identity_type
+
   ## Required info for resource-level connections (Remove once this bug is fixed)
   shared_byo_key_vault_resource_id      = var.deploy_key_vault_connection_secrets ? azurerm_key_vault.key_vault_foundry_secrets[0].id : null
   shared_app_insights_resource_id       = azurerm_application_insights.appins_foundry[0].id
@@ -1930,13 +1948,12 @@ module "foundry_project_agents" {
   deploy_key_vault_connection_secrets   = var.deploy_key_vault_connection_secrets ? true : false
 
   ## Required info for project-level connections
-  agents                                     = var.agents ? true : false
-  project_managed_identity_type              = var.project_managed_identity_type
   shared_agent_ai_search_resource_id         = azurerm_search_service.ai_search_foundry[0].id
   shared_agent_cosmosdb_account_resource_id  = azurerm_cosmosdb_account.cosmosdb_foundry[0].id
   shared_agent_cosmosdb_account_endpoint     = azurerm_cosmosdb_account.cosmosdb_foundry[0].endpoint
   shared_agent_storage_account_resource_id   = azurerm_storage_account.storage_account_foundry[0].id
   shared_agent_storage_account_blob_endpoint = azurerm_storage_account.storage_account_foundry[0].primary_blob_endpoint
+  shared_agent_container_registry_resource_id = azurerm_container_registry.acr_foundry[0].id
   shared_bing_grounding_search_resource_id   = azapi_resource.bing_grounding_search_foundry[0].id
   shared_bing_grounding_search_api_key       = data.azapi_resource_action.bing_api_keys[0].output.key1
   shared_external_openai                     = var.external_openai
@@ -1945,40 +1962,6 @@ module "foundry_project_agents" {
   apim_ai_gateway       = var.apim_ai_gateway
   model_gateway         = var.model_gateway
   model_gateway_api_key = var.model_gateway_api_key
-
-  # User object id to grant permissions over project
-  user_object_id = var.user_object_id
-}
-
-## RAG DEMO DEPLOYMENT
-## Create a Foundry project suited for basic RAG demo use cases
-##
-module "foundry_project_rag" {
-  count = var.deploy_rag_resources ? 1 : 0
-
-  depends_on = [
-    # Wait for creation of Foundry resource
-    azapi_resource.foundry_resource,
-    azurerm_private_endpoint.pe_foundry_resource,
-    azapi_resource.assoc_foundry_resource,
-    # Wait for resources to support RAG demo
-    azurerm_search_service.ai_search_foundry,
-    azurerm_storage_account.storage_account_foundry,
-    azurerm_private_endpoint.pe_aisearch_foundry,
-    azurerm_private_endpoint.pe_storage_blob_foundry
-  ]
-
-  source                             = "./modules/project"
-  foundry_resource_id                = azapi_resource.foundry_resource.id
-  foundry_resource_resource_group_id = azurerm_resource_group.rg_foundry.id
-  region                             = var.region
-  first_project                      = true
-  project_number                     = 100
-
-  ## Required info for project-level connections
-  agents                        = var.agents ? true : false
-  project_managed_identity_type = var.project_managed_identity_type
-  shared_external_openai        = var.external_openai
 
   # User object id to grant permissions over project
   user_object_id = var.user_object_id
