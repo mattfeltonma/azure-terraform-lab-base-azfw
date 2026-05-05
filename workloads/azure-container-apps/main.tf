@@ -286,7 +286,7 @@ resource "azapi_resource" "assoc_aca_env_key_vault_custom_domain" {
   count = var.aca_environment_domain_name != null ? 1 : 0
 
   type                      = "Microsoft.Network/networkSecurityPerimeters/resourceAssociations@2024-07-01"
-  name                      = "rapkvfoundrysecrets"
+  name                      = "rapkvacaenv"
   location                  = var.region
   parent_id                 = azapi_resource.nsp_aca_resources[0].id
   schema_validation_enabled = false
@@ -635,8 +635,8 @@ resource "time_sleep" "wait_umi_aca_env_permissions" {
 resource "azapi_resource" "container_app_environment" {
   depends_on = [
     null_resource.wait_for_app_insights_aca,
-    time_sleep.wait_umi_aca_env_permissions,
-    null_resource.merge_certificate
+    null_resource.merge_certificate,
+    time_sleep.wait_umi_aca_env_permissions
   ]
 
   type      = "Microsoft.App/managedEnvironments@2025-07-01"
