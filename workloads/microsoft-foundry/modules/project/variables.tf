@@ -144,6 +144,12 @@ variable "shared_agent_cosmosdb_account_resource_id" {
   default     = null
 }
 
+variable "shared_agent_container_registry_resource_id" {
+  description = "The resource id of the Azure Container Registry to connect to the Foundry project"
+  type        = string
+  default     = null
+}
+
 variable "shared_agent_cosmosdb_account_endpoint" {
   description = "The endpoint of the CosmosDB account to connect to the Foundry project"
   type        = string

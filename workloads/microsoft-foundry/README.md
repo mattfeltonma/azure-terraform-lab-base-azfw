@@ -23,6 +23,8 @@ AI was used to help with the format of this README file so if there is an issue 
 - [Usage](#usage)
 
 ## Updates
+* **5/7/2026**
+   * Added ACR and ACR connection to support hosted agents
 * **3/31/2026**
   * Added required property for managed vnet provisioning
 * **3/6/2026**
@@ -31,16 +33,9 @@ AI was used to help with the format of this README file so if there is an issue 
 * **12/29/2025**
   * Initial release
 
-## TODOS
-* Add support for managed vnet model for agents after testing
-* Add support for APIM connectivity after testing
-
 ## Limitations
-* 12/25 - Foundry with UMIs for CMK is available in a limited set of regions
-* 12/25 - AI Search must use an SMI when interacting with storage account in same region
-* 12/25 - AI Search must use SMI when using import data wizard and setting Foundry resource for vectorization
-* 12/25 - Foundry resource must support local authentication in order to use AzureOpenAIEmbedding skillset
-* 12/25 - CosmosDB support for Network Security Groups is still preview
+* 5/26 - Support for VNet injection with Class A IP space [is available in a limited set of regions](https://github.com/microsoft-foundry/foundry-samples/tree/main/infrastructure/infrastructure-setup-bicep/15-private-network-standard-agent-setup)
+* 5/26 - CosmosDB support [for Network Security Groups is still preview](https://learn.microsoft.com/en-us/azure/private-link/network-security-perimeter-concepts#onboarded-private-link-resources)
 * 12/25 - Usage of Key Vault for storage of connection secrets require a project first be created before creating the resource-level connection
 * 12/25 - Key Vault used for secrets storage cannot be placed in Network Security Perimeter due to an issue with secrets API calls and the usage of Network Security Perimeters
 
