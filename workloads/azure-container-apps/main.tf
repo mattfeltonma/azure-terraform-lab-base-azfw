@@ -412,11 +412,6 @@ resource "acme_registration" "aca_env_certificate_registration_letsencrypt" {
   "\n"
   )
   email_address   = var.letsencrypt_account_email
-
-  # Preserve account key so it can be reused
-  lifecycle {
-    prevent_destroy = true
-  }
 }
 
 ## Create a certificate request using Cloudflare for DNS validation

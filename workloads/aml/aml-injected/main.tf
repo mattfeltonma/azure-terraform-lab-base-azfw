@@ -548,15 +548,14 @@ resource "azurerm_role_assignment" "umi_aml_st_file_data_contributor" {
 
 ## Pause for 120 seconds to allow the role assignments to propagate through Azure
 ##
-resource "time_sleep" "wait_umi_hub_workspace_assignments_main" {
+resource "time_sleep" "wait_umi_aml_assignments_main" {
   count = var.workspace_identity == "umi" ? 1 : 0
 
   depends_on = [
     azurerm_role_assignment.umi_aml_rg_aiadministrator,
-    azurerm_role_assignment.umi_aml_st_file_data_contributor,
     azurerm_role_assignment.umi_aml_kv_admin,
-    azurerm_role_assignment.umi_aml_st_blob_data_contributor,
-    azurerm_role_assignment.umi_aml_st_file_data_contributor
+    azurerm_role_assignment.umi_aml_st_file_data_contributor,
+    azurerm_role_assignment.umi_aml_st_blob_data_contributor
   ]
   create_duration = "120s"
 }
@@ -574,8 +573,8 @@ resource "azurerm_machine_learning_workspace" "aml_workspace" {
     azurerm_container_registry.acr_aml_workspace,
     azurerm_storage_account.storage_account_aml_workspace,
     azurerm_key_vault.key_vault_aml_workspace,
-    time_sleep.wait_umi_hub_workspace_assignments_main,
-    azurerm_storage_account.storage_account_data
+    azurerm_storage_account.storage_account_data,
+    time_sleep.wait_umi_aml_assignments_main
   ]
 
   name                = "amlws${var.region_code}${var.random_string}"
@@ -1051,6 +1050,9 @@ resource "azurerm_private_endpoint" "pe_storage_account_data_dfs" {
 ########## Create connections to data storage account from AML Workspace
 ##########
 ##########
+
+## Create connection for optional storage account
+##
 resource "azurerm_machine_learning_datastore_blobstorage" "aml_workspace_datastore_data_blob" {
   depends_on = [
     azurerm_machine_learning_workspace.aml_workspace,
@@ -1194,7 +1196,7 @@ resource "azurerm_role_assignment" "wk_perm_data_scientist_project" {
 }
 
 ## Create Azure RBAC Role assignment granting the Storage File Data Privileged Contributor role on the
-## AML Hub storage account to the user within the scope of the file share used by the AML Project
+## AML storage account to the user within the scope of the file share used by the AML Project
 ##
 resource "azurerm_role_assignment" "wk_pr_perm_st_file_data_privileged_contributor" {
   depends_on = [
@@ -1207,7 +1209,7 @@ resource "azurerm_role_assignment" "wk_pr_perm_st_file_data_privileged_contribut
 }
 
 ## Create Azure RBAC Role assignment granting the Storage Blob Data Contributor role on the
-## AML Hub storage account to the user within the scope of the containers used by the AML Project
+## AML storage account to the user within the scope of the containers used by the AML Project
 ##
 resource "azurerm_role_assignment" "wk_pr_perm_st_blob_data_contributor" {
   depends_on = [
