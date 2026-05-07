@@ -222,38 +222,6 @@ resource "azapi_resource" "conn_project_ai_search_foundry" {
   }
 }
 
-## Create the Foundry project connection the Azure Container Registry
-##
-resource "azapi_resource" "conn_project_container_registry_foundry" {
-  count = var.agents ? 1 : 0
-
-  depends_on = [
-    time_sleep.wait_project_identities,
-    azapi_resource.conn_project_ai_search_foundry
-  ]
-
-  type                      = "Microsoft.CognitiveServices/accounts/projects/connections@2025-04-01-preview"
-  name                      = local.agent_container_registry_connection_name
-  parent_id                 = azapi_resource.foundry_project.id
-  schema_validation_enabled = false
-
-  body = {
-    name = local.agent_container_registry_connection_name
-    properties = {
-      category = "ContainerRegistry"
-      target   = "https://${local.agent_container_registry_name}.azurecr.io" 
-      authType = "ManagedIdentity"
-      credentials = {
-        clientId = var.project_managed_identity_type == "umi" ? azurerm_user_assigned_identity.foundry_project_umi[0].client_id : azapi_resource.foundry_project.output.identity.client_id
-        ResourceId = var.shared_agent_container_registry_resource_id
-      }
-      metadata = {
-        ResourceId = var.shared_agent_container_registry_resource_id
-      }
-    }
-  }
-}
-
 ## Create the Foundry project connections for APIM AI Gateway to demonstration static models
 ##
 resource "azapi_resource" "conn_project_apim_ai_gateway_foundry_static" {
@@ -261,7 +229,7 @@ resource "azapi_resource" "conn_project_apim_ai_gateway_foundry_static" {
 
   depends_on = [
     time_sleep.wait_project_identities,
-    azapi_resource.conn_project_container_registry_foundry
+    azapi_resource.conn_project_ai_search_foundry
   ]
 
   type                      = "Microsoft.CognitiveServices/accounts/projects/connections@2025-10-01-preview"
@@ -641,7 +609,7 @@ resource "azurerm_role_assignment" "storage_blob_data_owner_foundry_project" {
 
 ## Create the necessary role assignment to allow the Foundry project managed identity to pull container images for hosted agents if using project-managed identity for the capability host
 ##
-resource "azurerm_role_assignment" "acr_container_registry_repository_reader_foundry_project" {
+resource "azurerm_role_assignment" "acr_container_registry_acr_pull_foundry_project" {
   count = var.agents ? 1 : 0
 
   depends_on = [
@@ -650,7 +618,7 @@ resource "azurerm_role_assignment" "acr_container_registry_repository_reader_fou
 
   name                 = var.project_managed_identity_type == "umi" ? uuidv5("dns", "${local.agent_container_registry_name}${azurerm_user_assigned_identity.foundry_project_umi[0].principal_id}acrpull") : uuidv5("dns", "${local.agent_container_registry_name}${azapi_resource.foundry_project.output.identity.principalId}acrpull")
   scope                = var.shared_agent_container_registry_resource_id
-  role_definition_name = "Container Registry Repository Reader"
+  role_definition_name = "AcrPull"
   principal_id         = var.project_managed_identity_type == "umi" ? azurerm_user_assigned_identity.foundry_project_umi[0].principal_id : azapi_resource.foundry_project.output.identity.principalId
 }
 
