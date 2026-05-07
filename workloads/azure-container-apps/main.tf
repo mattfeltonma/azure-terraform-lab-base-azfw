@@ -403,15 +403,15 @@ resource "acme_registration" "aca_env_certificate_registration_letsencrypt" {
 
   # Replaces \r\n with newlines to account for the way Key Vault butchers the PEM
   account_key_pem = replace(
-  replace(
-    data.azurerm_key_vault_secret.letsencrypt_account_key[0].value,
-    "\\r\\n",
+    replace(
+      data.azurerm_key_vault_secret.letsencrypt_account_key[0].value,
+      "\\r\\n",
+      "\n"
+    ),
+    "\\n",
     "\n"
-  ),
-  "\\n",
-  "\n"
   )
-  email_address   = var.letsencrypt_account_email
+  email_address = var.letsencrypt_account_email
 }
 
 ## Create a certificate request using Cloudflare for DNS validation
@@ -647,16 +647,16 @@ resource "azapi_resource" "container_app_environment" {
         destination = "azure-monitor"
       }
       # Set a custom domain for the environment
-      customDomainConfiguration =  var.aca_environment_domain_name != null ? {
+      customDomainConfiguration = var.aca_environment_domain_name != null ? {
         dnsSuffix = "${var.aca_environment_domain_name}"
         certificateKeyVaultProperties = {
           keyVaultUrl = azurerm_key_vault_certificate.aca_env_certificate[0].versionless_secret_id
-          identity = azurerm_user_assigned_identity.umi_aca_env.id
+          identity    = azurerm_user_assigned_identity.umi_aca_env.id
         }
       } : null
       # Set the managed resource group to hold the internal load balancer
       infrastructureResourceGroup = "rgmanagedcaepriv${var.region_code}${var.random_string}"
-      
+
       # Enforce encryption in transit between Container Apps
       peerTrafficConfiguration = {
         encryption = {
@@ -666,11 +666,11 @@ resource "azapi_resource" "container_app_environment" {
 
       # Disable public network access
       publicNetworkAccess = "Disabled"
-    
+
       # Configure the environment to use the designated subnet for inbound and outbound traffic
       # to the environment
       vnetConfiguration = {
-        internal = true
+        internal               = true
         infrastructureSubnetId = var.subnet_id_aca
       }
 
@@ -678,20 +678,20 @@ resource "azapi_resource" "container_app_environment" {
       workloadProfiles = concat(
         var.dedicated_workload_profile ? [
           {
-            name = "dedicated"
+            name                = "dedicated"
             workloadProfileType = "D4"
-            maximumCount = 2
-            minimumCount = 1
+            maximumCount        = 2
+            minimumCount        = 1
           }
         ] : [],
         [
           # This profile is automatically created but this keeps Terraform state standard
           {
-            name = "Consumption",
-            workloadProfileType = "Consumption"      
+            name                = "Consumption",
+            workloadProfileType = "Consumption"
           }
         ]
-      ) 
+      )
 
       # Disable zone redundancy to mitigate capacity issues
       zoneRedundant = false
@@ -762,7 +762,7 @@ resource "azurerm_private_dns_a_record" "a_record_aca_env_custom_domain" {
   zone_name           = var.aca_environment_domain_name
   resource_group_name = var.resource_group_name_dns
   ttl                 = 10
-  records             = [
+  records = [
     azapi_resource.container_app_environment.output.properties.staticIp
   ]
 }

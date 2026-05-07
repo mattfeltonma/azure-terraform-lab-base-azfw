@@ -73,7 +73,6 @@ variable "workspace_encryption" {
     condition     = contains(["cmk", "pmk"], var.workspace_encryption)
     error_message = "The workspace_encryption variable must be either 'cmk' or 'pmk'."
   }
-
 }
 
 variable "workspace_managed_identity" {

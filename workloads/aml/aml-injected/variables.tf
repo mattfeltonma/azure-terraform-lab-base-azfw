@@ -1,14 +1,10 @@
-variable "workspace_identity" {
-  description = "The identity name to use for the AML Workspace. This should be smi (system-assigned managed identity) or umi (user-managed identity)"
-  type        = string
-  default     = "smi"
-  validation {
-    condition     = contains(["smi", "umi"], var.workspace_identity)
-    error_message = "Workspace identity must be either 'smi' or 'umi'."
-  }
+variable "key_vault_cmk_rbac_enabled" {
+  description = "Sets the Key Vault to either support RBAC or Access Policies."
+  type        = bool
+  default     = false
 }
 
-variable "random_string" {
+variable "random_string" { 
   description = "The random string to append to the resource name"
   type        = string
 }
@@ -34,11 +30,6 @@ variable "ssh_public_key" {
   default     = null
 }
 
-variable "sub_id_dns" {
-  description = "The subscription where the Private DNS Zones are located"
-  type        = string
-}
-
 variable "subnet_id_amlcompute" {
   description = "The subnet id to deploy the AML Compute Cluster to"
   type        = string
@@ -46,6 +37,16 @@ variable "subnet_id_amlcompute" {
 
 variable "subnet_id_private_endpoints" {
   description = "The subnet id to deploy the private endpoints to"
+  type        = string
+}
+
+variable "subscription_id_infrastructure" {
+  description = "The subscription id where the infrastructure resources are deployed"
+  type        = string
+}
+
+variable "subscription_id_workload" {
+  description = "The subscription id where the workload resources will be deployed to"
   type        = string
 }
 
@@ -64,7 +65,22 @@ variable "user_object_id" {
   type        = string
 }
 
-variable "vm_size" {
-  description = "The size of the VM to use for the build compute cluster and compute instance"
+variable "workspace_encryption" {
+  description = "The type of encryption to use for the AML Workspace. Options are 'cmk' or 'pmk'"
   type        = string
+  default = "pmk"
+  validation {
+    condition     = contains(["cmk", "pmk"], var.workspace_encryption)
+    error_message = "The workspace_encryption variable must be either 'cmk' or 'pmk'."
+  }
+}
+
+variable "workspace_managed_identity" {
+  description = "The identity name to use for the AML Workspace. This should be smi (system-assigned managed identity) or umi (user-managed identity)"
+  type        = string
+  default     = "smi"
+  validation {
+    condition     = contains(["smi", "umi"], var.workspace_managed_identity)
+    error_message = "Workspace identity must be either 'smi' or 'umi'."
+  }
 }
