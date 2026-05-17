@@ -561,7 +561,7 @@ resource "azapi_resource" "foundry_project_capability_host" {
 }
 
 ########## Create the required non-human role assignments for the AI Foundry project managed identity to access the CosmosDB account and Azure Storage data plane
-########## 
+########## and to pull images from the container registry for hosted agents
 ##########
 
 ## Create an Azure RBAC role assignment granting the project managed identity the CosmosDB Built-in Data Contributor role
@@ -607,11 +607,26 @@ resource "azurerm_role_assignment" "storage_blob_data_owner_foundry_project" {
   EOT
 }
 
+## Create the necessary role assignment to allow the Foundry project managed identity to pull container images for hosted agents if using project-managed identity for the capability host
+##
+resource "azurerm_role_assignment" "acr_container_registry_acr_pull_foundry_project" {
+  count = var.agents ? 1 : 0
+
+  depends_on = [
+    azapi_resource.foundry_project_capability_host
+  ]
+
+  name                 = var.project_managed_identity_type == "umi" ? uuidv5("dns", "${local.agent_container_registry_name}${azurerm_user_assigned_identity.foundry_project_umi[0].principal_id}acrpull") : uuidv5("dns", "${local.agent_container_registry_name}${azapi_resource.foundry_project.output.identity.principalId}acrpull")
+  scope                = var.shared_agent_container_registry_resource_id
+  role_definition_name = "AcrPull"
+  principal_id         = var.project_managed_identity_type == "umi" ? azurerm_user_assigned_identity.foundry_project_umi[0].principal_id : azapi_resource.foundry_project.output.identity.principalId
+}
+
 ########## Create the required human role assignments to allow the user to perform common tasks within the Foundry project
 ########## 
 ##########
 
-## Create a role assignment granting a user the Azure AI User role which will allow the user
+## Create a role assignment granting a user the Foundry User role which will allow the user
 ## the ability to utilize the sample Foundry project
 resource "azurerm_role_assignment" "foundry_user" {
   depends_on = [
@@ -620,7 +635,7 @@ resource "azurerm_role_assignment" "foundry_user" {
 
   name                 = uuidv5("dns", "${var.user_object_id}${local.foundry_resource_name}${azapi_resource.foundry_project.name}user")
   scope                = azapi_resource.foundry_project.id
-  role_definition_name = "Azure AI User"
+  role_definition_name = "Foundry User"
   principal_id         = var.user_object_id
 }
 

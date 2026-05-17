@@ -33,6 +33,10 @@ Hope any bit of this code helps save you some time or learn something new!
 ## Updates
 
 ### 2026
+
+* **May 5, 2026**
+  * Foundry
+    * Added ACR to support hosted agents
 * **April 17, 2026**
   * AI Gateway
     * Separate sample notebook into connection setup/test

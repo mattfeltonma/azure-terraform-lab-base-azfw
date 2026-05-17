@@ -1,7 +1,7 @@
 ########## Create core resources
 ##########
 ##########
-
+ 
 ## Create resource group the resources in this deployment will be deployed to
 ##
 resource "azurerm_resource_group" "rg_aml_workspace" {
@@ -1826,6 +1826,9 @@ resource "azurerm_machine_learning_compute_instance" "aml_compute_instance" {
 
   virtual_machine_size = "Standard_D2s_v3"
   description          = "Compute instance for Jupyter notebooks and experiments"
+
+  # Nework controls
+  node_public_ip_enabled = false
 
   # Identity controls
   local_auth_enabled = false

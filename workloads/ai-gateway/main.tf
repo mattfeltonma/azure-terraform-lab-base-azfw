@@ -512,7 +512,7 @@ resource "cloudflare_dns_record" "custom_domain_cname" {
 resource "azurerm_private_dns_zone" "private_dns_zone_apim" {
   provider = azurerm.subscription_infrastructure
 
-  count = var.provision_certificate == true ? 1 : 0
+  count = var.provision_certificate == true && var.existing_zone == false ? 1 : 0
 
   depends_on = [
     azurerm_resource_group.rg_ai_gateway
@@ -535,7 +535,7 @@ resource "azurerm_private_dns_zone" "private_dns_zone_apim" {
 resource "azurerm_private_dns_zone_virtual_network_link" "dns_vnet_link_apim" {
   provider = azurerm.subscription_infrastructure
 
-  count = var.provision_certificate == true ? 1 : 0
+  count = var.provision_certificate == true && var.existing_zone == false ? 1 : 0
 
   depends_on = [
     azurerm_private_dns_zone.private_dns_zone_apim
@@ -2029,12 +2029,12 @@ resource "azurerm_private_dns_a_record" "dns_a_record_apim_gateway" {
   count = var.provision_certificate == true ? 1 : 0
 
   name                = "apim-example${var.random_string}"
-  zone_name           = azurerm_private_dns_zone.private_dns_zone_apim[0].name
+  zone_name           = var.existing_zone == false ? azurerm_private_dns_zone.private_dns_zone_apim[0].name : var.apim_private_dns_zone_name
   resource_group_name = var.resource_group_dns
   ttl                 = 10
 
   records = [
-    azurerm_api_management.apim.private_ip_addresses[0]
+     var.networking_model_v2 == "vnet_integrated" ? azurerm_private_endpoint.pe_apim_vnet_integrated[0].private_service_connection[0].private_ip_address : azurerm_api_management.apim.private_ip_addresses[0]
   ]
 }
 

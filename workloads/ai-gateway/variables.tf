@@ -68,6 +68,13 @@ variable "entra_id_tenant_id" {
   type        = string
 }
 
+
+variable "existing_zone" {
+  description = "Boolean to indicate if the Private DNS Zone already exists. If it doesn't already exist, it will be created and linked to the shared services virtual network."
+  type        = bool
+  default     = true
+}
+
 variable "letsencrypt_account_key" {
   description = "This is optional. The Key Vault secret id that contains the PEM encoded private key to use for the Let's Encrypt account"
   type = object({
