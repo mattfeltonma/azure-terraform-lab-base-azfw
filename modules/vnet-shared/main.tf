@@ -977,7 +977,7 @@ resource "azurerm_bastion_host" "bastion" {
     public_ip_address_id = azurerm_public_ip.pip_bastion.id
   }
 
-  # Use basic SKU since a single virtual network
+  # Use Basic SKU to save costs
   sku = "Basic"
 
   tags = var.tags
@@ -1064,7 +1064,7 @@ resource "azurerm_windows_virtual_machine" "vm" {
   source_image_reference {
     publisher = "MicrosoftWindowsServer"
     offer     = "WindowsServer"
-    sku       = "2022-Datacenter"
+    sku       = "2025-Datacenter"
     version   = "latest"
   }
 
