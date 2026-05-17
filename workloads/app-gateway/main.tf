@@ -516,6 +516,34 @@ resource "time_sleep" "wait_umi_app_gateway_permissions" {
 ##########
 ##########
 
+## Create a very basic Application Gateway WAF policy
+##
+resource "azurerm_web_application_firewall_policy" "app_gateway_waf_policy" {
+  depends_on = [ 
+      azurerm_resource_group.rg_app_gateway
+   ]
+
+  name                = "wafpolicyappgw${var.region_code}${var.random_string}"
+  resource_group_name = azurerm_resource_group.rg_app_gateway.name
+  location            = var.region
+  tags                = var.tags
+
+  policy_settings {
+    enabled                     = true
+    mode                        = "Detection"
+    request_body_check          = true
+    file_upload_limit_in_mb     = 100
+    max_request_body_size_in_kb = 128
+  }
+
+  managed_rules {
+    managed_rule_set {
+      type    = "OWASP"
+      version = "3.2"
+    }
+  }
+}
+
 ## Create a public IP address to associate to the Application Gateway if it is being deployed with a public listener
 ##
 resource "azurerm_public_ip" "app_gateway_public_ip" {
@@ -535,6 +563,7 @@ resource "azurerm_public_ip" "app_gateway_public_ip" {
 resource "azurerm_application_gateway" "app_gateway" {
   depends_on = [
     null_resource.merge_certificate,
+    azurerm_web_application_firewall_policy.app_gateway_waf_policy,
     time_sleep.wait_umi_app_gateway_permissions
   ]
 
@@ -556,15 +585,8 @@ resource "azurerm_application_gateway" "app_gateway" {
     tier     = "WAF_v2"
     capacity = 1
   }
-
-  waf_configuration {
-    enabled            = true
-    firewall_mode      = "Detection"
-    rule_set_type      = "OWASP"
-    rule_set_version   = "3.2"
-    request_body_check = true
-
-  }
+  
+  firewall_policy_id = azurerm_web_application_firewall_policy.app_gateway_waf_policy.id
 
   ## Create frontend IP configurations and gateway ip configuration
   ##
@@ -609,15 +631,18 @@ resource "azurerm_application_gateway" "app_gateway" {
 
   # Create a frontend port for TCP proxy for the private listener
   # The public and private listener can't share the same frontend port for TCP
-  frontend_port {
-    name = local.frontend_port_tcp_proxy_name_private
-    port = var.tcp_port
+  dynamic "frontend_port" {
+    for_each = var.tcp_port != null ? [1] : []
+    content {
+      name = local.frontend_port_tcp_proxy_name_private
+      port = var.tcp_port
+    }
   }
 
   # Create a frontend port for TCP proxy for the public listener
   # The public and private listener can't share the same frontend port for TCP
   dynamic "frontend_port" {
-    for_each = var.public_listener == true ? [1] : []
+    for_each = var.public_listener == true && var.tcp_port != null ? [1] : []
     content {
       name = local.frontend_port_tcp_proxy_name_public
       port = var.tcp_port + 2
@@ -626,15 +651,18 @@ resource "azurerm_application_gateway" "app_gateway" {
 
   # Create a frontend port for TLS proxy for the private listener
   # The public and private listener can't share the same frontend port for TLS
-  frontend_port {
+  dynamic "frontend_port" {
+    for_each = var.tcp_port != null ? [1] : []
+    content {
       name = local.frontend_port_tls_proxy_name_private
       port = var.tcp_port + 1
+    }
   }
 
   # Create a frontend port for TLS proxy for the public listener if configured to deploy a public listener
   # The public and private listener can't share the same frontend port for TLS
   dynamic "frontend_port" {
-    for_each = var.public_listener == true ? [1] : []
+    for_each = var.public_listener == true && var.tcp_port != null ? [1] : []
     content {
       name = local.frontend_port_tls_proxy_name_public
       port = var.tcp_port + 3
@@ -674,23 +702,29 @@ resource "azurerm_application_gateway" "app_gateway" {
   }
 
   # Create the custom probe for TCP
-  probe {
-    name                = local.probe_tcp_name
-    protocol            = "Tcp"
-    port                = var.tcp_port
-    interval            = 30
-    timeout             = 30
-    unhealthy_threshold = 3
+  dynamic "probe" {
+    for_each = var.tcp_port != null ? [1] : []
+    content {
+      name                = local.probe_tcp_name
+      protocol            = "Tcp"
+      port                = var.tcp_port
+      interval            = 30
+      timeout             = 30
+      unhealthy_threshold = 3
+    }
   }
 
   # Create the custom probe for TLS
-  probe {
-    name                = local.probe_tls_name
-    protocol            = "Tls"
-    port                = var.tcp_port
-    interval            = 30
-    timeout             = 30
-    unhealthy_threshold = 3
+  dynamic "probe" {
+    for_each = var.tcp_port != null ? [1] : []
+    content {
+      name                = local.probe_tls_name
+      protocol            = "Tls"
+      port                = var.tcp_port
+      interval            = 30
+      timeout             = 30
+      unhealthy_threshold = 3
+    }
   }
 
   ## Create empty backend address pools
@@ -732,24 +766,30 @@ resource "azurerm_application_gateway" "app_gateway" {
   }
 
   # Create the backend settings for TCP
-  backend {
-    name                           = local.backend_tcp_settings_tcp_proxy_default
-    port                           = var.tcp_port
-    protocol                       = "Tcp"
-    client_ip_preservation_enabled = true
-    probe_name                     = local.probe_tcp_name
-    timeout_in_seconds             = 20
+  dynamic "backend" {
+    for_each = var.tcp_port != null ? [1] : []
+    content {
+      name                           = local.backend_tcp_settings_tcp_proxy_default
+      port                           = var.tcp_port
+      protocol                       = "Tcp"
+      client_ip_preservation_enabled = true
+      probe_name                     = local.probe_tcp_name
+      timeout_in_seconds             = 20
+    }
   }
 
   # Create the backend settings for TLS
-  backend {
-    name                           = local.backend_tls_settings_tls_proxy_default
-    port                           = var.tcp_port
-    protocol                       = "Tls"
-    client_ip_preservation_enabled = true
-    probe_name                     = local.probe_tls_name
-    timeout_in_seconds             = 20
-    host_name = "testapp.local"
+  dynamic "backend" {
+      for_each = var.tcp_port != null ? [1] : []
+      content {
+      name                           = local.backend_tls_settings_tls_proxy_default
+      port                           = var.tcp_port
+      protocol                       = "Tls"
+      client_ip_preservation_enabled = true
+      probe_name                     = local.probe_tls_name
+      timeout_in_seconds             = 20
+      host_name = "testapp.local"
+    }
   }
 
   # SSL certificate used for HTTPS and TLS listeners
@@ -803,7 +843,7 @@ resource "azurerm_application_gateway" "app_gateway" {
 
   # Create listener for tcp associated to the public ip address if creating a public listener
   dynamic "listener" {
-    for_each = var.public_listener == true ? [1] : []
+    for_each = var.public_listener == true && var.tcp_port != null ? [1] : []
     content {
       name                           = local.listener_tcp_proxy_name_public
       frontend_ip_configuration_name = local.frontend_ip_configuration_public_name
@@ -814,7 +854,7 @@ resource "azurerm_application_gateway" "app_gateway" {
 
   # Create listener for tls associated to the public ip address if creating a public listener
   dynamic "listener" {
-    for_each = var.public_listener == true ? [1] : []
+    for_each = var.public_listener == true && var.tcp_port != null ? [1] : []
     content {
       name                           = local.listener_tls_proxy_name_public
       frontend_ip_configuration_name = local.frontend_ip_configuration_public_name
@@ -825,20 +865,26 @@ resource "azurerm_application_gateway" "app_gateway" {
   }
 
   # Create listener for tcp associated to the private ip address
-  listener {
-    name                           = local.listener_tcp_proxy_name_private
-    frontend_ip_configuration_name = local.frontend_ip_configuration_private_name
-    frontend_port_name             = local.frontend_port_tcp_proxy_name_private
-    protocol                       = "Tcp"
+  dynamic "listener" {
+    for_each = var.tcp_port != null ? [1] : []
+    content {
+      name                           = local.listener_tcp_proxy_name_private
+      frontend_ip_configuration_name = local.frontend_ip_configuration_private_name
+      frontend_port_name             = local.frontend_port_tcp_proxy_name_private
+      protocol                       = "Tcp"
+    } 
   }
 
   # Create listener for tls associated to the private ip address
-  listener {
+  dynamic "listener" {
+    for_each = var.tcp_port != null ? [1] : []
+    content {
       name                           = local.listener_tls_proxy_name_private
       frontend_ip_configuration_name = local.frontend_ip_configuration_private_name
       frontend_port_name             = local.frontend_port_tls_proxy_name_private
       protocol                       = "Tls"
       ssl_certificate_name           = local.ssl_certificate_name
+    }
   }
 
   ## Create routing rules
@@ -855,12 +901,15 @@ resource "azurerm_application_gateway" "app_gateway" {
   }
 
   # Create a basic routing rule for TCP
-  routing_rule {
-    name                      = local.routing_rule_tcp_proxy_name
-    priority                  = 101
-    listener_name             = local.listener_tcp_proxy_name_public
-    backend_address_pool_name = local.backend_pool_tcp_proxy_default
-    backend_name              = local.backend_tcp_settings_tcp_proxy_default
+  dynamic "routing_rule" {
+    for_each = var.tcp_port != null ? [1] : []
+    content {
+      name                      = local.routing_rule_tcp_proxy_name
+      priority                  = 101
+      listener_name             = local.listener_tcp_proxy_name_public
+      backend_address_pool_name = local.backend_pool_tcp_proxy_default
+      backend_name              = local.backend_tcp_settings_tcp_proxy_default
+    }
   }
 }
 

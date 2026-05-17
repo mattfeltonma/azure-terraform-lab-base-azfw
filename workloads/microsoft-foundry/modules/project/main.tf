@@ -626,7 +626,7 @@ resource "azurerm_role_assignment" "acr_container_registry_acr_pull_foundry_proj
 ########## 
 ##########
 
-## Create a role assignment granting a user the Azure AI User role which will allow the user
+## Create a role assignment granting a user the Foundry User role which will allow the user
 ## the ability to utilize the sample Foundry project
 resource "azurerm_role_assignment" "foundry_user" {
   depends_on = [
@@ -635,7 +635,7 @@ resource "azurerm_role_assignment" "foundry_user" {
 
   name                 = uuidv5("dns", "${var.user_object_id}${local.foundry_resource_name}${azapi_resource.foundry_project.name}user")
   scope                = azapi_resource.foundry_project.id
-  role_definition_name = "Azure AI User"
+  role_definition_name = "Foundry User"
   principal_id         = var.user_object_id
 }
 
