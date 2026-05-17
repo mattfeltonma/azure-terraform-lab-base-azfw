@@ -532,8 +532,6 @@ resource "azurerm_web_application_firewall_policy" "app_gateway_waf_policy" {
     enabled                     = true
     mode                        = "Detection"
     request_body_check          = true
-    file_upload_limit_in_mb     = 100
-    max_request_body_size_in_kb = 128
   }
 
   managed_rules {
@@ -910,6 +908,31 @@ resource "azurerm_application_gateway" "app_gateway" {
       backend_address_pool_name = local.backend_pool_tcp_proxy_default
       backend_name              = local.backend_tcp_settings_tcp_proxy_default
     }
+  }
+}
+
+## Create diagnostic settings for the Application Gateway
+##
+resource "azurerm_monitor_diagnostic_setting" "diag_app_gateway" {
+  provider = azurerm.subscription_workload
+
+  depends_on = [
+    azurerm_application_gateway.app_gateway,
+    azurerm_log_analytics_workspace.log_analytics_workspace_workload
+  ]
+
+  name                       = "diag-base"
+  target_resource_id         = azurerm_application_gateway.app_gateway.id
+  log_analytics_workspace_id = azurerm_log_analytics_workspace.log_analytics_workspace_workload.id
+
+  enabled_log {
+    category = "ApplicationGatewayAccessLog"
+  }
+  enabled_log {
+    category = "ApplicationGatewayPerformanceLog"
+  }
+  enabled_log {
+    category = "ApplicationGatewayFirewallLog"
   }
 }
 
