@@ -23,8 +23,10 @@ AI was used to help with the format of this README file so if there is an issue 
 - [Usage](#usage)
 
 ## Updates
+* **5/16/2026**
+  * Modified RBAC role from AI User to Foundry User since name was changed recently
 * **5/7/2026**
-   * Added ACR and ACR connection to support hosted agents
+  * Added ACR and ACR connection to support hosted agents
 * **3/31/2026**
   * Added required property for managed vnet provisioning
 * **3/6/2026**

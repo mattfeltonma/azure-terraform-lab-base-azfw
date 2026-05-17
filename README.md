@@ -33,7 +33,9 @@ Hope any bit of this code helps save you some time or learn something new!
 ## Updates
 
 ### 2026
-
+* **May 16, 2026**
+  * Foundry
+    * Updated RBAC Role name from AI User to Foundry User. It was changed over past week
 * **May 5, 2026**
   * Foundry
     * Added ACR to support hosted agents
