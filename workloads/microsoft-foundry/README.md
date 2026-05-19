@@ -23,6 +23,9 @@ AI was used to help with the format of this README file so if there is an issue 
 - [Usage](#usage)
 
 ## Updates
+* **5/18/2026**
+  * Added Terraform module for creating Bot Service to support Foundry Agent publishing to Teams
+  * Added Jupyter Notebook that walks programmatic publishing of Foundry Agent
 * **5/16/2026**
   * Modified RBAC role from AI User to Foundry User since name was changed recently
 * **5/7/2026**
