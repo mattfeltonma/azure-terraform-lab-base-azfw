@@ -1544,6 +1544,7 @@ resource "azapi_resource" "assoc_foundry_storage_account" {
 
   depends_on = [
     azurerm_storage_account.storage_account_foundry,
+    azurerm_monitor_diagnostic_setting.diag_storage_foundry_table,
     azapi_resource.assoc_foundry_ai_search
   ]
 
@@ -1710,7 +1711,8 @@ resource "azurerm_private_endpoint" "pe_storage_blob_foundry" {
 
   depends_on = [
     azurerm_private_endpoint.pe_aisearch_foundry,
-    azurerm_storage_account.storage_account_foundry
+    azurerm_storage_account.storage_account_foundry,
+    azapi_resource.assoc_foundry_storage_account
   ]
 
   name                = "pe${azurerm_storage_account.storage_account_foundry[0].name}blob"

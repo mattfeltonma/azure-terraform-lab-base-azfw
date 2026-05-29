@@ -914,8 +914,6 @@ resource "azurerm_application_gateway" "app_gateway" {
 ## Create diagnostic settings for the Application Gateway
 ##
 resource "azurerm_monitor_diagnostic_setting" "diag_app_gateway" {
-  provider = azurerm.subscription_workload
-
   depends_on = [
     azurerm_application_gateway.app_gateway,
     azurerm_log_analytics_workspace.log_analytics_workspace_workload
