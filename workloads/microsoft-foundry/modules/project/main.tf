@@ -19,7 +19,7 @@ resource "azapi_resource" "foundry_project" {
     azurerm_user_assigned_identity.foundry_project_umi
   ]
 
-  type                      = "Microsoft.CognitiveServices/accounts/projects@2025-10-01-preview"
+  type                      = "Microsoft.CognitiveServices/accounts/projects@2026-01-15-preview"
   name                      = "sampleproject${var.project_number}"
   parent_id                 = var.foundry_resource_id
   location                  = var.region
@@ -76,7 +76,7 @@ resource "azapi_resource" "conn_resource_key_vault_secrets" {
     azapi_resource.foundry_project
   ]
 
-  type                      = "Microsoft.CognitiveServices/accounts/connections@2025-04-01-preview"
+  type                      = "Microsoft.CognitiveServices/accounts/connections@2026-01-15-preview"
   name                      = "${local.resource_byo_key_vault_name}1"
   parent_id                 = var.foundry_resource_id
   schema_validation_enabled = false
@@ -106,7 +106,7 @@ resource "azapi_resource" "conn_resource_appins_foundry" {
     azapi_resource.conn_resource_key_vault_secrets
   ]
 
-  type                      = "Microsoft.CognitiveServices/accounts/connections@2025-10-01-preview"
+  type                      = "Microsoft.CognitiveServices/accounts/connections@2026-01-15-preview"
   name                      = "${local.resource_app_insights_name}1"
   parent_id                 = var.foundry_resource_id
   schema_validation_enabled = false
@@ -143,7 +143,7 @@ resource "azapi_resource" "conn_project_cosmosdb_foundry" {
     azapi_resource.conn_resource_appins_foundry
   ]
 
-  type                      = "Microsoft.CognitiveServices/accounts/projects/connections@2025-04-01-preview"
+  type                      = "Microsoft.CognitiveServices/accounts/projects/connections@2026-01-15-preview"
   name                      = local.agent_cosmosdb_account_connection_name
   parent_id                 = azapi_resource.foundry_project.id
   schema_validation_enabled = false
@@ -173,7 +173,7 @@ resource "azapi_resource" "conn_project_storage_foundry" {
     azapi_resource.conn_project_cosmosdb_foundry
   ]
 
-  type                      = "Microsoft.CognitiveServices/accounts/projects/connections@2025-04-01-preview"
+  type                      = "Microsoft.CognitiveServices/accounts/projects/connections@2026-01-15-preview"
   name                      = local.agent_storage_account_connection_name
   parent_id                 = azapi_resource.foundry_project.id
   schema_validation_enabled = false
@@ -203,7 +203,7 @@ resource "azapi_resource" "conn_project_ai_search_foundry" {
     azapi_resource.conn_project_storage_foundry
   ]
 
-  type                      = "Microsoft.CognitiveServices/accounts/projects/connections@2025-04-01-preview"
+  type                      = "Microsoft.CognitiveServices/accounts/projects/connections@2026-01-15-preview"
   name                      = local.agent_ai_search_connection_name
   parent_id                 = azapi_resource.foundry_project.id
   schema_validation_enabled = false
@@ -265,7 +265,7 @@ resource "azapi_resource" "conn_project_apim_ai_gateway_foundry_static" {
     azapi_resource.conn_project_ai_search_foundry
   ]
 
-  type                      = "Microsoft.CognitiveServices/accounts/projects/connections@2025-10-01-preview"
+  type                      = "Microsoft.CognitiveServices/accounts/projects/connections@2026-01-15-preview"
   name                      = "${local.project_ai_gateway_apim_static_model_connection_name}${each.value.api_path}"
   parent_id                 = azapi_resource.foundry_project.id
   schema_validation_enabled = false
@@ -298,7 +298,7 @@ resource "azapi_resource" "conn_project_apim_ai_gateway_foundry_dynamic" {
     azapi_resource.conn_project_apim_ai_gateway_foundry_static
   ]
 
-  type                      = "Microsoft.CognitiveServices/accounts/projects/connections@2025-10-01-preview"
+  type                      = "Microsoft.CognitiveServices/accounts/projects/connections@2026-01-15-preview"
   name                      = "${local.project_ai_gateway_apim_dynamic_model_connection_name}${each.value.api_path}"
   parent_id                 = azapi_resource.foundry_project.id
   schema_validation_enabled = false
@@ -331,7 +331,7 @@ resource "azapi_resource" "conn_project_model_gateway_foundry_static" {
     azapi_resource.conn_project_apim_ai_gateway_foundry_dynamic
   ]
 
-  type                      = "Microsoft.CognitiveServices/accounts/projects/connections@2025-10-01-preview"
+  type                      = "Microsoft.CognitiveServices/accounts/projects/connections@2026-01-15-preview"
   name                      = "${local.project_model_gateway_static_model_connection_name}${each.value.model_gateway_api_path}"
   parent_id                 = azapi_resource.foundry_project.id
   schema_validation_enabled = false
@@ -367,7 +367,7 @@ resource "azapi_resource" "conn_project_model_gateway_foundry_dynamic" {
     azapi_resource.conn_project_model_gateway_foundry_static
   ]
 
-  type                      = "Microsoft.CognitiveServices/accounts/projects/connections@2025-10-01-preview"
+  type                      = "Microsoft.CognitiveServices/accounts/projects/connections@2026-01-15-preview"
   name                      = "${local.project_model_gateway_dynamic_model_connection_name}${each.value.model_gateway_api_path}"
   parent_id                 = azapi_resource.foundry_project.id
   schema_validation_enabled = false
@@ -406,7 +406,7 @@ resource "azapi_resource" "conn_project_external_openai_foundry" {
     azapi_resource.conn_project_model_gateway_foundry_dynamic
   ]
 
-  type                      = "Microsoft.CognitiveServices/accounts/projects/connections@2025-04-01-preview"
+  type                      = "Microsoft.CognitiveServices/accounts/projects/connections@2026-01-15-preview"
   name                      = local.agent_external_openai_connection_name
   parent_id                 = azapi_resource.foundry_project.id
   schema_validation_enabled = false
@@ -442,7 +442,7 @@ resource "azapi_resource" "conn_project_bing_grounding_search_foundry" {
     azapi_resource.conn_project_external_openai_foundry
   ]
 
-  type                      = "Microsoft.CognitiveServices/accounts/projects/connections@2025-04-01-preview"
+  type                      = "Microsoft.CognitiveServices/accounts/projects/connections@2026-01-15-preview"
   name                      = local.agent_bing_grounding_search_connection_name
   parent_id                 = azapi_resource.foundry_project.id
   schema_validation_enabled = false
@@ -569,7 +569,7 @@ resource "azapi_resource" "foundry_project_capability_host" {
     azapi_resource.conn_resource_appins_foundry,
     azapi_resource.conn_resource_key_vault_secrets
   ]
-  type                      = "Microsoft.CognitiveServices/accounts/projects/capabilityHosts@2025-04-01-preview"
+  type                      = "Microsoft.CognitiveServices/accounts/projects/capabilityHosts@2026-01-15-preview"
   name                      = "caphostproj"
   parent_id                 = azapi_resource.foundry_project.id
   schema_validation_enabled = false

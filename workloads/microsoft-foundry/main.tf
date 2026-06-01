@@ -743,7 +743,6 @@ resource "azurerm_private_endpoint" "pe_key_vault_cmk_foundry" {
 ## the Azure AI Enterprise Network Connection Approver role on the resource group to allow approval of private endpoints created in the
 ## managed virtual network
 ##
-
 resource "azurerm_role_assignment" "umi_foundry_resource_azure_ai_enterprise_network_connection_approver" {
   count = var.resource_managed_identity_type == "umi" && var.agent_service_outbound_networking.type == "managed_virtual_network" && var.agents ? 1 : 0
 
@@ -796,11 +795,11 @@ resource "azapi_resource" "foundry_resource" {
     azapi_resource.access_rule_foundry_key_vault_cmk_subscription
   ]
 
-  type                      = "Microsoft.CognitiveServices/accounts@2025-10-01-preview"
+  type                      = "Microsoft.CognitiveServices/accounts@2026-01-15-preview"
   name                      = "msf${var.region_code}${var.random_string}"
   location                  = var.region
   parent_id                 = azurerm_resource_group.rg_foundry.id
-  schema_validation_enabled = true
+  schema_validation_enabled = false
 
   body = {
     kind = "AIServices"
@@ -1815,7 +1814,7 @@ resource "azapi_resource" "foundry_managed_virtual_network" {
     time_sleep.wait_managed_vnet_smi_permissions_replication
   ]
 
-  type                      = "Microsoft.CognitiveServices/accounts/managedNetworks@2025-10-01-preview"
+  type                      = "Microsoft.CognitiveServices/accounts/managedNetworks@2026-01-15-preview"
   name                      = "default"
   parent_id                 = azapi_resource.foundry_resource.id
   schema_validation_enabled = false
@@ -1847,7 +1846,7 @@ resource "azapi_resource" "managed_vnet_outbound_rule_service_tag_azure_monitor"
     azapi_resource.foundry_managed_virtual_network
   ]
 
-  type                      = "Microsoft.CognitiveServices/accounts/managedNetworks/outboundRules@2025-10-01-preview"
+  type                      = "Microsoft.CognitiveServices/accounts/managedNetworks/outboundRules@2026-01-15-preview"
   name                      = "AllowAgentAzureMonitor"
   parent_id                 = azapi_resource.foundry_managed_virtual_network[0].id
   schema_validation_enabled = false
@@ -1874,7 +1873,7 @@ resource "azapi_resource" "managed_vnet_outbound_rule_apim" {
     azapi_resource.managed_vnet_outbound_rule_service_tag_azure_monitor
   ]
 
-  type                      = "Microsoft.CognitiveServices/accounts/managedNetworks/outboundRules@2025-10-01-preview"
+  type                      = "Microsoft.CognitiveServices/accounts/managedNetworks/outboundRules@2026-01-15-preview"
   name                      = "AllowAIGateway"
   parent_id                 = azapi_resource.foundry_managed_virtual_network[0].id
   schema_validation_enabled = false
