@@ -6,7 +6,7 @@ get_creds.sh
 validate-aml.ipynb
 
 # Ignore VS Code stuff
-.vscode/*
+.vscode
 
 # Ignore implementation-specific Terraform files
 providers/
