@@ -569,17 +569,20 @@ resource "azurerm_firewall_policy_rule_collection_group" "rule_collection_group_
         azurerm_ip_group.ip_group_azure.id
       ]
       destination_ports = [
-        "*"
+        # Don't allow 80,443 so that gets processed by Application Rules
+        "1-78",
+        "81-442",
+        "444-65535"
       ]
     }
   }
   application_rule_collection {
-    name     = "AllowAzureToInternetTraffic"
+    name     = "AllowAzureToAzureAndInternetTraffic"
     action   = "Allow"
     priority = 2500
     rule {
-      name        = "AllowAzureResourcesToInternet"
-      description = "Allows Azures resources to contact any HTTP or HTTPS endpoint"
+      name        = "AllowAzureToAzureAndInternet"
+      description = "Allows Azures resources to contact any HTTP or HTTPS endpoint in Azure or the Internet"
       protocols {
         type = "Http"
         port = 80
