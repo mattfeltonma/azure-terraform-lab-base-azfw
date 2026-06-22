@@ -38,7 +38,11 @@ resource "azuread_application" "app_reg_function" {
 
 ## Create the Entra ID service principal for the app registration
 ##
-resource "azuread_service_principal" "example" {
+resource "azuread_service_principal" "sp_function" {
+  depends_on = [
+    azuread_application.app_reg_function
+  ]
+
   client_id                    = azuread_application.app_reg_function.client_id
   app_role_assignment_required = false
   owners                       = [data.azuread_client_config.current.object_id]
@@ -709,8 +713,8 @@ resource "time_sleep" "wait_umi_function" {
 }
 
 ## Create an Azure RBAC role assignment granting the user-assigned managed identity for the Function App
-## the Storage Account Contributor role on the Azure Storage account used by the Azure Function
-##
+## the Storage Account Contributor role on the Azure Storage account used by the Azure Function.
+## This is required for the Azure Blobs trigger
 resource "azurerm_role_assignment" "umi_function_storage_account_contributor" {
   depends_on = [
     time_sleep.wait_umi_function,
@@ -724,7 +728,7 @@ resource "azurerm_role_assignment" "umi_function_storage_account_contributor" {
 
 ## Create an Azure RBAC role assignment granting the user-assigned managed identity for the Function App
 ## the Storage Blob Data Owner role on the Azure Storage account used by the Azure Function
-##
+## This is required for all use cases
 resource "azurerm_role_assignment" "umi_function_storage_blob_data_owner" {
   depends_on = [
     time_sleep.wait_umi_function,
@@ -739,7 +743,7 @@ resource "azurerm_role_assignment" "umi_function_storage_blob_data_owner" {
 
 ## Create an Azure RBAC role assignment granting the user-assigned managed identity for the Function App
 ## the Storage Queue Data Contributor role on the Azure Storage account used by the Azure Function
-##
+## ## This is required for the Azure Blobs trigger
 resource "azurerm_role_assignment" "umi_function_storage_queue_data_contributor" {
   depends_on = [
     time_sleep.wait_umi_function,
@@ -754,7 +758,7 @@ resource "azurerm_role_assignment" "umi_function_storage_queue_data_contributor"
 
 ## Create an Azure RBAC role assignment granting the user-assigned managed identity for the Function App
 ## the Storage Table Data Contributor role on the Azure Storage account used by the Azure Function
-##
+## This is required for all use cases and supports diagnostic events
 resource "azurerm_role_assignment" "umi_function_storage_table_data_contributor" {
   depends_on = [
     time_sleep.wait_umi_function,
@@ -769,7 +773,7 @@ resource "azurerm_role_assignment" "umi_function_storage_table_data_contributor"
 
 ## Create an Azure RBAC role assignment granting the user-assigned managed identity for the Function App
 ## the Key Vault Secrets User role on the Azure Key Vault used by the Azure Function
-##
+## This allows the function to pull secrets for Key Vault references
 resource "azurerm_role_assignment" "umi_function_key_vault_secrets_user" {
   depends_on = [
     time_sleep.wait_umi_function,
@@ -833,6 +837,9 @@ resource "azurerm_function_app_flex_consumption" "function_app" {
   location            = var.region
   resource_group_name = azurerm_resource_group.rg_function.name
   service_plan_id     = azurerm_service_plan.function_app_plan.id
+
+  # Disable basic authN for deployments
+  webdeploy_publish_basic_authentication_enabled = false
 
   # Identity-based access to storage account
   storage_container_type            = "blobContainer"
@@ -904,7 +911,7 @@ resource "azurerm_function_app_flex_consumption" "function_app" {
   }
 
   app_settings = {
-    # The azurerm provider automatically creates this app setting trying to set it to the storage account connection string
+    # The azurerm provider automatically creates this app setting and tries to set it to the storage account connection string
     # which breaks Entra auth using managed identity to storage account. Setting to empty string prevents this
     AzureWebJobsStorage = ""
 
@@ -914,7 +921,8 @@ resource "azurerm_function_app_flex_consumption" "function_app" {
     AzureWebJobsStorage__credential                = "managedidentity"
     AzureWebJobsStorage__managedIdentityResourceId = azurerm_user_assigned_identity.umi_function.id
 
-    # This tells the Function app it's going to be using a federated identity credential
+    # This tells the function to use its managed identity as a federated credential when acting as a confidential client to Entra to support Entra
+    # ID authentication when the function exchanges an authorization code or refresh token for an access token
     OVERRIDE_USE_MI_FIC_ASSERTION_CLIENTID         = azurerm_user_assigned_identity.umi_function.client_id
 
     # TODO: 5/2026 - Remove the mention of preview when this feature goes GA

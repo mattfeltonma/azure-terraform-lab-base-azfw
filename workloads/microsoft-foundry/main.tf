@@ -830,6 +830,7 @@ resource "azapi_resource" "foundry_resource" {
           keyName     = azurerm_key_vault_key.key_foundry_cmk[0].name
           keyVaultUri = azurerm_key_vault.key_vault_foundry_cmk[0].vault_uri
           keyVersion  = azurerm_key_vault_key.key_foundry_cmk[0].version
+          identityClientId = azurerm_user_assigned_identity.umi_foundry_resource[0].client_id
         }
       } : null
 

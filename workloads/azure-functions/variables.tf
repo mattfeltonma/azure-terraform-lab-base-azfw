@@ -1,5 +1,5 @@
 variable "function_plan_sku" {
-  description = "The SKU of the Function Plan"
+  description = "The SKU of the Flexible Consumption plan. This template only supports the Flexible Consumption Plan"
   type        = string
   default     = "FC1"
 }
