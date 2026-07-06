@@ -80,8 +80,8 @@ variable "deploy_key_vault_connection_secrets" {
   }
 }
 
-variable "deploy_rag_resources" {
-  description = "Set to true if you are not using agents but want to deploy the resources required to demonstrate simple RAG patterns. This is not necessary when deploying agents."
+variable "deploy_content_understanding_resources" {
+  description = "Set to true if you plan to use Content Understanding"
   type        = bool
   default     = false
 }
@@ -145,11 +145,6 @@ variable "project_managed_identity_type" {
     condition     = contains(["smi", "umi"], var.project_managed_identity_type)
     error_message = "Managed identity type must be either 'smi' or 'umi'."
   }
-}
-
-variable "purpose" {
-  description = "The three character purpose of the resource"
-  type        = string
 }
 
 variable "random_string" {

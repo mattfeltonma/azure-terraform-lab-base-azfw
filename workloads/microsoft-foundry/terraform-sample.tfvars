@@ -3,8 +3,8 @@
 ##########
 ##########
 #agents = false
-##deploy_key_vault_connection_secrets = false
-#deploy_rag_resources = false
+#deploy_key_vault_connection_secrets = false
+#deploy_content_understanding_resources = false
 #foundry_encryption = "pmk"
 #resource_managed_identity_type = "umi"
 #region = "eastus2"
@@ -21,17 +21,16 @@
 #}
 #trusted_ip = "X.X.X.X"
 
-########## Example of a deployment used to demonstrate simple RAG patterns
+########## Example of a deployment that could be used for Content Understanding
 ##########
 ##########
 #agents = false
 #deploy_key_vault_connection_secrets = false
-#deploy_rag_resources = true
+#deploy_content_understanding_resources = true
 #foundry_encryption = "cmk"
 #resource_managed_identity_type = "umi"
 #region = "eastus2"
 #region_code = "eus2"
-#purpose = "lab"
 #random_string = "26z420"
 #resource_group_name_dns = "rgshwus326z"
 #subscription_id_infrastructure = "XXXXXXXX-XXXX-XXXX-XXXX-XXXXXXXXXXXX"
@@ -49,12 +48,12 @@
 ##########
 #agents = true
 #deploy_key_vault_connection_secrets = false
-#deploy_rag_resources = false
+#deploy_content_understanding_resources = true
 #foundry_encryption = "pmk"
+#project_managed_identity_type = "umi"
 #resource_managed_identity_type = "umi"
 #region = "westus3"
 #region_code = "wus3"
-#purpose = "lab"
 #random_string = "1qq100"
 #resource_group_name_dns = "rgshwus31gq"
 #subscription_id_infrastructure = "XXXXXXXX-XXXX-XXXX-XXXX-XXXXXXXXXXXX"
@@ -116,22 +115,22 @@
 ########## Example of an agent deployment using managed vnet
 ##########
 ##########
-agents = true
-deploy_key_vault_connection_secrets = false
-deploy_rag_resources = false
-foundry_encryption = "pmk"
-resource_managed_identity_type = "smi"
-region = "eastus2"
-region_code = "eus2"
-purpose = "lab"
-random_string = "1qq211"
-resource_group_name_dns = "rgshwus31gq"
-subscription_id_infrastructure = "XXXXXXXX-XXXX-XXXX-XXXX-XXXXXXXXXXXX"
+agents                                 = true
+deploy_key_vault_connection_secrets    = false
+deploy_content_understanding_resources = true
+foundry_encryption                     = "pmk"
+project_managed_identity_type          = "umi"
+resource_managed_identity_type         = "smi"
+region                                 = "eastus2"
+region_code                            = "eus2"
+random_string                          = "1qq211"
+resource_group_name_dns                = "rgshwus31gq"
+subscription_id_infrastructure         = "XXXXXXXX-XXXX-XXXX-XXXX-XXXXXXXXXXXX"
 agent_service_outbound_networking = {
-    type = "managed_virtual_network"
+  type = "managed_virtual_network"
 }
 subnet_id_private_endpoints = "/subscriptions/XXXXXXXX-XXXX-XXXX-XXXX-XXXXXXXXXXXX/resourceGroups/rgwlwus31gq/providers/Microsoft.Network/virtualNetworks/vnetwl3eus21gq/subnets/snet-svc"
-user_object_id = "XXXXXXXX-XXXX-XXXX-XXXX-XXXXXXXXXXXX"
+user_object_id              = "XXXXXXXX-XXXX-XXXX-XXXX-XXXXXXXXXXXX"
 tags = {
   environment = "lab"
   product     = "foundry"

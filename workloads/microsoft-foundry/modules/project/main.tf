@@ -2,12 +2,13 @@
 ##########
 ##########
 
-## Create Foundry project user-assigned managed identity if var.project_managed_identity_type is set to 'umi'
+##!UMI
+## Create a user-assigned managed identity for the Foundry project
 ##
 resource "azurerm_user_assigned_identity" "foundry_project_umi" {
   count = var.project_managed_identity_type == "umi" ? 1 : 0
 
-  name                = "foundryprojumi${var.project_number}"
+  name                = "umi${local.foundry_resource_name}project${var.project_number}"
   location            = var.region
   resource_group_name = local.foundry_resource_resource_group_name
 }
@@ -19,7 +20,7 @@ resource "azapi_resource" "foundry_project" {
     azurerm_user_assigned_identity.foundry_project_umi
   ]
 
-  type                      = "Microsoft.CognitiveServices/accounts/projects@2026-01-15-preview"
+  type                      = "Microsoft.CognitiveServices/accounts/projects@2026-05-01"
   name                      = "sampleproject${var.project_number}"
   parent_id                 = var.foundry_resource_id
   location                  = var.region
@@ -39,7 +40,7 @@ resource "azapi_resource" "foundry_project" {
 
     properties = {
       displayName = "Sample Project ${var.project_number}"
-      description = "This is sample AI Foundry project"
+      description = "This is sample Microsoft Foundry project"
     }
   }
 
@@ -51,6 +52,7 @@ resource "azapi_resource" "foundry_project" {
   ]
 }
 
+##!SMI
 ## Wait 10 seconds for the Foundry project managed identities to be created and to replicate
 ## through Entra ID
 resource "time_sleep" "wait_project_identities" {
@@ -62,72 +64,6 @@ resource "time_sleep" "wait_project_identities" {
   create_duration = "10s"
 }
 
-########## Create Foundry resource-level connections. This is only required if using BYOK and should be removed in the future
-########## because it is required due to a bug in the service requiring a project be created before creating
-########## the connection to the BYOK. This is only performed when the first_project variable is set to true
-########## TODO: 12/2025 Move this to main Foundry resource template once PG fixes the issue
-
-## Create a Foundry resource connection to the Key Vault used to store secrets for connections created within Foundry
-## This is only required if var.deploy_key_vault_connection_secrets is set to true
-resource "azapi_resource" "conn_resource_key_vault_secrets" {
-  count = var.deploy_key_vault_connection_secrets && var.agents && var.first_project == true ? 1 : 0
-
-  depends_on = [
-    azapi_resource.foundry_project
-  ]
-
-  type                      = "Microsoft.CognitiveServices/accounts/connections@2026-01-15-preview"
-  name                      = "${local.resource_byo_key_vault_name}1"
-  parent_id                 = var.foundry_resource_id
-  schema_validation_enabled = false
-
-  body = {
-    properties = {
-      category      = "AzureKeyVault"
-      isSharedToAll = true
-      target        = "https://${local.resource_byo_key_vault_name}.vault.azure.net/"
-      authType      = "AccountManagedIdentity"
-      credentials   = {}
-      metadata = {
-        ApiType    = "Azure"
-        ResourceId = var.shared_byo_key_vault_resource_id
-        Location   = var.region
-      }
-    }
-  }
-}
-
-## Create a Foundry resoure connection to the Application Insights instance to support tracing. This must be created after the connection to the Key Vault if using BYO Key Vault for secrets
-##
-resource "azapi_resource" "conn_resource_appins_foundry" {
-  count = var.first_project && var.agents ? 1 : 0
-
-  depends_on = [
-    azapi_resource.conn_resource_key_vault_secrets
-  ]
-
-  type                      = "Microsoft.CognitiveServices/accounts/connections@2026-01-15-preview"
-  name                      = "${local.resource_app_insights_name}1"
-  parent_id                 = var.foundry_resource_id
-  schema_validation_enabled = false
-
-  body = {
-    properties = {
-      category      = "AppInsights"
-      isSharedToAll = true
-      target        = var.shared_app_insights_resource_id
-      authType      = "ApiKey"
-
-      credentials = {
-        key = var.shared_app_insights_connection_string
-      }
-      metadata = {
-        ApiType    = "Azure"
-        ResourceId = var.shared_app_insights_resource_id
-      }
-    }
-  }
-}
 
 ########## Create Foundry project-level connections to support the project capability host
 ##########
@@ -139,11 +75,10 @@ resource "azapi_resource" "conn_project_cosmosdb_foundry" {
   count = var.agents ? 1 : 0
 
   depends_on = [
-    time_sleep.wait_project_identities,
-    azapi_resource.conn_resource_appins_foundry
+    time_sleep.wait_project_identities
   ]
 
-  type                      = "Microsoft.CognitiveServices/accounts/projects/connections@2026-01-15-preview"
+  type                      = "Microsoft.CognitiveServices/accounts/projects/connections@2026-05-01"
   name                      = local.agent_cosmosdb_account_connection_name
   parent_id                 = azapi_resource.foundry_project.id
   schema_validation_enabled = false
@@ -173,7 +108,7 @@ resource "azapi_resource" "conn_project_storage_foundry" {
     azapi_resource.conn_project_cosmosdb_foundry
   ]
 
-  type                      = "Microsoft.CognitiveServices/accounts/projects/connections@2026-01-15-preview"
+  type                      = "Microsoft.CognitiveServices/accounts/projects/connections@2026-05-01"
   name                      = local.agent_storage_account_connection_name
   parent_id                 = azapi_resource.foundry_project.id
   schema_validation_enabled = false
@@ -203,7 +138,7 @@ resource "azapi_resource" "conn_project_ai_search_foundry" {
     azapi_resource.conn_project_storage_foundry
   ]
 
-  type                      = "Microsoft.CognitiveServices/accounts/projects/connections@2026-01-15-preview"
+  type                      = "Microsoft.CognitiveServices/accounts/projects/connections@2026-05-01"
   name                      = local.agent_ai_search_connection_name
   parent_id                 = azapi_resource.foundry_project.id
   schema_validation_enabled = false
@@ -223,16 +158,50 @@ resource "azapi_resource" "conn_project_ai_search_foundry" {
   }
 }
 
+########## Create Foundry project-level connections to application insights for tracing and container registry for hosted agents
+##########
+##########
+
+## Create a Foundry project connection to the Application Insights instance to support tracing
+##
+resource "azapi_resource" "conn_project_appins_foundry" {
+  depends_on = [
+    azapi_resource.conn_project_ai_search_foundry
+  ]
+
+  type                      = "Microsoft.CognitiveServices/accounts/projects/connections@2026-05-01"
+  name                      = local.resource_app_insights_name
+  parent_id                 = azapi_resource.foundry_project.id
+  schema_validation_enabled = false
+
+  body = {
+    properties = {
+      category      = "AppInsights"
+      isSharedToAll = true
+      target        = var.shared_app_insights_resource_id
+      authType      = "ApiKey"
+
+      credentials = {
+        key = var.shared_app_insights_connection_string
+      }
+      metadata = {
+        ApiType    = "Azure"
+        ResourceId = var.shared_app_insights_resource_id
+      }
+    }
+  }
+}
+
 ## Create the Foundry project connection to Azure Container Registry
 ##
 resource "azapi_resource" "conn_project_acr_foundry" {
   count = var.agents ? 1 : 0
 
   depends_on = [
-    time_sleep.wait_project_identities
+    azapi_resource.conn_project_appins_foundry
   ]
 
-  type                      = "Microsoft.CognitiveServices/accounts/projects/connections@2025-04-01-preview"
+  type                      = "Microsoft.CognitiveServices/accounts/projects/connections@2026-05-01"
   name                      = local.agent_container_registry_connection_name
   parent_id                 = azapi_resource.foundry_project.id
   schema_validation_enabled = false
@@ -255,6 +224,11 @@ resource "azapi_resource" "conn_project_acr_foundry" {
   }
 }
 
+########## Create Foundry project-level connections to support BYO-model connections
+##########
+##########
+
+## BYOMODEL
 ## Create the Foundry project connections for APIM AI Gateway to demonstration static models
 ##
 resource "azapi_resource" "conn_project_apim_ai_gateway_foundry_static" {
@@ -265,7 +239,7 @@ resource "azapi_resource" "conn_project_apim_ai_gateway_foundry_static" {
     azapi_resource.conn_project_ai_search_foundry
   ]
 
-  type                      = "Microsoft.CognitiveServices/accounts/projects/connections@2026-01-15-preview"
+  type                      = "Microsoft.CognitiveServices/accounts/projects/connections@2026-05-01"
   name                      = "${local.project_ai_gateway_apim_static_model_connection_name}${each.value.api_path}"
   parent_id                 = azapi_resource.foundry_project.id
   schema_validation_enabled = false
@@ -288,6 +262,7 @@ resource "azapi_resource" "conn_project_apim_ai_gateway_foundry_static" {
   }
 }
 
+## BYOMODEL
 ## Create the Foundry project connections for APIM AI Gateway to demonstrate dynamic models
 ##
 resource "azapi_resource" "conn_project_apim_ai_gateway_foundry_dynamic" {
@@ -298,7 +273,7 @@ resource "azapi_resource" "conn_project_apim_ai_gateway_foundry_dynamic" {
     azapi_resource.conn_project_apim_ai_gateway_foundry_static
   ]
 
-  type                      = "Microsoft.CognitiveServices/accounts/projects/connections@2026-01-15-preview"
+  type                      = "Microsoft.CognitiveServices/accounts/projects/connections@2026-05-01"
   name                      = "${local.project_ai_gateway_apim_dynamic_model_connection_name}${each.value.api_path}"
   parent_id                 = azapi_resource.foundry_project.id
   schema_validation_enabled = false
@@ -321,6 +296,7 @@ resource "azapi_resource" "conn_project_apim_ai_gateway_foundry_dynamic" {
   }
 }
 
+## BYOMODEL
 ## Create the Foundry project connections for the APIM which is emulating a model gateway to demonstrate static models
 ##
 resource "azapi_resource" "conn_project_model_gateway_foundry_static" {
@@ -331,7 +307,7 @@ resource "azapi_resource" "conn_project_model_gateway_foundry_static" {
     azapi_resource.conn_project_apim_ai_gateway_foundry_dynamic
   ]
 
-  type                      = "Microsoft.CognitiveServices/accounts/projects/connections@2026-01-15-preview"
+  type                      = "Microsoft.CognitiveServices/accounts/projects/connections@2026-05-01"
   name                      = "${local.project_model_gateway_static_model_connection_name}${each.value.model_gateway_api_path}"
   parent_id                 = azapi_resource.foundry_project.id
   schema_validation_enabled = false
@@ -357,6 +333,7 @@ resource "azapi_resource" "conn_project_model_gateway_foundry_static" {
   }
 }
 
+## BYOMODEL
 ## Create the Foundry project connections for the APIM which is emulating a model gateway to demonstrate dynamic models
 ##
 resource "azapi_resource" "conn_project_model_gateway_foundry_dynamic" {
@@ -367,7 +344,7 @@ resource "azapi_resource" "conn_project_model_gateway_foundry_dynamic" {
     azapi_resource.conn_project_model_gateway_foundry_static
   ]
 
-  type                      = "Microsoft.CognitiveServices/accounts/projects/connections@2026-01-15-preview"
+  type                      = "Microsoft.CognitiveServices/accounts/projects/connections@2026-05-01"
   name                      = "${local.project_model_gateway_dynamic_model_connection_name}${each.value.model_gateway_api_path}"
   parent_id                 = azapi_resource.foundry_project.id
   schema_validation_enabled = false
@@ -396,7 +373,7 @@ resource "azapi_resource" "conn_project_model_gateway_foundry_dynamic" {
   }
 }
 
-
+## BYOMODEL
 ## Create a Foundry resource connection to the external Azure OpenAI Service or Foundry instance if that is specified in the external_openai variable
 ##
 resource "azapi_resource" "conn_project_external_openai_foundry" {
@@ -406,7 +383,7 @@ resource "azapi_resource" "conn_project_external_openai_foundry" {
     azapi_resource.conn_project_model_gateway_foundry_dynamic
   ]
 
-  type                      = "Microsoft.CognitiveServices/accounts/projects/connections@2026-01-15-preview"
+  type                      = "Microsoft.CognitiveServices/accounts/projects/connections@2026-05-01"
   name                      = local.agent_external_openai_connection_name
   parent_id                 = azapi_resource.foundry_project.id
   schema_validation_enabled = false
@@ -442,7 +419,7 @@ resource "azapi_resource" "conn_project_bing_grounding_search_foundry" {
     azapi_resource.conn_project_external_openai_foundry
   ]
 
-  type                      = "Microsoft.CognitiveServices/accounts/projects/connections@2026-01-15-preview"
+  type                      = "Microsoft.CognitiveServices/accounts/projects/connections@2026-05-01"
   name                      = local.agent_bing_grounding_search_connection_name
   parent_id                 = azapi_resource.foundry_project.id
   schema_validation_enabled = false
@@ -565,11 +542,10 @@ resource "azapi_resource" "foundry_project_capability_host" {
     azapi_resource.conn_project_cosmosdb_foundry,
     azapi_resource.conn_project_external_openai_foundry,
     azapi_resource.conn_project_bing_grounding_search_foundry,
-    # Wait for resource-level connections
-    azapi_resource.conn_resource_appins_foundry,
-    azapi_resource.conn_resource_key_vault_secrets
+    azapi_resource.conn_project_appins_foundry,
+    azapi_resource.conn_project_acr_foundry
   ]
-  type                      = "Microsoft.CognitiveServices/accounts/projects/capabilityHosts@2026-01-15-preview"
+  type                      = "Microsoft.CognitiveServices/accounts/projects/capabilityHosts@2026-05-01"
   name                      = "caphostproj"
   parent_id                 = azapi_resource.foundry_project.id
   schema_validation_enabled = false
@@ -593,9 +569,9 @@ resource "azapi_resource" "foundry_project_capability_host" {
   }
 }
 
-########## Create the required non-human role assignments for the AI Foundry project managed identity to access the CosmosDB account and Azure Storage data plane
-########## and to pull images from the container registry for hosted agents
-##########
+########## Create the required non-human role assignments for the Microsoft Foundry project system-managed identity or user-assigned managed identity to 
+########## access the data-planes of the CosmosDB, Storage Account, and Azure Container Registry instances
+########## 
 
 ## Create an Azure RBAC role assignment granting the project managed identity the CosmosDB Built-in Data Contributor role
 ## on the CosmosDB account to allow data plane access
@@ -670,6 +646,25 @@ resource "azurerm_role_assignment" "acr_container_registry_repository_reader_fou
   principal_id         = var.project_managed_identity_type == "umi" ? azurerm_user_assigned_identity.foundry_project_umi[0].principal_id : azapi_resource.foundry_project.output.identity.principalId
 }
 
+########## Create the required non-human role assignments for the Microsoft Foundry project system-managed identity or user-assigned managed identity to 
+########## access the CMK for the Microsoft Foundy resource
+##########
+
+## !CMK
+## Create an Azure RBAC role assignment granting the Microsoft Foundry user-assigned managed identity 
+## the Key Vault Crypto User role on the Key Vault to allow use of the CMK
+resource "azurerm_role_assignment" "foundry_resource_cmk_key_vault_crypto_user" {
+  count = var.foundry_cmk_enabled ? 1 : 0
+
+  depends_on = [
+    azapi_resource.foundry_project_capability_host
+  ]
+
+  scope                = var.foundry_cmk_key_vault_resource_id
+  role_definition_name = "Key Vault Crypto User"
+  principal_id         = var.project_managed_identity_type == "umi" ? azurerm_user_assigned_identity.foundry_project_umi[0].principal_id : azapi_resource.foundry_project.output.identity.principalId
+}
+
 ########## Create the required human role assignments to allow the user to perform common tasks within the Foundry project
 ########## 
 ##########
@@ -687,3 +682,23 @@ resource "azurerm_role_assignment" "foundry_user" {
   principal_id         = var.user_object_id
 }
 
+########## Final sleep to allow Azure RBAC role assignments time to propagate
+########## 
+##########
+
+resource "time_sleep" "wait_final_rbac" {
+  count = var.agents ? 1 : 0
+
+  depends_on = [
+    azurerm_role_assignment.foundry_user,
+    azurerm_role_assignment.cosmosdb_operator_foundry_project,
+    azurerm_role_assignment.storage_blob_data_contributor_foundry_project,
+    azurerm_role_assignment.search_index_data_contributor_foundry_project,
+    azurerm_role_assignment.search_service_contributor_foundry_project,
+    azurerm_cosmosdb_sql_role_assignment.cosmosdb_db_sql_role_aifp_account,
+    azurerm_role_assignment.storage_blob_data_owner_foundry_project,
+    azurerm_role_assignment.acr_container_registry_acr_pull_foundry_project,
+    azurerm_role_assignment.acr_container_registry_repository_reader_foundry_project
+  ]
+  create_duration = "120s"
+}
