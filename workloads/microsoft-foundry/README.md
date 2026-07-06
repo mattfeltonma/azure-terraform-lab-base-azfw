@@ -2,7 +2,7 @@
 
 ## Description
 
-This Terraform can be used in combiantion with the [base lab](../../README.md) to provision a lab environment to experiment with different Microsoft Foundry designs and architectures. Use cases for this lab include:
+This Terraform can be used in combination with the [base lab](../../README.md) to provision a lab environment to experiment with different Microsoft Foundry designs and architectures. Use cases for this lab include:
 
 1. Demonstrating basic consumption of Microsoft AI Services or models deployed to Foundry.
 2. Demonstrating Content Understanding features of Foundry.
