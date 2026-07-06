@@ -5,7 +5,7 @@
 This Terraform can be used in combination with the [base lab](../../README.md) to provision a lab environment to experiment with different Microsoft Foundry designs and architectures. Use cases for this lab include:
 
 1. Demonstrating basic consumption of Microsoft AI Services or models deployed to Foundry.
-2. Demonstrating Content Understanding features of Foundry.
+2. (WIP as of 7/2026) Demonstrating Content Understanding features of Foundry.
 3. Demonstrating Foundry agents with [VNet injection](https://learn.microsoft.com/en-us/azure/foundry/agents/how-to/virtual-networks?tabs=portal&pivots=templates) with BYO resources.
 4. Demonstration Foundry agents with [Managed VNet](https://learn.microsoft.com/en-us/azure/foundry/how-to/managed-virtual-network?tabs=azure-cli) and BYO resources.
 AI was used to help with the format of this README file so if there is an issue blame the many threads of bad Stackoverflow answers and subpar Git repos it scraped during training.
