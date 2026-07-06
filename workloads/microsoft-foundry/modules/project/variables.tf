@@ -28,16 +28,26 @@ variable "apim_ai_gateway" {
   default = null
 }
 
-variable "deploy_key_vault_connection_secrets" {
-  description = "Specify whether BYO Key Vault will be used to store secrets for connections created within Foundry resource and projects that use key-based authentication"
+#variable "first_project" {
+#  description = "TEMPORARY: Set to true to create the first Foundry project within the Foundry resource. This is required for now because the BYOK will fail to create a connection if there are no projects associated to the Foundry resource"
+#  type        = bool
+#  default     = true
+#}
+
+variable "foundry_cmk_enabled" {
+  description = "Specify whether the Foundry resource is encrypted with CMK"
   type        = bool
   default     = false
 }
 
-variable "first_project" {
-  description = "TEMPORARY: Set to true to create the first Foundry project within the Foundry resource. This is required for now because the BYOK will fail to create a connection if there are no projects associated to the Foundry resource"
-  type        = bool
-  default     = true
+variable "foundry_cmk_key_vault_resource_id" {
+  description = "The resource id of the Key Vault that contains the CMK used to encrypt the Foundry resource"
+  type        = string
+  default     = null
+  validation {
+    condition     = var.foundry_cmk_enabled ? var.foundry_cmk_key_vault_resource_id != null : var.foundry_cmk_key_vault_resource_id == null
+    error_message = "If foundry_cmk_enabled is true, foundry_cmk_key_vault_resource_id must be provided. If foundry_cmk_enabled is false, foundry_cmk_key_vault_resource_id must be null."
+  }
 }
 
 variable "foundry_resource_id" {
@@ -123,12 +133,6 @@ variable "shared_bing_grounding_search_api_key" {
   description = "The API key of the Bing Grounding Search resource to connect to the Foundry project"
   type        = string
   sensitive   = true
-  default     = null
-}
-
-variable "shared_byo_key_vault_resource_id" {
-  description = "The resource id of the Azure Key Vault to store secrets for connections created within Foundry resource and projects that use key-based authentication"
-  type        = string
   default     = null
 }
 

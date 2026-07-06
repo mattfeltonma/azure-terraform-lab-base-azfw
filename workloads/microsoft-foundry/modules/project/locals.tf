@@ -11,7 +11,7 @@ locals {
     agent_bing_grounding_search_name = var.shared_bing_grounding_search_resource_id != null ? provider::azapi::parse_resource_id("Microsoft.Bing/accounts",var.shared_bing_grounding_search_resource_id).name : null
     agent_container_registry_name = var.shared_agent_container_registry_resource_id != null ? provider::azurerm::parse_resource_id(var.shared_agent_container_registry_resource_id)["resource_name"] : null
     resource_app_insights_name = var.shared_app_insights_resource_id != null ? provider::azurerm::parse_resource_id(var.shared_app_insights_resource_id)["resource_name"] : null
-    resource_byo_key_vault_name = var.shared_byo_key_vault_resource_id != null ? provider::azurerm::parse_resource_id(var.shared_byo_key_vault_resource_id)["resource_name"] : null
+    resource_cmk_key_vault_name = var.foundry_cmk_key_vault_resource_id != null ? provider::azurerm::parse_resource_id(var.foundry_cmk_key_vault_resource_id)["resource_name"] : null
 
     # Create unique connection names for each project
     # connection names have a max of 60 characters in my testing
