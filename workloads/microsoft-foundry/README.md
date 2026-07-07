@@ -144,8 +144,7 @@ Before deployment, gather the following:
 | `foundry_encryption` | `string` | `cmk` | Set to `cmk` to create a Key Vault, key, and configure customer-managed key encryption for the Foundry instance. Set to `pmk` to use Microsoft-managed keys. [Review documentation](https://learn.microsoft.com/en-us/azure/ai-foundry/concepts/encryption-keys-portal?view=foundry&preserve-view=true) for regional support |
 | `resource_managed_identity_type` | `string` | `umi` | Set to `umi` to configure the Foundry resource to use a user-assigned managed identity. Set to `smi` for system-assigned managed identity |
 | `project_managed_identity_type` | `string` | `umi` | Set to `umi` to configure the Foundry project to use a user-assigned managed identity. Set to `smi` for system-assigned managed identity |
-| `apim_ai_gateway` | `object` | `null` |
-Configuration to setup [BYO model feature](https://learn.microsoft.com/en-us/azure/foundry/agents/how-to/ai-gateway?tabs=api-management&pivots=foundry-portal). See [terraform-sample.tfvars](terraform-sample.tfvars) for example. |
+| `apim_ai_gateway` | `object` | `null` | Configuration to setup [BYO model feature](https://learn.microsoft.com/en-us/azure/foundry/agents/how-to/ai-gateway?tabs=api-management&pivots=foundry-portal). See [terraform-sample.tfvars](terraform-sample.tfvars) for example. |
 | `model_gateway` | `object`| `null`| Configuration to setup [BYO model feature](https://learn.microsoft.com/en-us/azure/foundry/agents/how-to/ai-gateway?tabs=api-management&pivots=foundry-portal). See [terraform-sample.tfvars](terraform-sample.tfvars) for example. |
 
 ## Quick Start
