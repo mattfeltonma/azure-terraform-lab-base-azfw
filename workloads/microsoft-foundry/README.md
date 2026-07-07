@@ -146,7 +146,7 @@ Before deployment, gather the following:
 | `project_managed_identity_type` | `string` | `umi` | Set to `umi` to configure the Foundry project to use a user-assigned managed identity. Set to `smi` for system-assigned managed identity |
 | `apim_ai_gateway` | `object` | `null` |
 Configuration to setup [BYO model feature](https://learn.microsoft.com/en-us/azure/foundry/agents/how-to/ai-gateway?tabs=api-management&pivots=foundry-portal). See [terraform-sample.tfvars](terraform-sample.tfvars) for example. |
-| `model_gateway` | `object`| |`null`| Configuration to setup [BYO model feature](https://learn.microsoft.com/en-us/azure/foundry/agents/how-to/ai-gateway?tabs=api-management&pivots=foundry-portal). See [terraform-sample.tfvars](terraform-sample.tfvars) for example. |
+| `model_gateway` | `object`| `null`| Configuration to setup [BYO model feature](https://learn.microsoft.com/en-us/azure/foundry/agents/how-to/ai-gateway?tabs=api-management&pivots=foundry-portal). See [terraform-sample.tfvars](terraform-sample.tfvars) for example. |
 
 ## Quick Start
 
