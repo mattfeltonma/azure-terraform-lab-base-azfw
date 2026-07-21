@@ -16,17 +16,19 @@ resource "azurerm_storage_account" "storage_account" {
   # Disable public access for blob containers
   allow_nested_items_to_be_public = false
 
+  # Disable public network access for the storage account
+  public_network_access_enabled = false
+
   network_rules {
     default_action = "Deny"
 
     # Configure bypass if bypass isn't an empty list
-    bypass         = var.network_trusted_services_bypass
+    bypass   = var.network_trusted_services_bypass
     ip_rules = var.allowed_ips
   }
 
   lifecycle {
     ignore_changes = [
-      tags["created_date"],
       tags["created_by"]
     ]
   }

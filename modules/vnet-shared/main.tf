@@ -19,7 +19,6 @@ resource "azurerm_virtual_network" "vnet_shared" {
 
   lifecycle {
     ignore_changes = [
-      tags["created_date"],
       tags["created_by"]
     ]
   }
@@ -72,7 +71,6 @@ resource "azurerm_network_watcher_flow_log" "vnet_flow_log" {
 
   lifecycle {
     ignore_changes = [
-      tags["created_date"],
       tags["created_by"]
     ]
   }
@@ -108,6 +106,7 @@ resource "azurerm_subnet" "subnet_dnsin" {
     name = "delegation"
     service_delegation {
       name = "Microsoft.Network/dnsResolvers"
+      actions = ["Microsoft.Network/virtualNetworks/subnets/join/action"]
     }
   }
 }
@@ -129,6 +128,7 @@ resource "azurerm_subnet" "subnet_dnsout" {
     name = "delegation"
     service_delegation {
       name = "Microsoft.Network/dnsResolvers"
+      actions = ["Microsoft.Network/virtualNetworks/subnets/join/action"]
     }
   }
 }
@@ -204,7 +204,6 @@ resource "azurerm_route_table" "rt_dnsin" {
 
   lifecycle {
     ignore_changes = [
-      tags["created_date"],
       tags["created_by"]
     ]
   }
@@ -229,7 +228,6 @@ resource "azurerm_route_table" "rt_dnsout" {
 
   lifecycle {
     ignore_changes = [
-      tags["created_date"],
       tags["created_by"]
     ]
   }
@@ -254,7 +252,6 @@ resource "azurerm_route_table" "rt_tools" {
 
   lifecycle {
     ignore_changes = [
-      tags["created_date"],
       tags["created_by"]
     ]
   }
@@ -439,7 +436,6 @@ resource "azurerm_network_security_group" "nsg_bastion" {
 
   lifecycle {
     ignore_changes = [
-      tags["created_date"],
       tags["created_by"]
     ]
   }
@@ -472,7 +468,6 @@ resource "azurerm_network_security_group" "nsg_dnsin" {
 
   lifecycle {
     ignore_changes = [
-      tags["created_date"],
       tags["created_by"]
     ]
   }
@@ -489,7 +484,6 @@ resource "azurerm_network_security_group" "nsg_dnsout" {
 
   lifecycle {
     ignore_changes = [
-      tags["created_date"],
       tags["created_by"]
     ]
   }
@@ -506,7 +500,6 @@ resource "azurerm_network_security_group" "nsg_tools" {
 
   lifecycle {
     ignore_changes = [
-      tags["created_date"],
       tags["created_by"]
     ]
   }
@@ -523,7 +516,6 @@ resource "azurerm_network_security_group" "nsg_svc" {
 
   lifecycle {
     ignore_changes = [
-      tags["created_date"],
       tags["created_by"]
     ]
   }
@@ -624,7 +616,6 @@ resource "azurerm_private_dns_resolver" "resolver" {
 
   lifecycle {
     ignore_changes = [
-      tags["created_date"],
       tags["created_by"]
     ]
   }
@@ -644,7 +635,6 @@ resource "azurerm_private_dns_resolver_inbound_endpoint" "inbound_endpoint" {
 
   lifecycle {
     ignore_changes = [
-      tags["created_date"],
       tags["created_by"]
     ]
   }
@@ -665,7 +655,6 @@ resource "azurerm_private_dns_resolver_outbound_endpoint" "outbound_endpoint" {
 
   lifecycle {
     ignore_changes = [
-      tags["created_date"],
       tags["created_by"]
     ]
   }
@@ -688,7 +677,6 @@ resource "azurerm_private_dns_resolver_dns_forwarding_ruleset" "frs" {
 
   lifecycle {
     ignore_changes = [
-      tags["created_date"],
       tags["created_by"]
     ]
   }
@@ -717,18 +705,17 @@ resource "azapi_resource" "domain_list_alert" {
   parent_id                 = var.resource_group_id
   location                  = var.region
   schema_validation_enabled = true
+  tags = var.tags
 
   body = {
     properties = {
       domains = [
       ]
     }
-    tags = var.tags
   }
 
   lifecycle {
     ignore_changes = [
-      tags["created_date"],
       tags["created_by"]
     ]
   }
@@ -742,18 +729,18 @@ resource "azapi_resource" "domain_list_blocked" {
   parent_id                 = var.resource_group_id
   location                  = var.region
   schema_validation_enabled = true
+  tags = var.tags
 
   body = {
     properties = {
       domains = [
       ]
     }
-    tags = var.tags
+
   }
 
   lifecycle {
     ignore_changes = [
-      tags["created_date"],
       tags["created_by"]
     ]
   }
@@ -767,6 +754,7 @@ resource "azapi_resource" "domain_list_allow" {
   parent_id                 = var.resource_group_id
   location                  = var.region
   schema_validation_enabled = true
+  tags = var.tags
 
   body = {
     properties = {
@@ -774,12 +762,10 @@ resource "azapi_resource" "domain_list_allow" {
         "."
       ]
     }
-    tags = var.tags
   }
 
   lifecycle {
     ignore_changes = [
-      tags["created_date"],
       tags["created_by"]
     ]
   }
@@ -799,14 +785,13 @@ resource "azapi_resource" "drp_enterprise" {
   parent_id                 = var.resource_group_id
   location                  = var.region
   schema_validation_enabled = true
+  tags = var.tags
 
   body = {
-    tags = var.tags
   }
 
   lifecycle {
     ignore_changes = [
-      tags["created_date"],
       tags["created_by"]
     ]
   }
@@ -854,7 +839,6 @@ resource "azapi_resource" "drpr_block_malicious" {
       ]
       dnsSecurityRuleState = "Enabled"
     }
-    tags = var.tags
   }
 }
 
@@ -884,7 +868,6 @@ resource "azapi_resource" "drpr_alert" {
       ]
       dnsSecurityRuleState = "Enabled"
     }
-    tags = var.tags
   }
 }
 
@@ -914,7 +897,6 @@ resource "azapi_resource" "drpr_allow_all" {
       ]
       dnsSecurityRuleState = "Enabled"
     }
-    tags = var.tags
   }
 }
 
@@ -941,7 +923,6 @@ resource "azapi_resource" "vnet_link_drp_enterprise" {
         id = azurerm_virtual_network.vnet_shared.id
       }
     }
-    tags = var.tags
   }
 }
 
@@ -958,6 +939,13 @@ resource "azurerm_public_ip" "pip_bastion" {
   sku                 = "Standard"
 
   domain_name_label = "bstprod${var.region_code}${var.random_string}"
+
+  lifecycle {
+    ignore_changes = [
+      # Ignore ip_tags property due to MCAPS policy
+      ip_tags
+    ]
+  }
 }
 
 ## Create an Azure Bastion instance in the production transit virtual network
@@ -1013,6 +1001,13 @@ resource "azurerm_public_ip" "pip_vm" {
   resource_group_name = var.resource_group_name
   allocation_method   = "Static"
   sku                 = "Standard"
+
+  lifecycle {
+    ignore_changes = [
+      # Ignore ip_tags property due to MCAPS policy
+      ip_tags
+    ]
+  }
 }
 
 ## Create the virtual network interface for the virtual machine

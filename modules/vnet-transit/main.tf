@@ -16,8 +16,9 @@ resource "azurerm_virtual_network" "vnet_transit" {
 
   lifecycle {
     ignore_changes = [
-      tags["created_date"],
-      tags["created_by"]
+      tags["created_by"],
+      # Ignore dns_servers property so Terraform doesn't cycle it on reapplies
+      dns_servers
     ]
   }
 }
@@ -69,7 +70,6 @@ resource "azurerm_network_watcher_flow_log" "vnet_flow_log" {
 
   lifecycle {
     ignore_changes = [
-      tags["created_date"],
       tags["created_by"]
     ]
   }
@@ -120,7 +120,6 @@ resource "azurerm_route_table" "rt_gateway" {
 
   lifecycle {
     ignore_changes = [
-      tags["created_date"],
       tags["created_by"]
     ]
   }
@@ -144,7 +143,6 @@ resource "azurerm_route_table" "rt_azfw" {
 
   lifecycle {
     ignore_changes = [
-      tags["created_date"],
       tags["created_by"]
     ]
   }
@@ -194,8 +192,9 @@ resource "azurerm_public_ip" "pip_vpn_gateway" {
 
   lifecycle {
     ignore_changes = [
-      tags["created_date"],
-      tags["created_by"]
+      tags["created_by"],
+      # Ignore ip_tags property due to MCAPS policy
+      ip_tags
     ]
   }
 }
@@ -260,13 +259,14 @@ resource "azurerm_virtual_network_gateway" "vgw_vpn" {
     peering_addresses {
       ip_configuration_name = "ipconfig-1"
     }
-
+      peering_addresses {
+      ip_configuration_name = "ipconfig-2"
+    }
   }
   tags = var.tags
 
   lifecycle {
     ignore_changes = [
-      tags["created_date"],
       tags["created_by"]
     ]
   }
@@ -314,7 +314,6 @@ resource "azurerm_ip_group" "ip_group_on_prem" {
 
   lifecycle {
     ignore_changes = [
-      tags["created_date"],
       tags["created_by"]
     ]
   }
@@ -333,7 +332,6 @@ resource "azurerm_ip_group" "ip_group_azure" {
 
   lifecycle {
     ignore_changes = [
-      tags["created_date"],
       tags["created_by"]
     ]
   }
@@ -354,7 +352,6 @@ resource "azurerm_ip_group" "ip_group_rfc1918" {
 
   lifecycle {
     ignore_changes = [
-      tags["created_date"],
       tags["created_by"]
     ]
   }
@@ -373,7 +370,6 @@ resource "azurerm_ip_group" "ip_group_apim" {
 
   lifecycle {
     ignore_changes = [
-      tags["created_date"],
       tags["created_by"]
     ]
   }
@@ -390,7 +386,6 @@ resource "azurerm_ip_group" "ip_group_amlcpt" {
 
   lifecycle {
     ignore_changes = [
-      tags["created_date"],
       tags["created_by"]
     ]
   }
@@ -425,7 +420,6 @@ resource "azurerm_firewall_policy" "firewall_policy" {
 
   lifecycle {
     ignore_changes = [
-      tags["created_date"],
       tags["created_by"]
     ]
   }
@@ -1133,8 +1127,9 @@ resource "azurerm_public_ip" "pip_azure_firewall" {
 
   lifecycle {
     ignore_changes = [
-      tags["created_date"],
-      tags["created_by"]
+      tags["created_by"],
+      # Ignore ip_tags property due to MCAPS policy
+      ip_tags
     ]
   }
 }
@@ -1169,7 +1164,6 @@ resource "azurerm_firewall" "azure_firewall" {
 
   lifecycle {
     ignore_changes = [
-      tags["created_date"],
       tags["created_by"]
     ]
   }
@@ -1253,25 +1247,6 @@ resource "azurerm_route" "udr_workloads" {
   address_prefix      = var.vnet_cidr_wl[count.index]
   next_hop_type       = "VirtualAppliance"
   next_hop_in_ip_address = azurerm_firewall.azure_firewall.ip_configuration[0].private_ip_address
-}
-
-########## Configure the transit virtual network to use the Azure Firewall instance as its DNS server
-##########
-
-## Set the DNS server settings to the Azure Firewall instance
-##
-resource "azurerm_virtual_network_dns_servers" "vnet_dns_servers" {
-  depends_on = [
-    azurerm_virtual_network_gateway.vgw_vpn,
-    azurerm_firewall.azure_firewall,
-    azurerm_route.udr_shared_services,
-    azurerm_route.udr_workloads
-  ]
-
-  virtual_network_id = azurerm_virtual_network.vnet_transit.id
-  dns_servers        = [
-    azurerm_firewall.azure_firewall.ip_configuration[0].private_ip_address
-  ]
 }
 
 

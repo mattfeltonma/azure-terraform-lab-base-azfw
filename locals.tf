@@ -85,7 +85,7 @@ locals {
   } : {}
 
   ##### Combine these default zones, regional Private DNS Zones and user-specified zones and filter out secondary environment
-  ##### when it isn't present.
+  ##### when it isn't present
 
   default_private_dns_namespaces = {
     acr               = "privatelink.azurecr.io"
@@ -170,7 +170,7 @@ locals {
   ##### Combine required and user-specified tags
   # Add required tags and merge them with the provided tags
   required_tags = {
-    created_date = timestamp()
+    created_date = time_static.created.rfc3339
     created_by   = data.azurerm_client_config.identity_config.object_id
   }
 

@@ -16,7 +16,6 @@ resource "azurerm_virtual_network" "vnet_workload" {
 
   lifecycle {
     ignore_changes = [
-      tags["created_date"],
       tags["created_by"]
     ]
   }
@@ -69,7 +68,6 @@ resource "azurerm_network_watcher_flow_log" "vnet_flow_log" {
 
   lifecycle {
     ignore_changes = [
-      tags["created_date"],
       tags["created_by"]
     ]
   }
@@ -251,7 +249,6 @@ resource "azurerm_route_table" "route_table_app_gateway" {
 
   lifecycle {
     ignore_changes = [
-      tags["created_date"],
       tags["created_by"]
     ]
   }
@@ -276,7 +273,6 @@ resource "azurerm_route_table" "route_table_amlcpt" {
 
   lifecycle {
     ignore_changes = [
-      tags["created_date"],
       tags["created_by"]
     ]
   }
@@ -307,7 +303,6 @@ resource "azurerm_route_table" "route_table_apim" {
 
   lifecycle {
     ignore_changes = [
-      tags["created_date"],
       tags["created_by"]
     ]
   }
@@ -332,7 +327,6 @@ resource "azurerm_route_table" "route_table_mgmt" {
 
   lifecycle {
     ignore_changes = [
-      tags["created_date"],
       tags["created_by"]
     ]
   }
@@ -357,7 +351,6 @@ resource "azurerm_route_table" "route_table_app" {
 
   lifecycle {
     ignore_changes = [
-      tags["created_date"],
       tags["created_by"]
     ]
   }
@@ -382,7 +375,6 @@ resource "azurerm_route_table" "route_table_data" {
 
   lifecycle {
     ignore_changes = [
-      tags["created_date"],
       tags["created_by"]
     ]
   }
@@ -406,7 +398,6 @@ resource "azurerm_route_table" "route_table_vint" {
   }
   lifecycle {
     ignore_changes = [
-      tags["created_date"],
       tags["created_by"]
     ]
   }
@@ -585,7 +576,6 @@ resource "azurerm_network_security_group" "nsg_app_gateway" {
 
   lifecycle {
     ignore_changes = [
-      tags["created_date"],
       tags["created_by"]
     ]
   }
@@ -601,7 +591,6 @@ resource "azurerm_network_security_group" "nsg_amlcpt" {
 
   lifecycle {
     ignore_changes = [
-      tags["created_date"],
       tags["created_by"]
     ]
   }
@@ -702,7 +691,6 @@ resource "azurerm_network_security_group" "nsg_apim" {
 
   lifecycle {
     ignore_changes = [
-      tags["created_date"],
       tags["created_by"]
     ]
   }
@@ -718,7 +706,6 @@ resource "azurerm_network_security_group" "nsg_mgmt" {
 
   lifecycle {
     ignore_changes = [
-      tags["created_date"],
       tags["created_by"]
     ]
   }
@@ -734,7 +721,6 @@ resource "azurerm_network_security_group" "nsg_app" {
 
   lifecycle {
     ignore_changes = [
-      tags["created_date"],
       tags["created_by"]
     ]
   }
@@ -750,7 +736,6 @@ resource "azurerm_network_security_group" "nsg_data" {
 
   lifecycle {
     ignore_changes = [
-      tags["created_date"],
       tags["created_by"]
     ]
   }
@@ -766,7 +751,6 @@ resource "azurerm_network_security_group" "nsg_svc" {
 
   lifecycle {
     ignore_changes = [
-      tags["created_date"],
       tags["created_by"]
     ]
   }
@@ -782,7 +766,6 @@ resource "azurerm_network_security_group" "nsg_vint" {
 
   lifecycle {
     ignore_changes = [
-      tags["created_date"],
       tags["created_by"]
     ]
   }
@@ -905,7 +888,6 @@ resource "azurerm_user_assigned_identity" "umi" {
 
   lifecycle {
     ignore_changes = [
-      tags["created_date"],
       tags["created_by"]
     ]
   }
@@ -926,6 +908,8 @@ resource "azurerm_key_vault" "key_vault_workload" {
   sku_name  = "premium"
   tenant_id = data.azurerm_subscription.current.tenant_id
 
+  public_network_access_enabled = false
+
   rbac_authorization_enabled = true
 
   soft_delete_retention_days  = 7
@@ -939,7 +923,6 @@ resource "azurerm_key_vault" "key_vault_workload" {
 
   lifecycle {
     ignore_changes = [
-      tags["created_date"],
       tags["created_by"]
     ]
   }
@@ -972,7 +955,7 @@ resource "azurerm_role_assignment" "role_assignment_key_vault_workload_kv_umi" {
     azurerm_monitor_diagnostic_setting.diag_key_vault_workload
   ]
   name                 = uuidv5("dns", "${azurerm_key_vault.key_vault_workload.name}${azurerm_user_assigned_identity.umi.principal_id}")
-  scope                = "/subscriptions/${data.azurerm_subscription.current.subscription_id}/resourceGroups/${var.resource_group_name}/providers/Microsoft.KeyVault/vaults/${azurerm_key_vault.key_vault_workload.name}"
+  scope                = azurerm_key_vault.key_vault_workload.id
   role_definition_name = "Key Vault Administrator"
   principal_id         = azurerm_user_assigned_identity.umi.principal_id
 }
@@ -1006,7 +989,6 @@ resource "azurerm_private_endpoint" "pe_key_vault_workload" {
 
   lifecycle {
     ignore_changes = [
-      tags["created_date"],
       tags["created_by"]
     ]
   }

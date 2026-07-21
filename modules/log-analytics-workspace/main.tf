@@ -12,7 +12,6 @@ resource "azurerm_log_analytics_workspace" "log_analytics_workspace" {
 
   lifecycle {
     ignore_changes = [
-      tags["created_date"],
       tags["created_by"]
     ]
   }
@@ -50,7 +49,6 @@ resource "azurerm_monitor_data_collection_endpoint" "endpoint" {
   lifecycle {
     create_before_destroy = true
     ignore_changes = [
-      tags["created_date"],
       tags["created_by"]
     ]
   }
@@ -98,7 +96,6 @@ resource "azurerm_monitor_data_collection_rule" "rule_windows" {
 
   lifecycle {
     ignore_changes = [
-      tags["created_date"],
       tags["created_by"]
     ]
   }
@@ -146,7 +143,6 @@ resource "azurerm_monitor_data_collection_rule" "rule_linux" {
 
   lifecycle {
     ignore_changes = [
-      tags["created_date"],
       tags["created_by"]
     ]
   }

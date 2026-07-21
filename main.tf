@@ -8,6 +8,11 @@ resource "random_string" "unique" {
   special = false
 }
 
+## Use time_static to generate a timestamp which will be used in created_date tag. Use this instead of timestamp
+## so Terraform doesn't freak out every time apply is run again
+##
+resource "time_static" "created" {}
+
 ## Create resource groups
 ##
 resource "azurerm_resource_group" "rgtran" {
@@ -19,7 +24,6 @@ resource "azurerm_resource_group" "rgtran" {
 
   lifecycle {
     ignore_changes = [
-      tags["created_date"],
       tags["created_by"]
     ]
   }
@@ -34,7 +38,6 @@ resource "azurerm_resource_group" "rgshared" {
 
   lifecycle {
     ignore_changes = [
-      tags["created_date"],
       tags["created_by"]
     ]
   }
@@ -49,7 +52,6 @@ resource "azurerm_resource_group" "rgwork" {
 
   lifecycle {
     ignore_changes = [
-      tags["created_date"],
       tags["created_by"]
     ]
   }
@@ -303,7 +305,6 @@ resource "azurerm_private_dns_zone" "zone" {
 
   lifecycle {
     ignore_changes = [
-      tags["created_date"],
       tags["created_by"]
     ]
   }
@@ -331,7 +332,6 @@ resource "azurerm_private_dns_zone_virtual_network_link" "link" {
 
   lifecycle {
     ignore_changes = [
-      tags["created_date"],
       tags["created_by"]
     ]
   }

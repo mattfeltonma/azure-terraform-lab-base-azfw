@@ -452,7 +452,7 @@ resource "azurerm_key_vault" "key_vault_foundry_cmk" {
   name                = "kvfoundrycmk${var.region_code}${var.random_string}"
   location            = var.region
   resource_group_name = azurerm_resource_group.rg_foundry.name
-  tags                = var.tags
+  tags = merge(var.tags, { SecurityControl = "Ignore" })
 
   sku_name  = "premium"
   tenant_id = data.azurerm_subscription.current.tenant_id
@@ -782,9 +782,9 @@ resource "azapi_resource" "foundry_resource" {
       # Network-related controls
 
       # TODO: 6/2026 Set public network access to Disabled and remove the network_acls section once NSPs support cross-NSP links (which will address diagnostic log delivery issue)
-      publicNetworkAccess = "Enabled"
+      publicNetworkAccess = "Disabled"
       networkAcls = {
-        defaultAction = "Deny"
+        defaultAction = "Allow"
         bypass        = "AzureServices"
         ipRules = []
         virtualNetworkRules = []
@@ -1808,7 +1808,6 @@ resource "azurerm_role_assignment" "smi_foundry_reader_container_registry" {
   role_definition_name = "Reader"
   principal_id         = azapi_resource.foundry_resource.output.identity.principalId
 }
-
 
 ## !UMI
 ## !AGENTS

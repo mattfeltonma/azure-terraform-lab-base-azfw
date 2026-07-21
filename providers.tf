@@ -10,5 +10,8 @@ provider "azurerm" {
 provider "random" {
 }
 
+provider "time" {
+}
+
 provider "null" {
 }
