@@ -33,6 +33,23 @@ Hope any bit of this code helps save you some time or learn something new!
 ## Updates
 
 ### 2026
+* **July 21, 2026**
+  * Base Lab
+    * Updated Terraform provider versions
+      * azapi -> 2.10 and azurerm -> 4.74
+* **July 7, 2026**
+  * Foundry
+    * Added more detail in comments
+    * Added indicators to easily find dependencies. Indicators start with ! like !AGENTS to see resources that are provisioned when doing agent deployment
+    * Swapped azapi provider to azurerm for NSPs
+    * Updated CMK key size to 4096
+    * Changed Grounding for Bing to Grounding for Bing Custom to support advanced WebSearch use cases
+    * For agents with managed vnet added outbound rules for CosmosDb, AI Search, ACR, Storage (Blob), Foundry, and FrontDoor.front (supports A365 use cases
+    * Updated Cognitive.Service/accounts azapi versions to 2026-05-01 (exempting managedNetwork)
+    * Moved secret connection to main resource provisioning template now that bug has been fixed
+    * Shifted Application Insights connection to project-level connection
+    * Added Key Vault Crypto User to project umi to support CMK when used
+
 * **May 16, 2026**
   * Foundry
     * Updated RBAC Role name from AI User to Foundry User. It was changed over past week
