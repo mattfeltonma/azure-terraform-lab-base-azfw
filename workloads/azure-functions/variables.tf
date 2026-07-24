@@ -1,7 +1,12 @@
 variable "function_plan_sku" {
-  description = "The SKU of the Flexible Consumption plan. This template only supports the Flexible Consumption Plan"
+  description = "The SKU of the Azure Function App Service Plan. This can be FC1 or EP1"
   type        = string
   default     = "FC1"
+
+  validation {
+    condition     = contains(["FC1", "EP1"], var.function_plan_sku)
+    error_message = "The function_plan_sku variable must be either 'FC1' or 'EP1'."
+  }
 }
 
 variable "python_version" {

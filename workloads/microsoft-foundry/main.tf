@@ -38,7 +38,7 @@ resource "azurerm_log_analytics_workspace" "log_analytics_workspace_workload" {
 
 ########## Create a Network Security Perimeter to protect service-to-service traffic between the Microsoft Foundry resource, AI Search, Azure Storage Account, and optionally Key Vault
 ##########
-##########
+########## 
 
 ## Create Network Security Perimeter that will contain the Foundry resource, AI Search service, Storage Account, and optional Key Vaults for CMK and secrets if provisioned
 ## 
@@ -737,7 +737,7 @@ resource "azapi_resource" "foundry_resource" {
     azurerm_network_security_perimeter_access_rule.access_rule_foundry_key_vault_cmk_subscription
   ]
 
-  type                      = "Microsoft.CognitiveServices/accounts@2026-05-01"
+  type                      = "Microsoft.CognitiveServices/accounts@2026-01-15-preview"
   name                      = "msf${var.region_code}${var.random_string}"
   location                  = var.region
   parent_id                 = azurerm_resource_group.rg_foundry.id
@@ -1856,7 +1856,53 @@ resource "time_sleep" "wait_managed_vnet_permissions_replication" {
 ## !AGENTS
 ## Create a managed virtual network where Foundry agents will be deployed to
 ##
-resource "azapi_resource" "foundry_managed_virtual_network" {
+#resource "azapi_resource" "foundry_managed_virtual_network" {
+#  count = var.agents && var.agent_service_outbound_networking.type == "managed_virtual_network" ? 1 : 0
+#
+#  depends_on = [
+#    # Wait for creation of Foundry resource
+#    azapi_resource.foundry_resource,
+#    azurerm_private_endpoint.pe_foundry_resource,
+#    azurerm_network_security_perimeter_association.assoc_foundry_resource,
+#    # Wait for creation of resources required for standard agent with bring-your-own resources
+#    azurerm_cosmosdb_account.cosmosdb_foundry,
+#    azurerm_search_service.ai_search_foundry,
+#    azurerm_storage_account.storage_account_foundry,
+#    azurerm_private_endpoint.pe_aisearch_foundry,
+#    azurerm_private_endpoint.pe_cosmosdb_foundry,
+#    azurerm_private_endpoint.pe_storage_blob_foundry,
+#    # Wait for Azure Container Registry used for Foundry hosted agents
+#    azurerm_container_registry.acr_foundry,
+#    azurerm_private_endpoint.pe_acr_foundry,
+#    # Wait for permissions required for managed virtual network to be replicated across Azure
+#    time_sleep.wait_managed_vnet_permissions_replication
+#  ]
+
+#  type                      = "Microsoft.CognitiveServices/accounts/managedNetworks@2026-05-15-preview"
+#  name                      = "default"
+#  parent_id                 = azapi_resource.foundry_resource.id
+#  schema_validation_enabled = false
+
+#  body = {
+#    properties = {
+#      managedNetwork = {
+        # Ensure use of v2 managed virtual network
+#        managedNetworkKind = "V2"
+
+        # Restrict all outbound access unless excplicitly allowed via outbound rules
+#        isolationMode = "AllowOnlyApprovedOutbound"
+
+        # Use Standard SKU if there is a use case for FQDN rule; keeping disabled because I'm cheap
+        #firewallSku = "Standard"
+
+        # Create the managed virtual network immediately
+#        provisionNetworkNow = true
+#      }
+#    }
+#  }
+#}
+
+resource "azapi_resource_action" "foundry_managed_virtual_network" {
   count = var.agents && var.agent_service_outbound_networking.type == "managed_virtual_network" ? 1 : 0
 
   depends_on = [
@@ -1879,24 +1925,52 @@ resource "azapi_resource" "foundry_managed_virtual_network" {
   ]
 
   type                      = "Microsoft.CognitiveServices/accounts/managedNetworks@2026-05-15-preview"
-  name                      = "default"
+  resource_id = "${azapi_resource.foundry_resource.id}/managedNetworks/default"
+  method = "PATCH"
+
+  body = {
+    properties = {
+      managedNetwork = {
+        firewallSku = "Basic"
+        isolationMode = "AllowOnlyApprovedOutbound"
+      }
+    }
+  }
+}
+
+## !BYOKEYVAULT
+## !AGENTS
+## Create a Foundry resource connection to the Key Vault used to store secrets for connections created within Foundry
+## This is only required if var.deploy_key_vault_connection_secrets is set to true
+resource "azapi_resource" "conn_resource_key_vault_secrets" {
+  count = var.deploy_key_vault_connection_secrets && var.agents ? 1 : 0
+
+  depends_on = [
+    azurerm_key_vault.key_vault_foundry_secrets,
+    azurerm_private_endpoint.pe_key_vault_secrets_foundry,
+    time_sleep.wait_key_vault_secrets_umi_rbac_replication,
+    time_sleep.wait_key_vault_secrets_smi_rbac_replication,
+    azapi_resource.foundry_resource,
+    #azapi_resource.foundry_managed_virtual_network
+    azapi_resource_action.foundry_managed_virtual_network
+  ]
+
+  type                      = "Microsoft.CognitiveServices/accounts/connections@2026-05-01"
+  name                      = azurerm_key_vault.key_vault_foundry_secrets[0].name
   parent_id                 = azapi_resource.foundry_resource.id
   schema_validation_enabled = false
 
   body = {
     properties = {
-      managedNetwork = {
-        # Ensure use of v2 managed virtual network
-        managedNetworkKind = "V2"
-
-        # Restrict all outbound access unless excplicitly allowed via outbound rules
-        isolationMode = "AllowOnlyApprovedOutbound"
-
-        # Use Standard SKU if there is a use case for FQDN rule; keeping disabled because I'm cheap
-        #firewallSku = "Standard"
-
-        # Create the managed virtual network immediately
-        provisionNetworkNow = true
+      category      = "AzureKeyVault"
+      isSharedToAll = true
+      target        = "https://${azurerm_key_vault.key_vault_foundry_secrets[0].name}.vault.azure.net/"
+      authType      = "AccountManagedIdentity"
+      credentials   = {}
+      metadata = {
+        ApiType    = "Azure"
+        ResourceId = azurerm_key_vault.key_vault_foundry_secrets[0].id
+        Location   = var.region
       }
     }
   }
@@ -1910,12 +1984,15 @@ resource "azapi_resource" "managed_vnet_outbound_rule_private_endpoint_foundry_r
   count = var.agents && var.agent_service_outbound_networking.type == "managed_virtual_network" ? 1 : 0
 
   depends_on = [
-    azapi_resource.foundry_managed_virtual_network
+    #azapi_resource.foundry_managed_virtual_network,
+    azapi_resource_action.foundry_managed_virtual_network,
+    azapi_resource.conn_resource_key_vault_secrets
   ]
 
   type                      = "Microsoft.CognitiveServices/accounts/managedNetworks/outboundRules@2026-05-15-preview"
   name                      = "AllowFoundryResource"
-  parent_id                 = azapi_resource.foundry_managed_virtual_network[0].id
+  #parent_id                 = azapi_resource.foundry_managed_virtual_network[0].id
+  parent_id                 = "${azapi_resource.foundry_resource.id}/managedNetworks/default"
   schema_validation_enabled = false
 
   body = {
@@ -1943,7 +2020,8 @@ resource "azapi_resource" "managed_vnet_outbound_rule_private_endpoint_storage_a
 
   type                      = "Microsoft.CognitiveServices/accounts/managedNetworks/outboundRules@2026-05-15-preview"
   name                      = "AllowStorageAccountBlob"
-  parent_id                 = azapi_resource.foundry_managed_virtual_network[0].id
+  #parent_id                 = azapi_resource.foundry_managed_virtual_network[0].id
+  parent_id                 = "${azapi_resource.foundry_resource.id}/managedNetworks/default"
   schema_validation_enabled = false
 
   body = {
@@ -1971,7 +2049,8 @@ resource "azapi_resource" "managed_vnet_outbound_rule_private_endpoint_cosmosdb_
 
   type                      = "Microsoft.CognitiveServices/accounts/managedNetworks/outboundRules@2026-05-15-preview"
   name                      = "AllowCosmosDBAccountSQL"
-  parent_id                 = azapi_resource.foundry_managed_virtual_network[0].id
+  #parent_id                 = azapi_resource.foundry_managed_virtual_network[0].id
+  parent_id                 = "${azapi_resource.foundry_resource.id}/managedNetworks/default"
   schema_validation_enabled = false
 
   body = {
@@ -1999,7 +2078,8 @@ resource "azapi_resource" "managed_vnet_outbound_rule_private_endpoint_ai_search
 
   type                      = "Microsoft.CognitiveServices/accounts/managedNetworks/outboundRules@2026-05-15-preview"
   name                      = "AllowAISearch"
-  parent_id                 = azapi_resource.foundry_managed_virtual_network[0].id
+  #parent_id                 = azapi_resource.foundry_managed_virtual_network[0].id
+  parent_id                 = "${azapi_resource.foundry_resource.id}/managedNetworks/default"
   schema_validation_enabled = false
 
   body = {
@@ -2027,7 +2107,8 @@ resource "azapi_resource" "managed_vnet_outbound_rule_private_endpoint_acr" {
 
   type                      = "Microsoft.CognitiveServices/accounts/managedNetworks/outboundRules@2026-05-15-preview"
   name                      = "AllowACR"
-  parent_id                 = azapi_resource.foundry_managed_virtual_network[0].id
+  #parent_id                 = azapi_resource.foundry_managed_virtual_network[0].id
+  parent_id                 = "${azapi_resource.foundry_resource.id}/managedNetworks/default"
   schema_validation_enabled = false
 
   body = {
@@ -2057,7 +2138,8 @@ resource "azapi_resource" "managed_vnet_outbound_rule_service_tag_azure_monitor"
 
   type                      = "Microsoft.CognitiveServices/accounts/managedNetworks/outboundRules@2026-05-15-preview"
   name                      = "AllowAgentAzureMonitor"
-  parent_id                 = azapi_resource.foundry_managed_virtual_network[0].id
+  #parent_id                 = azapi_resource.foundry_managed_virtual_network[0].id
+  parent_id                 = "${azapi_resource.foundry_resource.id}/managedNetworks/default"
   schema_validation_enabled = false
 
   body = {
@@ -2090,7 +2172,8 @@ resource "azapi_resource" "managed_vnet_outbound_rule_service_tag_azure_frontdoo
 
   type                      = "Microsoft.CognitiveServices/accounts/managedNetworks/outboundRules@2026-05-15-preview"
   name                      = "AllowAgent365FrontdoorRule"
-  parent_id                 = azapi_resource.foundry_managed_virtual_network[0].id
+  #parent_id                 = azapi_resource.foundry_managed_virtual_network[0].id
+  parent_id                 = "${azapi_resource.foundry_resource.id}/managedNetworks/default"
   schema_validation_enabled = false
 
   body = {
@@ -2122,7 +2205,8 @@ resource "azapi_resource" "managed_vnet_outbound_rule_private_endpoint_apim" {
 
   type                      = "Microsoft.CognitiveServices/accounts/managedNetworks/outboundRules@2026-05-15-preview"
   name                      = "AllowAIGateway"
-  parent_id                 = azapi_resource.foundry_managed_virtual_network[0].id
+  #parent_id                 = azapi_resource.foundry_managed_virtual_network[0].id
+  parent_id                 = "${azapi_resource.foundry_resource.id}/managedNetworks/default"
   schema_validation_enabled = false
 
   body = {
@@ -2133,42 +2217,6 @@ resource "azapi_resource" "managed_vnet_outbound_rule_private_endpoint_apim" {
         subresourceTarget = "Gateway"
       }
       category = "UserDefined"
-    }
-  }
-}
-
-## !BYOKEYVAULT
-## !AGENTS
-## Create a Foundry resource connection to the Key Vault used to store secrets for connections created within Foundry
-## This is only required if var.deploy_key_vault_connection_secrets is set to true
-resource "azapi_resource" "conn_resource_key_vault_secrets" {
-  count = var.deploy_key_vault_connection_secrets && var.agents ? 1 : 0
-
-  depends_on = [
-    azurerm_key_vault.key_vault_foundry_secrets,
-    azurerm_private_endpoint.pe_key_vault_secrets_foundry,
-    time_sleep.wait_key_vault_secrets_umi_rbac_replication,
-    time_sleep.wait_key_vault_secrets_smi_rbac_replication,
-    azapi_resource.foundry_resource
-  ]
-
-  type                      = "Microsoft.CognitiveServices/accounts/connections@2026-05-01"
-  name                      = azurerm_key_vault.key_vault_foundry_secrets[0].name
-  parent_id                 = azapi_resource.foundry_resource.id
-  schema_validation_enabled = false
-
-  body = {
-    properties = {
-      category      = "AzureKeyVault"
-      isSharedToAll = true
-      target        = "https://${azurerm_key_vault.key_vault_foundry_secrets[0].name}.vault.azure.net/"
-      authType      = "AccountManagedIdentity"
-      credentials   = {}
-      metadata = {
-        ApiType    = "Azure"
-        ResourceId = azurerm_key_vault.key_vault_foundry_secrets[0].id
-        Location   = var.region
-      }
     }
   }
 }
@@ -2200,7 +2248,8 @@ module "foundry_project_agents" {
     azapi_resource.bing_grounding_custom_search_foundry,
     azurerm_application_insights.appins_foundry,
     # Wait for managed VNet and outbound rules to be created
-    azapi_resource.foundry_managed_virtual_network,
+    #azapi_resource.foundry_managed_virtual_network,
+    azapi_resource_action.foundry_managed_virtual_network,
     azapi_resource.managed_vnet_outbound_rule_private_endpoint_foundry_resource,
     azapi_resource.managed_vnet_outbound_rule_private_endpoint_storage_account_blob,
     azapi_resource.managed_vnet_outbound_rule_private_endpoint_cosmosdb_account_sql,
