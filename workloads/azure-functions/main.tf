@@ -15,6 +15,8 @@ resource "time_static" "created" {}
 ##
 resource "azuread_application" "app_reg_function" {
   display_name = "FunctionApp${var.region_code}${var.random_string}"
+
+  # Set the owner to the identity context that deployed the resources
   owners = [
     data.azuread_client_config.current.object_id
   ]
@@ -265,14 +267,23 @@ resource "azurerm_storage_account" "storage_account_function" {
   # LRS to save costs since this is lab
   account_replication_type = "LRS"
 
-  # Disable key-based access preventing use of SAK/SAS and restrict to Entra
-  shared_access_key_enabled = false
+  # Disable key-based access preventing use of SAK/SAS and restrict to Entra if Flex Consumption
+  # and enable for Elastic Premium because Azure Files integration will not support Entra ID authentication
+  shared_access_key_enabled = var.function_plan_sku == "FC1" ? false : true
 
   # Disable public access for blob containers
   allow_nested_items_to_be_public = false
 
-  # Disable anonymous access to blob for the entire storage account
-  public_network_access_enabled = false
+  # TODO: 6/2026 Set public network access to false and remove the network_acls section once NSPs support cross-NSP links (which will address diagnostic log delivery issue)
+  # This is a unique requirement for my lab
+  public_network_access_enabled = true
+  network_rules {
+    default_action = "Deny"
+    ip_rules = [
+      var.trusted_ip
+    ]
+    bypass = ["AzureServices"]
+  }
 
   lifecycle {
     ignore_changes = [
@@ -432,6 +443,12 @@ resource "azurerm_private_endpoint" "private_endpoint_storage_account_blob_funct
   }
 
   tags = local.tags
+
+  lifecycle {
+    ignore_changes = [
+      tags["created_by"]
+    ]
+  }
 }
 
 ## Create a Private Endpoint for Function Storage Account for file endpoint
@@ -461,6 +478,12 @@ resource "azurerm_private_endpoint" "private_endpoint_storage_account_file_funct
     ]
   }
   tags = local.tags
+
+  lifecycle {
+    ignore_changes = [
+      tags["created_by"]
+    ]
+  }
 }
 
 ## Create a Private Endpoint for Function Storage Account for table endpoint
@@ -490,6 +513,12 @@ resource "azurerm_private_endpoint" "private_endpoint_storage_account_table_func
     ]
   }
   tags = local.tags
+
+  lifecycle {
+    ignore_changes = [
+      tags["created_by"]
+    ]
+  }
 }
 
 ## Create a Private Endpoint for Function Storage Account for queue endpoint
@@ -519,6 +548,12 @@ resource "azurerm_private_endpoint" "private_endpoint_storage_account_queue_func
     ]
   }
   tags = local.tags
+
+  lifecycle {
+    ignore_changes = [
+      tags["created_by"]
+    ]
+  }
 }
 
 ########## Create a Key Vault instance and its private endpoint for secrets storage of the Azure Function
@@ -570,7 +605,6 @@ resource "azurerm_key_vault" "key_vault_function" {
 
   lifecycle {
     ignore_changes = [
-      tags["created_date"],
       tags["created_by"]
     ]
   }
@@ -627,6 +661,41 @@ resource "azurerm_network_security_perimeter_association" "assoc_key_vault_funct
   resource_id                           = azurerm_key_vault.key_vault_function.id
 }
 
+## Create a Private Endpoint for the Azure Key Vault used for secret storage by the Azure Function
+## 
+resource "azurerm_private_endpoint" "private_endpoint_key_vault_function" {
+  depends_on = [
+    azurerm_network_security_perimeter_association.assoc_key_vault_function
+  ]
+
+  name                = "pekvfunc${var.region_code}${var.random_string}"
+  location            = var.region
+  resource_group_name = azurerm_resource_group.rg_function.name
+
+  subnet_id = var.subnet_id_svc
+
+  private_service_connection {
+    name                           = "pekvfunc${var.region_code}${var.random_string}"
+    is_manual_connection           = false
+    private_connection_resource_id = azurerm_key_vault.key_vault_function.id
+    subresource_names              = ["vault"]
+  }
+
+  private_dns_zone_group {
+    name = "zoneconn${azurerm_key_vault.key_vault_function.name}"
+    private_dns_zone_ids = [
+      "/subscriptions/${var.subscription_id_infrastructure}/resourceGroups/${var.resource_group_name_dns}/providers/Microsoft.Network/privateDnsZones/privatelink.vaultcore.azure.net"
+    ]
+  }
+  tags = local.tags
+
+  lifecycle {
+    ignore_changes = [
+      tags["created_by"]
+    ]
+  }
+}
+
 ########## Create an Application Insights instance for the Azure Function
 ##########
 ##########
@@ -646,6 +715,12 @@ resource "azurerm_application_insights" "app_insights_function" {
   workspace_id     = azurerm_log_analytics_workspace.log_analytics_workspace_workload.id
 
   tags = local.tags
+
+  lifecycle {
+    ignore_changes = [
+      tags["created_by"]
+    ]
+  }
 }
 
 ## Add 30 second sleep to allow for Application Insights 
@@ -674,6 +749,12 @@ resource "azurerm_user_assigned_identity" "umi_function" {
   resource_group_name = azurerm_resource_group.rg_function.name
 
   tags = local.tags
+
+  lifecycle {
+    ignore_changes = [
+      tags["created_by"]
+    ]
+  }
 }
 
 ## Sleep for 10 seconds to allow the user-assigned managed identity to replicate through Entra ID
@@ -717,7 +798,7 @@ resource "azurerm_role_assignment" "umi_function_storage_blob_data_owner" {
 
 ## Create an Azure RBAC role assignment granting the user-assigned managed identity for the Function App
 ## the Storage Queue Data Contributor role on the Azure Storage account used by the Azure Function
-## ## This is required for the Azure Blobs trigger
+## This is required for the Azure Blobs trigger
 resource "azurerm_role_assignment" "umi_function_storage_queue_data_contributor" {
   depends_on = [
     time_sleep.wait_umi_function,
@@ -731,13 +812,30 @@ resource "azurerm_role_assignment" "umi_function_storage_queue_data_contributor"
 }
 
 ## Create an Azure RBAC role assignment granting the user-assigned managed identity for the Function App
+## the Storage Queue Data Message Processor role on the Azure Storage account used by the Azure Function
+## This is required to support the MCP Server extension if using SSE transport
+resource "azurerm_role_assignment" "umi_function_storage_queue_data_message_processor" {
+  count = var.mcp_server_enabled ? 1 : 0
+
+  depends_on = [
+    time_sleep.wait_umi_function,
+    azurerm_storage_account.storage_account_function,
+    azurerm_role_assignment.umi_function_storage_queue_data_contributor
+  ]
+
+  scope                = azurerm_storage_account.storage_account_function.id
+  role_definition_name = "Storage Queue Data Message Processor"
+  principal_id         = azurerm_user_assigned_identity.umi_function.principal_id
+}
+
+## Create an Azure RBAC role assignment granting the user-assigned managed identity for the Function App
 ## the Storage Table Data Contributor role on the Azure Storage account used by the Azure Function
 ## This is required for all use cases and supports diagnostic events
 resource "azurerm_role_assignment" "umi_function_storage_table_data_contributor" {
   depends_on = [
     time_sleep.wait_umi_function,
     azurerm_storage_account.storage_account_function,
-    azurerm_role_assignment.umi_function_storage_queue_data_contributor
+    azurerm_role_assignment.umi_function_storage_queue_data_message_processor
   ]
 
   scope                = azurerm_storage_account.storage_account_function.id
@@ -752,7 +850,7 @@ resource "azurerm_role_assignment" "umi_function_key_vault_secrets_user" {
   depends_on = [
     time_sleep.wait_umi_function,
     azurerm_key_vault.key_vault_function,
-    azurerm_role_assignment.umi_function_storage_queue_data_contributor
+    azurerm_role_assignment.umi_function_storage_table_data_contributor
   ]
 
   scope                = azurerm_key_vault.key_vault_function.id
@@ -792,6 +890,12 @@ resource "azurerm_service_plan" "function_app_plan" {
   sku_name = var.function_plan_sku
 
   tags = local.tags
+
+  lifecycle {
+    ignore_changes = [
+      tags["created_by"]
+    ]
+  }
 }
 
 ## Create the Function App as a Flex Consumption App if the SKU is set to FC1
@@ -802,11 +906,17 @@ resource "azurerm_function_app_flex_consumption" "function_app_flex_consumption"
   depends_on = [
     azurerm_service_plan.function_app_plan,
     azurerm_storage_account.storage_account_function,
+    azurerm_key_vault.key_vault_function,
     azurerm_storage_container.deployment,
     azurerm_user_assigned_identity.umi_function,
     time_sleep.wait_umi_function_permissions,
     azurerm_application_insights.app_insights_function,
-    time_sleep.wait_for_app_insights_func
+    time_sleep.wait_for_app_insights_func,
+    azurerm_private_endpoint.private_endpoint_storage_account_blob_function,
+    azurerm_private_endpoint.private_endpoint_storage_account_file_function,
+    azurerm_private_endpoint.private_endpoint_storage_account_table_function,
+    azurerm_private_endpoint.private_endpoint_storage_account_queue_function,
+    azurerm_private_endpoint.private_endpoint_key_vault_function
   ]
 
   name                = "funcapp${var.region_code}${var.random_string}"
@@ -872,7 +982,7 @@ resource "azurerm_function_app_flex_consumption" "function_app_flex_consumption"
 
       # Limit the audiences that the authentication extension will accept
       allowed_audiences = [
-        "api://${azuread_application.app_reg_function.client_id}"
+        "api://${azuread_application.app_reg_function.client_id}/user_impersonation"
       ]
       # Limit the applications that can authenticate directly to this app or on behalf of the user
       # You will need to modify this to allow apps other than the function app's own SP
@@ -881,8 +991,9 @@ resource "azurerm_function_app_flex_consumption" "function_app_flex_consumption"
       www_authentication_disabled = false
     }
 
+    # This is an API so token store isn't required
     login {
-      token_store_enabled = true
+      token_store_enabled = false
     }
   }
 
@@ -906,13 +1017,19 @@ resource "azurerm_function_app_flex_consumption" "function_app_flex_consumption"
     # OAuth 2.0 protected resource metadata that helps MCP clients understand
     # how to interact with the MCP Server. Specifically, we publish the scopes 
     # defined for the app registration used by the function
-    WEBSITE_AUTH_PRM_DEFAULT_WITH_SCOPES = "api://${azuread_application.app_reg_function.client_id}/user_impersonation"
+    WEBSITE_AUTH_PRM_DEFAULT_WITH_SCOPES = var.mcp_server_enabled ? "api://${azuread_application.app_reg_function.client_id}/user_impersonation" : ""
   }
 
   tags = local.tags
+
+  lifecycle {
+    ignore_changes = [
+      tags["created_by"]
+    ]
+  }
 }
 
-## Create the Function App as a Premium Plan App if the SKU is set to EP1
+## Create the Function App as a Elastic Premium App if the SKU is set to EP1
 ##
 resource "azurerm_linux_function_app" "function_app_premium_plan" {
   count = var.function_plan_sku == "EP1" ? 1 : 0
@@ -924,7 +1041,12 @@ resource "azurerm_linux_function_app" "function_app_premium_plan" {
     time_sleep.wait_umi_function_permissions,
     azurerm_application_insights.app_insights_function,
     time_sleep.wait_for_app_insights_func,
-    azurerm_key_vault_secret.secret_storage_account_connection_string_function
+    azurerm_key_vault_secret.secret_storage_account_connection_string_function,
+    azurerm_private_endpoint.private_endpoint_storage_account_blob_function,
+    azurerm_private_endpoint.private_endpoint_storage_account_file_function,
+    azurerm_private_endpoint.private_endpoint_storage_account_table_function,
+    azurerm_private_endpoint.private_endpoint_storage_account_queue_function,
+    azurerm_private_endpoint.private_endpoint_key_vault_function
   ]
 
   name                = "funcapp${var.region_code}${var.random_string}"
@@ -934,6 +1056,7 @@ resource "azurerm_linux_function_app" "function_app_premium_plan" {
 
   # Disable basic authN for deployments
   webdeploy_publish_basic_authentication_enabled = false
+  ftp_publish_basic_authentication_enabled       = false
 
   # Identity-based access to storage account
   storage_account_name          = azurerm_storage_account.storage_account_function.name
@@ -962,9 +1085,9 @@ resource "azurerm_linux_function_app" "function_app_premium_plan" {
     }
 
     # Setup scaling
-    elastic_instance_minimum = 1
-    pre_warmed_instance_count   = 1
-  
+    elastic_instance_minimum  = 1
+    pre_warmed_instance_count = 1
+
     # Set minimum TLS version
     minimum_tls_version = "1.2"
 
@@ -995,7 +1118,7 @@ resource "azurerm_linux_function_app" "function_app_premium_plan" {
 
       # Limit the audiences that the authentication extension will accept
       allowed_audiences = [
-        "api://${azuread_application.app_reg_function.client_id}"
+        "api://${azuread_application.app_reg_function.client_id}/user_impersonation"
       ]
       # Limit the applications that can authenticate directly to this app or on behalf of the user
       # You will need to modify this to allow apps other than the function app's own SP
@@ -1004,14 +1127,20 @@ resource "azurerm_linux_function_app" "function_app_premium_plan" {
       www_authentication_disabled = false
     }
 
+    # This is an API so token store isn't required
     login {
-      token_store_enabled = true
+      token_store_enabled = false
     }
   }
 
   app_settings = {
     # Function app does not support managed identity access to Azure Files so reference the connection string from Azure Key Vault
     WEBSITE_CONTENTAZUREFILECONNECTIONSTRING = data.azurerm_key_vault_secret.secret_storage_account_connection_string_function.value
+    WEBSITE_CONTENTSHARE                     = azurerm_storage_account.storage_account_function.name
+    # TODO: 7/2026 - Switch this to property setting of vnetContentShareEnabled once azurerm supports it
+    # This forces communication to storage account. Without it, traffic will come in public IP
+    # https://github.com/hashicorp/terraform-provider-azurerm/issues/30685
+    WEBSITE_CONTENTOVERVNET = 1
 
     # This setup will force the function to use its user-assigned managed identity to authenticate to the
     # storage account
@@ -1032,6 +1161,41 @@ resource "azurerm_linux_function_app" "function_app_premium_plan" {
   }
 
   tags = local.tags
+
+  lifecycle {
+    ignore_changes = [
+      tags["created_by"]
+    ]
+  }
+}
+
+## Enable diagnostic settings for the Function App to send logs to the workload Log Analytics Workspace
+##
+resource "azurerm_monitor_diagnostic_setting" "diag_function_app" {
+  depends_on = [
+    azurerm_function_app_flex_consumption.function_app_flex_consumption,
+    azurerm_linux_function_app.function_app_premium_plan
+  ]
+
+  name                       = "diag"
+  target_resource_id         = var.function_plan_sku == "FC1" ? azurerm_function_app_flex_consumption.function_app_flex_consumption[0].id : azurerm_linux_function_app.function_app_premium_plan[0].id
+  log_analytics_workspace_id = azurerm_log_analytics_workspace.log_analytics_workspace_workload.id
+
+  enabled_log {
+    category = "FunctionAppLogs"
+  }
+
+  enabled_log {
+    category = "AppServiceAuditLogs"
+  }
+
+  enabled_log {
+    category = "AppServiceIPSecAuditLogs"
+  }
+
+  enabled_log {
+    category = "AppServiceAuthenticationLogs"
+  }
 }
 
 ## Create Private Endpoint for Function App
@@ -1052,7 +1216,8 @@ resource "azurerm_private_endpoint" "private_endpoint_function_app" {
     name                           = "pefuncapp${var.region_code}${var.random_string}"
     is_manual_connection           = false
     private_connection_resource_id = var.function_plan_sku == "FC1" ? azurerm_function_app_flex_consumption.function_app_flex_consumption[0].id : azurerm_linux_function_app.function_app_premium_plan[0].id
-    subresource_names              = ["sites"]
+    subresource_names              = [
+      "sites"]
   }
 
   private_dns_zone_group {
@@ -1063,24 +1228,17 @@ resource "azurerm_private_endpoint" "private_endpoint_function_app" {
   }
 
   tags = local.tags
+
+  lifecycle {
+    ignore_changes = [
+      tags["created_by"]
+    ]
+  }
 }
 
 ########## Finalize settings on the app registration
 ##########
 ##########
-
-## Add the required redirect URI to support the Entra ID authentication extension for the Function App
-##
-resource "azuread_application_redirect_uris" "function_app_uri" {
-  application_id = azuread_application.app_reg_function.id
-  type           = "Web"
-
-  redirect_uris = var.function_plan_sku == "FC1" ? [
-    "https://${azurerm_function_app_flex_consumption.function_app_flex_consumption[0].default_hostname}/.auth/login/aad/callback"
-  ] : [
-    "https://${azurerm_linux_function_app.function_app_premium_plan[0].default_hostname}/.auth/login/aad/callback"
-  ]
-}
 
 ## Add an identifier URI (essentially the aud claim) to the app registration
 ##
@@ -1097,5 +1255,5 @@ resource "azuread_application_federated_identity_credential" "function_app_fic" 
   description    = "Federated credential associated to user-assigned managed identity assigned to Azure Function"
   issuer         = "https://login.microsoftonline.com/${data.azurerm_client_config.current.tenant_id}/v2.0"
   subject        = azurerm_user_assigned_identity.umi_function.principal_id
-  audiences      = ["api://AzureADTyesokenExchange"]
+  audiences      = ["api://AzureADTokenExchange"]
 }

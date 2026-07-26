@@ -9,6 +9,12 @@ variable "function_plan_sku" {
   }
 }
 
+variable "mcp_server_enabled" {
+  description = "Setting this to true enables the Azure Functions MCP Server Extension"
+  type        = bool
+  default     = false
+}
+
 variable "python_version" {
   description = "Python version to use for the Function App"
   type        = string
