@@ -86,6 +86,7 @@ resource "azurerm_subnet" "subnet_bastion" {
   address_prefixes = [
     cidrsubnet(var.address_space_vnet, 3, 0)
   ]
+  default_outbound_access_enabled = false
   private_endpoint_network_policies = "Enabled"
 }
 
@@ -99,6 +100,7 @@ resource "azurerm_subnet" "subnet_dnsin" {
   address_prefixes = [
     cidrsubnet(var.address_space_vnet, 3, 1)
   ]
+  default_outbound_access_enabled = false
   private_endpoint_network_policies = "Enabled"
 
   ## Delegation must be added because redeployment will fail without it.
@@ -121,6 +123,7 @@ resource "azurerm_subnet" "subnet_dnsout" {
   address_prefixes = [
     cidrsubnet(var.address_space_vnet, 3, 2)
   ]
+  default_outbound_access_enabled = false
   private_endpoint_network_policies = "Enabled"
 
   ## Delegation must be added because redeployment will fail without it.
@@ -143,6 +146,7 @@ resource "azurerm_subnet" "subnet_svc" {
   address_prefixes = [
     cidrsubnet(var.address_space_vnet, 3, 3)
   ]
+  default_outbound_access_enabled = false
   private_endpoint_network_policies = "Enabled"
 }
 
@@ -156,6 +160,7 @@ resource "azurerm_subnet" "subnet_tools" {
   address_prefixes = [
     cidrsubnet(var.address_space_vnet, 3, 4)
   ]
+  default_outbound_access_enabled = false
   private_endpoint_network_policies = "Enabled"
 }
 
@@ -434,13 +439,13 @@ resource "azurerm_network_security_group" "nsg_bastion" {
     destination_address_prefix = "*"
   }
 
+  tags = var.tags
+
   lifecycle {
     ignore_changes = [
       tags["created_by"]
     ]
   }
-
-  tags = var.tags
 }
 
 ## Create the network security group for the Private DNS Resolver inbound endpoint subnet
@@ -466,13 +471,13 @@ resource "azurerm_network_security_group" "nsg_dnsin" {
       destination_address_prefix = "*"
   }
 
+  tags = var.tags
+
   lifecycle {
     ignore_changes = [
       tags["created_by"]
     ]
   }
-
-  tags = var.tags
 }
 
 ## Create the network security group for the Private DNS Resolver outbound endpoint subnet
@@ -482,13 +487,13 @@ resource "azurerm_network_security_group" "nsg_dnsout" {
   location            = var.region
   resource_group_name = var.resource_group_name
 
+  tags = var.tags
+
   lifecycle {
     ignore_changes = [
       tags["created_by"]
     ]
   }
-
-  tags = var.tags
 }
 
 ## Create the network security group for the tools subnet
@@ -498,13 +503,13 @@ resource "azurerm_network_security_group" "nsg_tools" {
   location            = var.region
   resource_group_name = var.resource_group_name
 
+  tags = var.tags
+
   lifecycle {
     ignore_changes = [
       tags["created_by"]
     ]
   }
-
-  tags = var.tags
 }
 
 ## Create the network security group for the supporting services subnet
@@ -514,13 +519,13 @@ resource "azurerm_network_security_group" "nsg_svc" {
   location            = var.region
   resource_group_name = var.resource_group_name
 
+  tags = var.tags
+
   lifecycle {
     ignore_changes = [
       tags["created_by"]
     ]
   }
-
-  tags = var.tags
 }
 
 ## Associate network security group to the Azure Bastion subnet
@@ -942,6 +947,7 @@ resource "azurerm_public_ip" "pip_bastion" {
 
   lifecycle {
     ignore_changes = [
+      tags["created_by"],
       # Ignore ip_tags property due to MCAPS policy
       ip_tags
     ]
@@ -964,11 +970,16 @@ resource "azurerm_bastion_host" "bastion" {
     subnet_id            = azurerm_subnet.subnet_bastion.id
     public_ip_address_id = azurerm_public_ip.pip_bastion.id
   }
-
   # Use Basic SKU to save costs
   sku = "Basic"
 
   tags = var.tags
+
+  lifecycle {
+    ignore_changes = [
+      tags["created_by"]
+    ]
+  }
 }
 
 ## Create diagnostic settings for the Azure Bastion instance to send logs to Log Analytics Workspace
@@ -991,6 +1002,12 @@ resource "azurerm_user_assigned_identity" "umi" {
   resource_group_name = var.resource_group_name
 
   tags = var.tags
+
+  lifecycle {
+    ignore_changes = [
+      tags["created_by"]
+    ]
+  }
 }
 
 ## Create a public IP address to be used by the Azure virtual machine to allow access to the Internet
@@ -1002,8 +1019,11 @@ resource "azurerm_public_ip" "pip_vm" {
   allocation_method   = "Static"
   sku                 = "Standard"
 
+  tags = var.tags
+
   lifecycle {
     ignore_changes = [
+      tags["created_by"],
       # Ignore ip_tags property due to MCAPS policy
       ip_tags
     ]
@@ -1029,6 +1049,12 @@ resource "azurerm_network_interface" "nic" {
     public_ip_address_id          = azurerm_public_ip.pip_vm.id
   }
   tags = var.tags
+
+  lifecycle {
+    ignore_changes = [
+      tags["created_by"]
+    ]
+  }
 }
 
 ## Create the virtual machine
@@ -1073,6 +1099,14 @@ resource "azurerm_windows_virtual_machine" "vm" {
   tags = merge(var.tags, {
     cycle = "true"
   })
+
+  lifecycle {
+    ignore_changes = [
+      tags["created_by"],
+      # Ignore tags related to my automation
+      tags["lastBooted"]
+    ]
+  }
 }
 
 ## Execute the provisioning script via the custom script extension
@@ -1101,5 +1135,11 @@ resource "azurerm_virtual_machine_extension" "custom-script-extension" {
   }
 
   tags = var.tags
+
+  lifecycle {
+    ignore_changes = [
+      tags["created_by"]
+    ]
+  }
 }
 

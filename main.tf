@@ -301,7 +301,7 @@ resource "azurerm_private_dns_zone" "zone" {
 
   name                = each.value
   resource_group_name = module.vnet_shared["primary"].resource_group_name_shared_services
-  tags                = var.tags
+  tags                = local.tags
 
   lifecycle {
     ignore_changes = [
@@ -328,7 +328,7 @@ resource "azurerm_private_dns_zone_virtual_network_link" "link" {
   # TODO: 12/2025 Remove this condition if DNS fallback ever supports non-Private Link zones
   # resolution_policy is only valid for privatelink zones - use null for non-privatelink zones
   resolution_policy = startswith(each.value.namespace, "privatelink.") ? "NxDomainRedirect" : null
-  tags                = var.tags
+  tags                = local.tags
 
   lifecycle {
     ignore_changes = [
@@ -337,21 +337,24 @@ resource "azurerm_private_dns_zone_virtual_network_link" "link" {
   }
 }
 
-## Update the Azure Firewall DNS settings to point to the Private Resolver Inbound Endpoint IP address
-##
 resource "null_resource" "update_firewall_dns_policy" {
   depends_on = [
     azurerm_private_dns_zone_virtual_network_link.link
   ]
 
   for_each = var.environment_details
-  
-  # Trigger only if Azure Firewall Policy changes or if DNS resolver IP changes
+
+  # Trigger if Azure Firewall Policy changes,if DNS resolver IP changes, or if the
+  # firewall policy's actual DNS servers no longer match the expected resolver IP
   triggers = {
     firewall_policy_id = module.vnet_transit[each.key].policy_id
-    dns_resolver_ip    = module.vnet_shared[each.key].private_resolver_inbound_endpoint_ip
+    dns_resolver_ip     = module.vnet_shared[each.key].private_resolver_inbound_endpoint_ip
+    dns_in_sync = tostring(
+      try(data.azapi_resource.firewall_policy_current[each.key].output.properties.dnsSettings.servers, []) ==
+      [module.vnet_shared[each.key].private_resolver_inbound_endpoint_ip]
+    )
   }
-  
+
   provisioner "local-exec" {
     command = "az network firewall policy update --ids ${module.vnet_transit[each.key].policy_id} --dns-servers ${module.vnet_shared[each.key].private_resolver_inbound_endpoint_ip}"
   }

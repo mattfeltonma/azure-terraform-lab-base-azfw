@@ -82,7 +82,7 @@ resource "azurerm_subnet" "subnet_app_gateway" {
   address_prefixes = [
     cidrsubnet(var.address_space_vnet, 3, 0)
   ]
-
+  default_outbound_access_enabled = false
   private_endpoint_network_policies = "Enabled"
 }
 
@@ -95,6 +95,7 @@ resource "azurerm_subnet" "subnet_amlcpt" {
   address_prefixes = [
     cidrsubnet(var.address_space_vnet, 3, 1)
   ]
+  default_outbound_access_enabled = false
   private_endpoint_network_policies = "Enabled"
 }
 
@@ -107,6 +108,7 @@ resource "azurerm_subnet" "subnet_apim" {
   address_prefixes = [
     cidrsubnet(var.address_space_vnet, 3, 2)
   ]
+  default_outbound_access_enabled = false
   private_endpoint_network_policies = "Enabled"
 }
 
@@ -119,6 +121,7 @@ resource "azurerm_subnet" "subnet_app" {
   address_prefixes = [
     cidrsubnet(var.address_space_vnet, 3, 3)
   ]
+  default_outbound_access_enabled = false
   private_endpoint_network_policies = "Enabled"
 }
 
@@ -131,6 +134,7 @@ resource "azurerm_subnet" "subnet_data" {
   address_prefixes = [
     cidrsubnet(var.address_space_vnet, 3, 4)
   ]
+  default_outbound_access_enabled = false
   private_endpoint_network_policies = "Enabled"
 }
 
@@ -143,6 +147,7 @@ resource "azurerm_subnet" "subnet_mgmt" {
   address_prefixes = [
     cidrsubnet(var.address_space_vnet, 3, 5)
   ]
+  default_outbound_access_enabled = false
   private_endpoint_network_policies = "Enabled"
 }
 
@@ -155,6 +160,7 @@ resource "azurerm_subnet" "subnet_svc" {
   address_prefixes = [
     cidrsubnet(var.address_space_vnet, 3, 6)
   ]
+  default_outbound_access_enabled = false
   private_endpoint_network_policies = "Enabled"
 }
 
@@ -167,6 +173,7 @@ resource "azurerm_subnet" "subnet_vint" {
   address_prefixes = [
     cidrsubnet(var.address_space_vnet, 3, 7)
   ]
+  default_outbound_access_enabled = false
   private_endpoint_network_policies = "Enabled"
 }
 

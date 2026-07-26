@@ -89,6 +89,7 @@ resource "azurerm_subnet" "subnet_gateway" {
   address_prefixes = [
     cidrsubnet(var.address_space_vnet, 3, 0)
   ]
+  default_outbound_access_enabled = false
   private_endpoint_network_policies = "Enabled"
 }
 
@@ -105,6 +106,7 @@ resource "azurerm_subnet" "subnet_firewall" {
   address_prefixes = [
     cidrsubnet(var.address_space_vnet, 3, 1)
   ]
+  default_outbound_access_enabled = false
   private_endpoint_network_policies = "Enabled"
 }
 
@@ -238,7 +240,7 @@ resource "azurerm_virtual_network_gateway" "vgw_vpn" {
   sku                 = "VpnGw1AZ"
 
   active_active = true
-  enable_bgp    = true
+  bgp_enabled   = true
 
   ip_configuration {
     name                          = "ipconfig-1"
@@ -1155,7 +1157,7 @@ resource "azurerm_firewall" "azure_firewall" {
   firewall_policy_id = azurerm_firewall_policy.firewall_policy.id
 
   ip_configuration {
-    name                 = "fwipconfig"
+    name                 = "AzureFirewallIpConfiguration0"
     subnet_id            = azurerm_subnet.subnet_firewall.id
     public_ip_address_id = azurerm_public_ip.pip_azure_firewall.id
   }
@@ -1164,7 +1166,10 @@ resource "azurerm_firewall" "azure_firewall" {
 
   lifecycle {
     ignore_changes = [
-      tags["created_by"]
+      tags["created_by"],
+      # Ignore other properties related to my automation
+      tags["public_ip_id1"],
+      tags["vnet_id"]
     ]
   }
 }
