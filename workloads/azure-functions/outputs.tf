@@ -11,9 +11,9 @@ output "key_vault_uri" {
 }
 
 output "function_app_id" {
-  value = azurerm_function_app_flex_consumption.function_app.id
+  value = var.function_plan_sku == "FC1" ? azurerm_function_app_flex_consumption.function_app_flex_consumption[0].id : azurerm_linux_function_app.function_app_premium_plan[0].id
 }
 
 output "function_app_name" {
-  value = azurerm_function_app_flex_consumption.function_app.name
+  value = var.function_plan_sku == "FC1" ? azurerm_function_app_flex_consumption.function_app_flex_consumption[0].name : azurerm_linux_function_app.function_app_premium_plan[0].name
 }
