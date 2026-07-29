@@ -267,9 +267,8 @@ resource "azurerm_storage_account" "storage_account_function" {
   # LRS to save costs since this is lab
   account_replication_type = "LRS"
 
-  # Disable key-based access preventing use of SAK/SAS and restrict to Entra if Flex Consumption
-  # and enable for Elastic Premium because Azure Files integration will not support Entra ID authentication
-  shared_access_key_enabled = var.function_plan_sku == "FC1" ? false : true
+  # Disable key-based access preventing use of SAK/SAS
+  shared_access_key_enabled = false
 
   # Disable public access for blob containers
   allow_nested_items_to_be_public = false
@@ -385,11 +384,9 @@ resource "azurerm_monitor_diagnostic_setting" "diag_storage_function_table" {
   }
 }
 
-## Create the blob container used by Flex Consumption for code deployment
+## Create the blob container used for code deployment
 ##
-resource "azurerm_storage_container" "deployment" {
-  count = var.function_plan_sku == "FC1" ? 1 : 0
-
+resource "azurerm_storage_container" "container_deployment" {
   depends_on = [
     azurerm_storage_account.storage_account_function
   ]
@@ -399,12 +396,36 @@ resource "azurerm_storage_container" "deployment" {
   container_access_type = "private"
 }
 
+## Create the blob containers for web jobs
+##
+resource "azurerm_storage_container" "container_webjobs_hosts" {
+  depends_on = [
+    azurerm_storage_account.storage_account_function
+  ]
+
+  name                  = "azure-webjobs-hosts"
+  storage_account_id    = azurerm_storage_account.storage_account_function.id
+  container_access_type = "private"
+}
+
+resource "azurerm_storage_container" "container_webjobs_secrets" {
+  depends_on = [
+    azurerm_storage_account.storage_account_function
+  ]
+
+  name                  = "azure-webjobs-secrets"
+  storage_account_id    = azurerm_storage_account.storage_account_function.id
+  container_access_type = "private"
+}
+
 ## Create a Network Security Perimeter resource assocation to associate the Storage Accounts to the NSP
 ##
 resource "azurerm_network_security_perimeter_association" "assoc_storage_account_function" {
   depends_on = [
     azurerm_storage_account.storage_account_function,
-    azurerm_storage_container.deployment,
+    azurerm_storage_container.container_deployment,
+    azurerm_storage_container.container_webjobs_hosts,
+    azurerm_storage_container.container_webjobs_secrets,
     azurerm_network_security_perimeter_access_rule.access_rule_storage_account_function_env_ipprefix
   ]
 
@@ -451,46 +472,11 @@ resource "azurerm_private_endpoint" "private_endpoint_storage_account_blob_funct
   }
 }
 
-## Create a Private Endpoint for Function Storage Account for file endpoint
-## 
-resource "azurerm_private_endpoint" "private_endpoint_storage_account_file_function" {
-  depends_on = [
-    azurerm_private_endpoint.private_endpoint_storage_account_blob_function
-  ]
-
-  name                = "pestacctfuncfile${var.region_code}${var.random_string}"
-  location            = var.region
-  resource_group_name = azurerm_resource_group.rg_function.name
-
-  subnet_id = var.subnet_id_svc
-
-  private_service_connection {
-    name                           = "pestacctfuncfile${var.region_code}${var.random_string}"
-    is_manual_connection           = false
-    private_connection_resource_id = azurerm_storage_account.storage_account_function.id
-    subresource_names              = ["file"]
-  }
-
-  private_dns_zone_group {
-    name = "zoneconn${azurerm_storage_account.storage_account_function.name}file"
-    private_dns_zone_ids = [
-      "/subscriptions/${var.subscription_id_infrastructure}/resourceGroups/${var.resource_group_name_dns}/providers/Microsoft.Network/privateDnsZones/privatelink.file.core.windows.net"
-    ]
-  }
-  tags = local.tags
-
-  lifecycle {
-    ignore_changes = [
-      tags["created_by"]
-    ]
-  }
-}
-
 ## Create a Private Endpoint for Function Storage Account for table endpoint
 ## 
 resource "azurerm_private_endpoint" "private_endpoint_storage_account_table_function" {
   depends_on = [
-    azurerm_private_endpoint.private_endpoint_storage_account_file_function
+    azurerm_private_endpoint.private_endpoint_storage_account_blob_function
   ]
 
   name                = "pestacctfunctable${var.region_code}${var.random_string}"
@@ -907,13 +893,14 @@ resource "azurerm_function_app_flex_consumption" "function_app_flex_consumption"
     azurerm_service_plan.function_app_plan,
     azurerm_storage_account.storage_account_function,
     azurerm_key_vault.key_vault_function,
-    azurerm_storage_container.deployment,
+    azurerm_storage_container.container_deployment,
+    azurerm_storage_container.container_webjobs_hosts,
+    azurerm_storage_container.container_webjobs_secrets,
     azurerm_user_assigned_identity.umi_function,
     time_sleep.wait_umi_function_permissions,
     azurerm_application_insights.app_insights_function,
     time_sleep.wait_for_app_insights_func,
     azurerm_private_endpoint.private_endpoint_storage_account_blob_function,
-    azurerm_private_endpoint.private_endpoint_storage_account_file_function,
     azurerm_private_endpoint.private_endpoint_storage_account_table_function,
     azurerm_private_endpoint.private_endpoint_storage_account_queue_function,
     azurerm_private_endpoint.private_endpoint_key_vault_function
@@ -929,7 +916,7 @@ resource "azurerm_function_app_flex_consumption" "function_app_flex_consumption"
 
   # Identity-based access to storage account
   storage_container_type            = "blobContainer"
-  storage_container_endpoint        = "${azurerm_storage_account.storage_account_function.primary_blob_endpoint}${azurerm_storage_container.deployment[0].name}"
+  storage_container_endpoint        = "${azurerm_storage_account.storage_account_function.primary_blob_endpoint}${azurerm_storage_container.container_deployment.name}"
   storage_authentication_type       = "UserAssignedIdentity"
   storage_user_assigned_identity_id = azurerm_user_assigned_identity.umi_function.id
 
@@ -1030,7 +1017,8 @@ resource "azurerm_function_app_flex_consumption" "function_app_flex_consumption"
 }
 
 ## Create the Function App as a Elastic Premium App if the SKU is set to EP1
-##
+## You'll need to manually upload the zip package to the blob container and set
+## WEBSITE_RUN_FROM_PACKAGE app setting to the blob URL of the zip package to deploy code to the function app
 resource "azurerm_linux_function_app" "function_app_premium_plan" {
   count = var.function_plan_sku == "EP1" ? 1 : 0
 
@@ -1043,7 +1031,6 @@ resource "azurerm_linux_function_app" "function_app_premium_plan" {
     time_sleep.wait_for_app_insights_func,
     azurerm_key_vault_secret.secret_storage_account_connection_string_function,
     azurerm_private_endpoint.private_endpoint_storage_account_blob_function,
-    azurerm_private_endpoint.private_endpoint_storage_account_file_function,
     azurerm_private_endpoint.private_endpoint_storage_account_table_function,
     azurerm_private_endpoint.private_endpoint_storage_account_queue_function,
     azurerm_private_endpoint.private_endpoint_key_vault_function
@@ -1122,7 +1109,7 @@ resource "azurerm_linux_function_app" "function_app_premium_plan" {
       ]
       # Limit the applications that can authenticate directly to this app or on behalf of the user
       # You will need to modify this to allow apps other than the function app's own SP
-      allowed_applications = []
+      allowed_applications = null
 
       www_authentication_disabled = false
     }
@@ -1134,13 +1121,8 @@ resource "azurerm_linux_function_app" "function_app_premium_plan" {
   }
 
   app_settings = {
-    # Function app does not support managed identity access to Azure Files so reference the connection string from Azure Key Vault
-    WEBSITE_CONTENTAZUREFILECONNECTIONSTRING = data.azurerm_key_vault_secret.secret_storage_account_connection_string_function.value
-    WEBSITE_CONTENTSHARE                     = azurerm_storage_account.storage_account_function.name
-    # TODO: 7/2026 - Switch this to property setting of vnetContentShareEnabled once azurerm supports it
-    # This forces communication to storage account. Without it, traffic will come in public IP
-    # https://github.com/hashicorp/terraform-provider-azurerm/issues/30685
-    WEBSITE_CONTENTOVERVNET = 1
+    # This tells the function app to use it's user-assigned managed identity to fetch the zip package from blob
+    "WEBSITE_RUN_FROM_PACKAGE_BLOB_MI_RESOURCE_ID" = azurerm_user_assigned_identity.umi_function.id
 
     # This setup will force the function to use its user-assigned managed identity to authenticate to the
     # storage account
@@ -1164,7 +1146,8 @@ resource "azurerm_linux_function_app" "function_app_premium_plan" {
 
   lifecycle {
     ignore_changes = [
-      tags["created_by"]
+      tags["created_by"],
+      app_settings["WEBSITE_RUN_FROM_PACKAGE"]
     ]
   }
 }
