@@ -19,11 +19,15 @@
 ## Updates
 
 ### 2026
+* **July 31st, 2026**
+  * Swapped NSP resources to azurerm from azapi
+  * Added support for Elastic Premium SKU in addition to Flexibile Consumption
+  * Updated azurerm provider to 5.0.1 and azapi to 2.11.0
 * **June 27th, 2026**
   * Initial release
 
 ## Overview
-This Terraform code provisions an Azure Function App into the base lab environment included in this repository to demonstrate an Azure Function deployed with network and identity controls. It is deployed with [restricted inbound traffic via a Private Endpoint](https://learn.microsoft.com/en-us/azure/azure-functions/functions-networking-options?tabs=azure-portal&pivots=flex-consumption-plan#private-endpoints) and [restricted outbound traffic with regional VNet integration](https://learn.microsoft.com/en-us/azure/azure-functions/functions-networking-options?tabs=azure-portal&pivots=flex-consumption-plan#virtual-network-integration). Authentication and authorization from the Function App to dependent resources such as Azure Storage and Azure Key Vault [uses Entra ID via a user-assigned managed identity](https://learn.microsoft.com/en-us/azure/app-service/overview-managed-identity?tabs=portal%2Chttp). Authentication to the Function App is [restricted using Entra ID using the built-in authentication feature](https://learn.microsoft.com/en-us/azure/app-service/overview-authentication-authorization#reasons-to-use-built-in-authentication).
+This Terraform code provisions an Azure Function App into the base lab environment included in this repository to demonstrate security features of Azure Functions. It is deployed network controls to manage inbound and outbound traffic. Identity controls ensure a managed identity is used when the Function needs to access other resources. Function keys are stored securely. Lastly, the Function is secured by Entra ID authentication.
 
 The templates are built to support Function App plans of Flexible Consumption and Elastic Premium. It may work with App Service Premium plans, but I haven't tested it.
 
@@ -31,22 +35,31 @@ The templates are built to support Function App plans of Flexible Consumption an
 
 The items pictured below in blue are deployed as part of this lab.
 
-![Overall architecture](./images/lab-aca-architecture.svg)
+![Overall architecture](./images/functions-lab.svg)
 
 ## Features
 
+### Neat stuff
+* Optional support for [Azure Functions MCP Server Extension](learn.microsoft.com/en-us/azure/azure-functions/functions-bindings-mcp?pivots=programming-language-python)
+
 ### Security
-- **Container Apps Environment with no public access**: Traffic from the public Internet is blocked
-- **Container Apps with no public access**: Traffic from the public Internet to Container Apps deployed to the environment is blocked
-- **Container Apps outbound traffic is mediated and inspected**: Traffic from the Container Apps destined to the Internet is routed through the Azure Firewall
-- **Azure Container Registration**: Azure Container Registry created if you want to push or pull images
-- **Key Vault Integration**: (Optional) Certificate sourced from Let's Encrypt is stored in Key Vault
+* Function [uses user-assigned managed identity](https://learn.microsoft.com/en-us/azure/app-service/overview-managed-identity?tabs=portal%2Chttp)
+* Entra ID authentication and Azure RBAC authorization to [Storage Account](https://learn.microsoft.com/en-us/azure/azure-functions/manage-connections?tabs=host%2Ccsharp&pivots=functions-auth-identity), Key Vault, and [Application Insights](https://learn.microsoft.com/en-us/azure/azure-monitor/app/azure-ad-authentication?tabs=aspnetcore)
+* Built-in authentication to Function configured to [support Entra ID authentication](https://learn.microsoft.com/en-us/azure/app-service/overview-authentication-authorization#reasons-to-use-built-in-authentication)
+* Application registration (and supporting service principal) configured to support Entra authentication and has an available scope of user_impersonation to support delegated user use cases such as MCP Server use case
+* Application registration configured with [federated identity credential using user-assigned managed identity of the Function](https://learn.microsoft.com/en-us/entra/workload-id/workload-identity-federation-config-app-trust-managed-identity?tabs=microsoft-entra-admin-center%2Cdotnet)
+* Public network disabled to Function and traffic restricted to Private Endpoint
+* Function keys are [stored in Azure Key Vault as secrets](https://techcommunity.microsoft.com/blog/azureinfrastructureblog/storing-azure-function-keys-in-key-vault-using-user-assigned-managed-identity/4387877)
 
 ### Network & Connectivity
-- Outbound traffic is mediated and inspected by Azure Firewall. Intra-subnet traffic is mediated by Network Security Groups.
+* [Outbound traffic is mediated and inspected](https://learn.microsoft.com/en-us/azure/azure-functions/functions-networking-options?tabs=azure-portal&pivots=flex-consumption-plan#virtual-network-integration) by Azure Firewall. Intra-subnet traffic is mediated by Network Security Groups.
+* Traffic from the Function to Storage and Key Vault over Private Endpoints
+* Storage Account and Key Vault use service firewall to restrict public network access to a trusted IP
+* Network Security Perimeters in learning mode configured around Storage Account and Key Vaults for logging benefits
 
 ### Monitoring & Logging
-- **Azure Monitor Integration**: Logs and diagnostics are turned on for all resources and are set to an Azure Log Analytics Workspace.
+* All resources configured to resource logs to a Log Analytics Workspace
+* Function configured to send application logs and metrics to Application Insights
 
 ## Prerequisites
 
@@ -56,11 +69,12 @@ The items pictured below in blue are deployed as part of this lab.
    - Resource group creation and management
    - Role assignment creation
    - Network resource provisioning
-
 3. **Base Lab**: You must have already deployed the [base lab](../../README.md).
+4. You must delegate a subnet in the workload virtual network to Microsoft.Web/serverFarms to support regional vnet integration for
+   the Azure Function.
 
 ### Local Development Environment
-1. **Terraform**: Version 1.8.3 or higher
+1. **Terraform**: Version 1.10.0 or higher
    ```bash
    terraform version
    ```
@@ -78,50 +92,35 @@ The items pictured below in blue are deployed as part of this lab.
 ### Required Information
 Before deployment gather the following:
 
-1. The subnet in the workload virtual network that will be delegated to the Azure Container Apps Environment. This subnet must be delegated to Microsoft.App/environments.
-2. The subnet in the workload virtual network that where Private Endpoints will be created.
-
-### Optional Information
-If you want to dynamically provision a certificate for a custom domain, setup the following:
-
-1. A public domain namespace you'll use for the Container Apps Environment.
-2. DNS hosting for the domain in Cloudflare and an API token for Cloudflare that allows for management of DNS records.
-3. A RSA private key in PEM format stored as a Key Vault secret.
+*  A subnet in the workload virtual network must be delegated to Microsoft.Web/serverFarms to support regional vnet integration for the
+   Azure Function.
 
 ## Variables
 
 ### Required Variables
 
-| Variable | Type | Description |
-|----------|------|-------------|
-
-| `edicated_workload_profile` | `bool` | Setting this to true creates a dedicated workload profile in addition to the consumption workload profile |
-| `purpose` | `string` | The three character purpose of the resource |
-| `random_string` | `string` | The random string to append to the resource name (alphanumeric, 6 characters or less) |
-| `resource_group_name_dns` | `string` | The name of the resource group where the Private DNS Zones exist |
-| `region` | `string` | The name of the Azure region to provision the resources to |
-| `region_code` | `string` | The code of the Azure region to provision the resources to |
-| `subnet_id_aca` | `string` | The resource id of the subnet that has been delegated for Azure Container Environments |
-| `subnet_id_svc` | `string` | The resource id of the subnet where Private Endpoints will be deployed |
-| `subscription_id_infrastructure` | `string` | The subscription where the Private DNS Zones are located |
-| `tags` | `map(string)` | The tags to apply to the resource |
-| `trusted_ip` | `string` | The trusted IP address of the Terraform deployment server. Used for Network Security Perimeter access rules when deploying from outside the virtual network |
-
-### Optional Variables
-
 | Variable | Type | Default | Description |
-|----------|------|---------|-------------|
-| `aca_environment_domain_name` | `string` | `null` | Populate this attribute if you're provisioning the Azure Container Apps Environment with a custom domain using the workflow built into this template|
-| `cloudflare_api_token` | `string` | `null` | The API token for your Cloudflare account that can modify DNS records in the custom domain you are using the Azure Container Apps Environment|
-| `letsencrypt_account_key` | `object` | `null` | The Key Vault resource secret id that contains the PEM encoded private key to use for the Let's Encrypt account |
-| `letsencrypt_account_email` | `string` | `null` | The email address to use for the Let's Encrypt account |
+|----------|------|--------|-------------|
+| `function_plan_sku` | `string` | `FC`|  The function plan to use for the App Service Plan. This can be FC1 or EC1. |
+| `mcp_server_enabled` | `bool` | `false` | Set this to true if you are deploying and MCP Server and want to use the [Function MCP Server extension](https://learn.microsoft.com/en-us/azure/azure-functions/functions-bindings-mcp?pivots=programming-language-python) |
+| `python_version` | `string` | `3.13`|  The version of Python the application will use. By default it's set to 3.13 |
+| `random_string` | `string` | | The random string to append to resources |
+| `region` | `string` | | The name of the Azure region to provision the resources to |
+| `region_code` | `string` | | The code of the Azure region to provision the resources to |
+| `resource_group_name_dns` | `string` | | The name of the resource group where the Private DNS Zones are stored |
+| `subnet_id_app` | `string` | | The resource id of the subnet where the Private Endpoint for the Function App will be deployed |
+| `subnet_id_svc` | `string` | | The resource id of the subnet where Private Endpoints for supporting resources will be deployed |
+| `subnet_id_vint` | `string` | | The ID of the subnet that has been delegated to Microsoft.Web/serverFarms for regional VNet integration for outbound traffic from the Azure Function |
+| `subscription_id_infrastructure` | `string` | | The subscription ID where the Private DNS Zones are deploeyd to. This is the GUID not the full resource id |
+| `tags` | `map(string)` | | The tags to apply to the resource |
+| `trusted_ip` | `string` | | The IP address that will be granted access to the Azure Storage Account and Key Vault through the public IP. In my environment this is the machine I deploy my Terraform code from |
 
 ## Quick Start
 
 ### 1. Clone Repository
 ```bash
 git clone <repository-url>
-cd azure-terraform-lab-base-azfw/workloads/azure-container-apps
+cd azure-terraform-lab-base-azfw/workloads/azure-functions
 ```
 
 ### 2. Configure Variables
@@ -153,4 +152,7 @@ terraform apply
 ```
 
 ## Post-Deployment
-Once everything is fully deployed you can begin deploying Container Apps to the environment.
+Once everything is fully deployed you can begin deploying code to the Function App.
+
+### Elastic Premium Plans
+If you're deploying to an Elastic Premium plan, you need to [deploy from a package file](https://learn.microsoft.com/en-us/azure/azure-functions/run-functions-from-deployment-package). This is required because the storage account used by the function in this deployment does not support storage access keys and is restricted to Entra ID authentication. Azure Functions does not support Entra ID authentication to Azure Files so 

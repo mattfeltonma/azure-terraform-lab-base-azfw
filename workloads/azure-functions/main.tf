@@ -616,28 +616,12 @@ resource "azurerm_monitor_diagnostic_setting" "diag_key_vault_function" {
   }
 }
 
-## Create a secret in the Key Vault used to access the File share endpoint of Azure Storage for the Elastic Premium plan
-##
-resource "azurerm_key_vault_secret" "secret_storage_account_connection_string_function" {
-  count = var.function_plan_sku == "EP1" ? 1 : 0
-
-  depends_on = [
-    azurerm_key_vault.key_vault_function,
-    azurerm_monitor_diagnostic_setting.diag_key_vault_function
-  ]
-
-  name         = "storageaccountconnectionstring"
-  value        = "DefaultEndpointsProtocol=https;AccountName=${azurerm_storage_account.storage_account_function.name};AccountKey=${azurerm_storage_account.storage_account_function.primary_access_key};EndpointSuffix=core.windows.net"
-  key_vault_id = azurerm_key_vault.key_vault_function.id
-}
-
 ## Create a Network Security Perimeter resource assocation to associate the Key Vault to the NSP
 ##
 resource "azurerm_network_security_perimeter_association" "assoc_key_vault_function" {
   depends_on = [
     azurerm_key_vault.key_vault_function,
-    azurerm_network_security_perimeter_access_rule.access_rule_key_vault_function_env_ipprefix,
-    azurerm_key_vault_secret.secret_storage_account_connection_string_function
+    azurerm_network_security_perimeter_access_rule.access_rule_key_vault_function_env_ipprefix
   ]
 
   name = "rakeyvault"
@@ -699,6 +683,8 @@ resource "azurerm_application_insights" "app_insights_function" {
 
   application_type = "web"
   workspace_id     = azurerm_log_analytics_workspace.log_analytics_workspace_workload.id
+
+  local_authentication_enabled = false
 
   tags = local.tags
 
@@ -830,9 +816,9 @@ resource "azurerm_role_assignment" "umi_function_storage_table_data_contributor"
 }
 
 ## Create an Azure RBAC role assignment granting the user-assigned managed identity for the Function App
-## the Key Vault Secrets User role on the Azure Key Vault used by the Azure Function
-## This allows the function to pull secrets for Key Vault references
-resource "azurerm_role_assignment" "umi_function_key_vault_secrets_user" {
+## the Key Vault Secrets Officer role on the Azure Key Vault used by the Azure Function
+## This allows the function to pull secrets for Key Vault references and store WebJobs secrets in the Key Vault
+resource "azurerm_role_assignment" "umi_function_key_vault_secrets_officer" {
   depends_on = [
     time_sleep.wait_umi_function,
     azurerm_key_vault.key_vault_function,
@@ -840,7 +826,21 @@ resource "azurerm_role_assignment" "umi_function_key_vault_secrets_user" {
   ]
 
   scope                = azurerm_key_vault.key_vault_function.id
-  role_definition_name = "Key Vault Secrets User"
+  role_definition_name = "Key Vault Secrets Officer"
+  principal_id         = azurerm_user_assigned_identity.umi_function.principal_id
+}
+
+## Create an Azure RBAC role assignment granting the user-assigned managed identity for the Function App
+## the Monitoring Metrics Publisher role on the Application Insights used by the Azure Function
+## This allows the function to deliver logs and metrics to Application Insights
+resource "azurerm_role_assignment" "umi_function_app_insights_metrics_publisher" {
+  depends_on = [
+    time_sleep.wait_umi_function,
+    azurerm_application_insights.app_insights_function,
+    azurerm_role_assignment.umi_function_key_vault_secrets_officer
+  ]
+  scope                = azurerm_application_insights.app_insights_function.id
+  role_definition_name = "Monitoring Metrics Publisher"
   principal_id         = azurerm_user_assigned_identity.umi_function.principal_id
 }
 
@@ -852,7 +852,8 @@ resource "time_sleep" "wait_umi_function_permissions" {
     azurerm_role_assignment.umi_function_storage_blob_data_owner,
     azurerm_role_assignment.umi_function_storage_table_data_contributor,
     azurerm_role_assignment.umi_function_storage_queue_data_contributor,
-    azurerm_role_assignment.umi_function_key_vault_secrets_user
+    azurerm_role_assignment.umi_function_key_vault_secrets_officer,
+    azurerm_role_assignment.umi_function_app_insights_metrics_publisher
   ]
   create_duration = "120s"
 }
@@ -985,6 +986,9 @@ resource "azurerm_function_app_flex_consumption" "function_app_flex_consumption"
   }
 
   app_settings = {
+    # Configure the function to use Entra ID auth to App Insights
+    APPLICATIONINSIGHTS_AUTHENTICATION_STRING = "Authorization=AAD;ClientId=${azurerm_user_assigned_identity.umi_function.client_id}"
+
     # The azurerm provider automatically creates this app setting and tries to set it to the storage account connection string
     # which breaks Entra auth using managed identity to storage account. Setting to empty string prevents this
     AzureWebJobsStorage = ""
@@ -994,6 +998,11 @@ resource "azurerm_function_app_flex_consumption" "function_app_flex_consumption"
     AzureWebJobsStorage__accountName               = azurerm_storage_account.storage_account_function.name
     AzureWebJobsStorage__credential                = "managedidentity"
     AzureWebJobsStorage__managedIdentityResourceId = azurerm_user_assigned_identity.umi_function.id
+
+    # This setup will store function access keys in Key Vault instead of Azure Storage
+    AzureWebJobsSecretStorageType = "keyvault"
+    AzureWebJobsSecretStorageKeyVaultUri = azurerm_key_vault.key_vault_function.vault_uri
+    AzureWebJobsSecretStorageKeyVaultClientId = azurerm_user_assigned_identity.umi_function.client_id
 
     # This tells the function to use its managed identity as a federated credential when acting as a confidential client to Entra to support Entra
     # ID authentication when the function exchanges an authorization code or refresh token for an access token
@@ -1029,7 +1038,6 @@ resource "azurerm_linux_function_app" "function_app_premium_plan" {
     time_sleep.wait_umi_function_permissions,
     azurerm_application_insights.app_insights_function,
     time_sleep.wait_for_app_insights_func,
-    azurerm_key_vault_secret.secret_storage_account_connection_string_function,
     azurerm_private_endpoint.private_endpoint_storage_account_blob_function,
     azurerm_private_endpoint.private_endpoint_storage_account_table_function,
     azurerm_private_endpoint.private_endpoint_storage_account_queue_function,
@@ -1121,14 +1129,22 @@ resource "azurerm_linux_function_app" "function_app_premium_plan" {
   }
 
   app_settings = {
+    # Configure the function to use Entra ID auth to App Insights
+    APPLICATIONINSIGHTS_AUTHENTICATION_STRING = "Authorization=AAD;ClientId=${azurerm_user_assigned_identity.umi_function.client_id}"
+
     # This tells the function app to use it's user-assigned managed identity to fetch the zip package from blob
-    "WEBSITE_RUN_FROM_PACKAGE_BLOB_MI_RESOURCE_ID" = azurerm_user_assigned_identity.umi_function.id
+    WEBSITE_RUN_FROM_PACKAGE_BLOB_MI_RESOURCE_ID = azurerm_user_assigned_identity.umi_function.id
 
     # This setup will force the function to use its user-assigned managed identity to authenticate to the
     # storage account
     AzureWebJobsStorage__accountName               = azurerm_storage_account.storage_account_function.name
     AzureWebJobsStorage__credential                = "managedidentity"
     AzureWebJobsStorage__managedIdentityResourceId = azurerm_user_assigned_identity.umi_function.id
+
+    # This setup will store function access keys in Key Vault instead of Azure Storage
+    AzureWebJobsSecretStorageType = "keyvault"
+    AzureWebJobsSecretStorageKeyVaultUri = azurerm_key_vault.key_vault_function.vault_uri
+    AzureWebJobsSecretStorageKeyVaultClientId = azurerm_user_assigned_identity.umi_function.client_id
 
     # This tells the function to use its managed identity as a federated credential when acting as a confidential client to Entra to support Entra
     # ID authentication when the function exchanges an authorization code or refresh token for an access token
@@ -1193,7 +1209,7 @@ resource "azurerm_private_endpoint" "private_endpoint_function_app" {
   location            = var.region
   resource_group_name = azurerm_resource_group.rg_function.name
 
-  subnet_id = var.subnet_id_svc
+  subnet_id = var.subnet_id_app
 
   private_service_connection {
     name                           = "pefuncapp${var.region_code}${var.random_string}"
