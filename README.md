@@ -33,6 +33,12 @@ Hope any bit of this code helps save you some time or learn something new!
 ## Updates
 
 ### 2026
+* **August 1, 2026**
+  * Azure Function Lab
+    * Added a bunch of security features
+      * Function keys in Key Vault
+      * App Insights w/ UMI and RBAC
+    * Updated base image to show more detailed design and RBAC info
 * **July 21, 2026**
   * Base Lab
     * Updated Terraform provider versions
