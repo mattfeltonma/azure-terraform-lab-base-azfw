@@ -21,6 +21,11 @@ variable "python_version" {
   default = "3.13"
 }
 
+variable "random_string" {
+  description = "The random string to append to the resource name"
+  type        = string
+}
+
 variable "region" {
   description = "The name of the Azure region to provision the resources to"
   type        = string
@@ -31,28 +36,28 @@ variable "region_code" {
   type        = string
 }
 
-variable "random_string" {
-  description = "The random string to append to the resource name"
-  type        = string
-}
-
 variable "resource_group_name_dns" {
   description = "The name of the resource group where the Private DNS Zones exist"
   type        = string
 }
 
+variable "subnet_id_app" {
+  description = "The resource ID of the subnet where the private endpoint for the Azure Function App will be created"
+  type        = string
+}
+
 variable "subnet_id_svc" {
-  description = "The ID of the subnet where the private endpoints will be created"
+  description = "The resource ID of the subnet where the private endpoints for the supporting resources will be created"
   type        = string
 }
 
 variable "subnet_id_vint" {
-  description = "The ID of the subnet where the virtual network integration will be configured"
+  description = "The resource ID of the subnet that has been delegated to Microsoft.Web/serverFarms for regional VNet integration for outbound traffic from the Azure Function"
   type        = string
 }
 
 variable "subscription_id_infrastructure" {
-  description = "The subscription ID where the infrastructure is provisioned"
+  description = "The subscription ID where the infrastructure is provisioned. This is the GUID not the full resource id"
   type        = string
 }
 
