@@ -337,7 +337,7 @@ resource "azurerm_private_dns_zone_virtual_network_link" "link" {
   }
 }
 
-resource "null_resource" "update_firewall_dns_policy" {
+resource "null_resource" "update_firewall_dns_policy_standard" {
   depends_on = [
     azurerm_private_dns_zone_virtual_network_link.link
   ]
@@ -347,16 +347,39 @@ resource "null_resource" "update_firewall_dns_policy" {
   # Trigger if Azure Firewall Policy changes,if DNS resolver IP changes, or if the
   # firewall policy's actual DNS servers no longer match the expected resolver IP
   triggers = {
-    firewall_policy_id = module.vnet_transit[each.key].policy_id
+    firewall_policy_id = module.vnet_transit[each.key].policy_id_standard
     dns_resolver_ip     = module.vnet_shared[each.key].private_resolver_inbound_endpoint_ip
     dns_in_sync = tostring(
-      try(data.azapi_resource.firewall_policy_current[each.key].output.properties.dnsSettings.servers, []) ==
+      try(data.azapi_resource.firewall_policy_current_standard[each.key].output.properties.dnsSettings.servers, []) ==
       [module.vnet_shared[each.key].private_resolver_inbound_endpoint_ip]
     )
   }
 
   provisioner "local-exec" {
-    command = "az network firewall policy update --ids ${module.vnet_transit[each.key].policy_id} --dns-servers ${module.vnet_shared[each.key].private_resolver_inbound_endpoint_ip}"
+    command = "az network firewall policy update --ids ${module.vnet_transit[each.key].policy_id_standard} --dns-servers ${module.vnet_shared[each.key].private_resolver_inbound_endpoint_ip}"
+  }
+}
+
+resource "null_resource" "update_firewall_dns_policy_premium" {
+  depends_on = [
+    null_resource.update_firewall_dns_policy_standard
+  ]
+
+  for_each = var.environment_details
+
+  # Trigger if Azure Firewall Policy changes,if DNS resolver IP changes, or if the
+  # firewall policy's actual DNS servers no longer match the expected resolver IP
+  triggers = {
+    firewall_policy_id = module.vnet_transit[each.key].policy_id_premium
+    dns_resolver_ip     = module.vnet_shared[each.key].private_resolver_inbound_endpoint_ip
+    dns_in_sync = tostring(
+      try(data.azapi_resource.firewall_policy_current_premium[each.key].output.properties.dnsSettings.servers, []) ==
+      [module.vnet_shared[each.key].private_resolver_inbound_endpoint_ip]
+    )
+  }
+
+  provisioner "local-exec" {
+    command = "az network firewall policy update --ids ${module.vnet_transit[each.key].policy_id_premium} --dns-servers ${module.vnet_shared[each.key].private_resolver_inbound_endpoint_ip}"
   }
 }
 
@@ -364,7 +387,8 @@ resource "null_resource" "update_firewall_dns_policy" {
 ##
 resource "azurerm_virtual_network_dns_servers" "update_dns_servers_transit" {
   depends_on = [
-    null_resource.update_firewall_dns_policy
+    null_resource.update_firewall_dns_policy_standard,
+    null_resource.update_firewall_dns_policy_premium
   ]
 
   for_each = var.environment_details
@@ -377,7 +401,8 @@ resource "azurerm_virtual_network_dns_servers" "update_dns_servers_transit" {
 #####
 module "vnet_workload" {
   depends_on = [
-    null_resource.update_firewall_dns_policy
+    null_resource.update_firewall_dns_policy_standard,
+    null_resource.update_firewall_dns_policy_premium
   ]
 
   for_each = { for env in local.workload_object : "${env.environment}-${env.workload_number}" => env }
@@ -425,7 +450,8 @@ module "vnet_workload" {
 #####
 module "vnet_workload_hero" {
   depends_on = [
-    null_resource.update_firewall_dns_policy
+    null_resource.update_firewall_dns_policy_standard,
+    null_resource.update_firewall_dns_policy_premium
   ]
 
   source              = "./modules/vnet-workload"

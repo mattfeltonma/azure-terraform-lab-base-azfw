@@ -38,12 +38,6 @@ variable "private_resolver_inbound_endpoint_subnet_cidr" {
   type        = string
 }
 
-variable "firewall_sku_tier" {
-  description = "The SKU tier of the Azure Firewall. This can be standard or premium"
-  type        = string
-  default     = "Standard"
-}
-
 variable "log_analytics_workspace_guid" {
   description = "The GUID of the Log Analytics Workspace"
   type        = string

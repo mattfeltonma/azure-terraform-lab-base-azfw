@@ -33,6 +33,10 @@ Hope any bit of this code helps save you some time or learn something new!
 ## Updates
 
 ### 2026
+* **August 3, 2026**
+  * Base Lab
+    * Added Azure Firewall Policy for Premium SKU to make it easier to swap
+      between standard and premium
 * **August 1, 2026**
   * Azure Function Lab
     * Added a bunch of security features

@@ -89,7 +89,7 @@ resource "azurerm_subnet" "subnet_gateway" {
   address_prefixes = [
     cidrsubnet(var.address_space_vnet, 3, 0)
   ]
-  default_outbound_access_enabled = false
+  default_outbound_access_enabled   = false
   private_endpoint_network_policies = "Enabled"
 }
 
@@ -106,7 +106,7 @@ resource "azurerm_subnet" "subnet_firewall" {
   address_prefixes = [
     cidrsubnet(var.address_space_vnet, 3, 1)
   ]
-  default_outbound_access_enabled = false
+  default_outbound_access_enabled   = false
   private_endpoint_network_policies = "Enabled"
 }
 
@@ -138,9 +138,9 @@ resource "azurerm_route_table" "rt_azfw" {
   bgp_route_propagation_enabled = true
 
   route {
-    name                   = "udr-default"
-    address_prefix         = "0.0.0.0/0"
-    next_hop_type          = "Internet"
+    name           = "udr-default"
+    address_prefix = "0.0.0.0/0"
+    next_hop_type  = "Internet"
   }
 
   lifecycle {
@@ -261,7 +261,7 @@ resource "azurerm_virtual_network_gateway" "vgw_vpn" {
     peering_addresses {
       ip_configuration_name = "ipconfig-1"
     }
-      peering_addresses {
+    peering_addresses {
       ip_configuration_name = "ipconfig-2"
     }
   }
@@ -393,14 +393,51 @@ resource "azurerm_ip_group" "ip_group_amlcpt" {
   }
 }
 
-## Create Azure Firewall Policy and Rule Collections
+## Create Azure Firewall Policy for the Standard SKU
 ##
-resource "azurerm_firewall_policy" "firewall_policy" {
-  name                = "fpazfw${var.region_code}${var.random_string}"
+resource "azurerm_firewall_policy" "firewall_policy_standard" {
+
+  name                = "fpazfwstd${var.region_code}${var.random_string}"
   resource_group_name = var.resource_group_name
   location            = var.region
 
-  sku = var.firewall_sku_tier
+
+  sku = "Standard"
+
+  dns {
+    proxy_enabled = true
+    servers       = var.dns_servers
+  }
+
+  insights {
+    enabled                            = true
+    default_log_analytics_workspace_id = var.log_analytics_workspace_resource_id
+    retention_in_days                  = 30
+
+    log_analytics_workspace {
+      id                = var.log_analytics_workspace_resource_id
+      firewall_location = var.region
+    }
+  }
+
+  tags = var.tags
+
+  lifecycle {
+    ignore_changes = [
+      tags["created_by"]
+    ]
+  }
+}
+
+## Create Azure Firewall Policy for the Premium SKU
+##
+resource "azurerm_firewall_policy" "firewall_policy_premium" {
+
+  name                = "fpazfwprem${var.region_code}${var.random_string}"
+  resource_group_name = var.resource_group_name
+  location            = var.region
+
+  sku = "Premium"
 
   dns {
     proxy_enabled = true
@@ -429,15 +466,22 @@ resource "azurerm_firewall_policy" "firewall_policy" {
 
 resource "azurerm_firewall_policy_rule_collection_group" "rule_collection_group_enterprise" {
   depends_on = [
-    azurerm_firewall_policy.firewall_policy,
+    azurerm_firewall_policy.firewall_policy_standard,
+    azurerm_firewall_policy.firewall_policy_premium,
     azurerm_ip_group.ip_group_azure,
     azurerm_ip_group.ip_group_on_prem,
     azurerm_ip_group.ip_group_rfc1918,
     azurerm_ip_group.ip_group_amlcpt,
     azurerm_ip_group.ip_group_apim
   ]
+
+  for_each = {
+    "standard" = azurerm_firewall_policy.firewall_policy_standard.id
+    "premium"  = azurerm_firewall_policy.firewall_policy_premium.id
+  }
+
   name               = "MyEnterpriseRuleCollectionGroup"
-  firewall_policy_id = azurerm_firewall_policy.firewall_policy.id
+  firewall_policy_id = each.value
   priority           = 500
   network_rule_collection {
     name     = "AllowWindowsVmRequired"
@@ -622,11 +666,18 @@ resource "azurerm_firewall_policy_rule_collection_group" "rule_collection_group_
 
 resource "azurerm_firewall_policy_rule_collection_group" "rule_collection_group_workload_apim" {
   depends_on = [
-    azurerm_firewall_policy.firewall_policy,
+    azurerm_firewall_policy.firewall_policy_standard,
+    azurerm_firewall_policy.firewall_policy_premium,
     azurerm_firewall_policy_rule_collection_group.rule_collection_group_enterprise
   ]
+
+  for_each = {
+    "standard" = azurerm_firewall_policy.firewall_policy_standard.id
+    "premium"  = azurerm_firewall_policy.firewall_policy_premium.id
+  }
+
   name               = "MyWorkloadApimRuleCollectionGroup"
-  firewall_policy_id = azurerm_firewall_policy.firewall_policy.id
+  firewall_policy_id = each.value
   priority           = 400
 
   network_rule_collection {
@@ -903,11 +954,18 @@ resource "azurerm_firewall_policy_rule_collection_group" "rule_collection_group_
 
 resource "azurerm_firewall_policy_rule_collection_group" "rule_collection_group_workload_aml_compute" {
   depends_on = [
-    azurerm_firewall_policy.firewall_policy,
+    azurerm_firewall_policy.firewall_policy_standard,
+    azurerm_firewall_policy.firewall_policy_premium,
     azurerm_firewall_policy_rule_collection_group.rule_collection_group_workload_apim
   ]
+
+  for_each = {
+    "standard" = azurerm_firewall_policy.firewall_policy_standard.id
+    "premium"  = azurerm_firewall_policy.firewall_policy_premium.id
+  }
+
   name               = "MyWorkloadAmlComputeRuleCollectionGroup"
-  firewall_policy_id = azurerm_firewall_policy.firewall_policy.id
+  firewall_policy_id = each.value
   priority           = 300
 
   network_rule_collection {
@@ -1113,7 +1171,6 @@ resource "azurerm_firewall_policy_rule_collection_group" "rule_collection_group_
   }
 }
 
-
 ## Create Public IP for Azure Firewall
 ##
 resource "azurerm_public_ip" "pip_azure_firewall" {
@@ -1140,7 +1197,7 @@ resource "azurerm_public_ip" "pip_azure_firewall" {
 ##
 resource "azurerm_firewall" "azure_firewall" {
   depends_on = [
-    azurerm_firewall_policy.firewall_policy,
+    azurerm_firewall_policy.firewall_policy_standard,
     azurerm_firewall_policy_rule_collection_group.rule_collection_group_enterprise,
     azurerm_firewall_policy_rule_collection_group.rule_collection_group_workload_apim,
     azurerm_firewall_policy_rule_collection_group.rule_collection_group_workload_aml_compute,
@@ -1153,8 +1210,8 @@ resource "azurerm_firewall" "azure_firewall" {
 
 
   sku_name           = "AZFW_VNet"
-  sku_tier           = var.firewall_sku_tier
-  firewall_policy_id = azurerm_firewall_policy.firewall_policy.id
+  sku_tier           = "Standard"
+  firewall_policy_id = azurerm_firewall_policy.firewall_policy_standard.id
 
   ip_configuration {
     name                 = "AzureFirewallIpConfiguration0"
@@ -1227,11 +1284,11 @@ resource "azurerm_route" "udr_shared_services" {
     azurerm_subnet_route_table_association.route_table_association_gateway
   ]
 
-  name                = "udr-ss"
-  resource_group_name = var.resource_group_name
-  route_table_name    = azurerm_route_table.rt_gateway.name
-  address_prefix      = var.vnet_cidr_ss
-  next_hop_type       = "VirtualAppliance"
+  name                   = "udr-ss"
+  resource_group_name    = var.resource_group_name
+  route_table_name       = azurerm_route_table.rt_gateway.name
+  address_prefix         = var.vnet_cidr_ss
+  next_hop_type          = "VirtualAppliance"
   next_hop_in_ip_address = azurerm_firewall.azure_firewall.ip_configuration[0].private_ip_address
 }
 
@@ -1244,13 +1301,13 @@ resource "azurerm_route" "udr_workloads" {
     azurerm_route.udr_shared_services
   ]
 
-  count               = length(var.vnet_cidr_wl)
+  count = length(var.vnet_cidr_wl)
 
-  name                = "udr-wl${count.index + 1}"
-  resource_group_name = var.resource_group_name
-  route_table_name    = azurerm_route_table.rt_gateway.name
-  address_prefix      = var.vnet_cidr_wl[count.index]
-  next_hop_type       = "VirtualAppliance"
+  name                   = "udr-wl${count.index + 1}"
+  resource_group_name    = var.resource_group_name
+  route_table_name       = azurerm_route_table.rt_gateway.name
+  address_prefix         = var.vnet_cidr_wl[count.index]
+  next_hop_type          = "VirtualAppliance"
   next_hop_in_ip_address = azurerm_firewall.azure_firewall.ip_configuration[0].private_ip_address
 }
 

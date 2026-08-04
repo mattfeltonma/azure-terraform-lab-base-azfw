@@ -3,9 +3,14 @@ output "azfw_private_ip" {
   description = "The private IP address of the Azure Firewall"
 }
 
-output "policy_id" {
-  value       = azurerm_firewall_policy.firewall_policy.id
-  description = "The id of the Azure Firewall Policy"
+output "policy_id_standard" {
+  value       = azurerm_firewall_policy.firewall_policy_standard.id
+  description = "The id of the standard Azure Firewall Policy"
+}
+
+output "policy_id_premium" {
+  value       = azurerm_firewall_policy.firewall_policy_premium.id
+  description = "The id of the premium Azure Firewall Policy"
 }
 
 output "resource_group_name_transit" {
