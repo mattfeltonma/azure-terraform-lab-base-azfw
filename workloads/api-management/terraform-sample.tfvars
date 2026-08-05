@@ -25,7 +25,7 @@
 #subnet_id_private_endpoints = "/subscriptions/00000000-0000-0000-0000-000000000000/resourceGroups/rg-workload/providers/Microsoft.Network/virtualNetworks/vnet-workload/subnets/snet-svc"
 #subscription_id_infrastructure = "00000000-0000-0000-0000-000000000000"
 #tags = {environment = "lab", product = "apim"}
-trusted_ip = "55.55.55.55"
+#trusted_ip = "55.55.55.55"
 #user_object_id = "00000000-0000-0000-0000-000000000000"
 #virtual_network_id_shared_services = "/subscriptions/00000000-0000-0000-0000-000000000000/resourceGroups/rg-shared/providers/Microsoft.Network/virtualNetworks/vnet-shared"
 
