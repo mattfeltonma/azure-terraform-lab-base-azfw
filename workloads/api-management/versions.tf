@@ -3,22 +3,22 @@ terraform {
   required_providers {
     azapi = {
       source  = "azure/azapi"
-      version = "~> 2.8.0"
+      version = "~> 2.11.0"
     }
 
     azurerm = {
       source  = "hashicorp/azurerm"
-      version = "~> 4.57.0"
+      version = "~> 5.0.1"
     }
-
+ 
     time = {
       source  = "hashicorp/time"
-      version = "~> 0.13.1"
+      version = "~> 0.14.0"
     }
 
     null = {
       source  = "hashicorp/null"
-      version = "~> 3.2.4"
+      version = "~> 3.3.0"
     }
 
     ## Used for my lab only
@@ -33,5 +33,5 @@ terraform {
       version = "~> 5"
     }
   }
-  required_version = ">= 1.8.3"
+  required_version = ">= 1.10.0"
 }

@@ -19,6 +19,9 @@ provider "azurerm" {
   storage_use_azuread = true
 }
 
+provider "time" {
+}
+
 ## Used for my lab only
 ##
 provider "acme" {

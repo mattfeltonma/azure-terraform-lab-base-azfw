@@ -68,7 +68,6 @@ variable "entra_id_tenant_id" {
   type        = string
 }
 
-
 variable "existing_zone" {
   description = "Boolean to indicate if the Private DNS Zone already exists. If it doesn't already exist, it will be created and linked to the shared services virtual network."
   type        = bool
@@ -139,7 +138,6 @@ variable "region_code" {
   type        = string
 }
 
-# Not used in this one but keeping it here so I remember what the syntax looks like
 variable "regions_additional" {
   description = "Additional regions to deploy API Management Gateways to and the corresponding subnets the gateway should be deployed to"
   type = list(object({
@@ -162,8 +160,9 @@ variable "sku" {
 }
 
 variable "service_principal_object_id" {
-  description = "The object id of the service principal that will be granted permission to the AI Foundry instances. This is used when using a service principal in the code"
+  description = "The object id of the service principal that will be granted permission to the Microsoft Foundry instances. This is used when using a service principal in the code"
   type        = string
+  default = null
 }
 
 variable "subnet_id_private_endpoints" {
@@ -183,11 +182,11 @@ variable "tags" {
 
 variable "trusted_ip" {
   description = "The trusted IP address or CIDR block to allow access to the Front Door"
-  type        = string
+  type        = string 
 }
 
 variable "user_object_id" {
-  description = "The object id of the user that will be granted permission to the AI Foundry instances. This is used when not using a service principal in the code"
+  description = "The object id of the user that will be granted permission to the Microsoft Foundry instances. This is used when not using a service principal in the code"
   type        = string
 }
 

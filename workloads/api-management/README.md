@@ -1,4 +1,4 @@
-# API Management as an AI Gateway using Classic SKU APIM
+# API Management as an AI Gateway
 [![Terraform](https://img.shields.io/badge/Terraform-%3E%3D1.8.3-blue)](https://www.terraform.io/)
 [![Azure](https://img.shields.io/badge/Azure-Cloud-blue)](https://azure.microsoft.com/)
 
@@ -14,11 +14,18 @@
 - [Post-Deployment](#post-deployment)
 
 ## TODOS
-  * 1/9/2026 Need to get list of required FQDNs through Azure Firewall for v2 SKUs
+  * 8/3/2026 - Add Redis to demonstrate semantic caching when capacity issues are removed
 
 ## Updates
 
 ### 2026
+* **August 4th, 2026**
+  * Updated NSP resources to azurerm from azapi
+  * Updated resource names from AI Foundry to MS Foundry
+  * Switched APIM To using UMI
+  * Disabled access keys for App Insights and switched to Entra ID authN / Azure RBAC AuthZ
+  * Updated azapi and azurerm providers to latest versions and tweaked resources that changed
+  * Added Microsoft Learn as existing MCP Server to demonstrate MCP Proxy capabilities
 * **April 10, 2026**
   * Added support for VNet integration + Private Endpoint model
   * Added Hello World API
@@ -34,12 +41,15 @@
   * Added support for API Management v2 SKUs
 
 ### 2025
-
 * **November 14th, 2025**
   * Initial release
 
 ## Overview
-This Terraform code provisions an APIM (Azure API Management) into the base lab environment included in this repository to demonstrate the AI Gateway capabilities of APIM. It can deployed to one of the workload spokes using the Classic Developer or Premium SKUs deployed in [internal mode](https://learn.microsoft.com/en-us/azure/api-management/api-management-using-with-internal-vnet). It can also be deployed using the [Premium v2 SKU in internal mode](https://learn.microsoft.com/en-us/azure/api-management/inject-vnet-v2). The base lab includes the necessary NSG (Network Security Group), routes, and Azure Firewall rules required for Classic internal mode API Management instances. Some of these rules and routes are unnecessary with the v2 SKU so ensure you check the latest documentation for specific requirements.
+This Terraform code provisions an APIM (Azure API Management) into the base lab environment included in this repository to demonstrate the AI Gateway capabilities of APIM. It can deployed to one of the workload spokes using the Classic Developer or Premium SKUs deployed in [internal mode](https://learn.microsoft.com/en-us/azure/api-management/api-management-using-with-internal-vnet). Alternatively, it can be deployed using the [Premium v2 SKU in internal mode](https://learn.microsoft.com/en-us/azure/api-management/inject-vnet-v2) or with [Standard v2 SKU with a Private Endpoint and Regional VNet Integration](https://learn.microsoft.com/en-us/azure/api-management/virtual-network-concepts#virtual-network-integration-v2-tiers). 
+
+The base lab includes the necessary NSG (Network Security Group), routes, and Azure Firewall rules required for the Classic internal mode. Some of these firewall rules and routes are unnecessary with the v2 SKU so ensure you check the latest documentation for specific requirements.
+
+It demonstrates some of the AI Gateway features of API Management as seen below.
 
 ![AI Gateway Features](./images/lab-ai-gateway-features.svg)
 
@@ -50,9 +60,11 @@ The items pictured below in blue are deployed as part of this lab.
 ![Overall architecture](./images/lab-ai-gateway-architecture.svg)
 
 ### API Management Setup
-APIs are created for the [2024-10-21 Azure OpenAI inferencing and authoring APIs](https://github.com/Azure/azure-rest-api-specs/tree/main/specification/cognitiveservices/OpenAI.Authoring) and the [Azure OpenAI v1 API](https://github.com/Azure/azure-rest-api-specs/blob/main/specification/ai/data-plane/OpenAI.v1/azure-v1-v1-generated.json). A sample APIM policy is deployed for each API with commonly used API policy snippets.
+APIs are created for the [2025-04-01-preview Azure OpenAI inferencing API](https://github.com/Azure/azure-rest-api-specs/tree/main/specification/cognitiveservices/data-plane/AzureOpenAI/inference) and the [Azure OpenAI v1 API](https://github.com/Azure/azure-rest-api-specs/tree/main/specification/ai/data-plane/OpenAI.v1). A sample APIM policy is deployed for each API with commonly used API policy snippets.
 
-Two AI Foundry instances are deployed with the OpenAI 4o model. These are deployed to West US and East US 2. These instances are configured as backends for the APIs with circuit breaker logic. A pooled backend is created to contain these two backends. This configuration is used to demonstrate load balancing capabilities.
+You can optionally import the [Azure OpenAI Authoring API](https://github.com/Azure/azure-rest-api-specs/tree/main/specification/cognitiveservices/data-plane/AzureOpenAI/authoring).
+
+Two Microsoft Foundry instances are deployed with the OpenAI 4.1 model. These are deployed to West US and East US 2. These instances are configured as backends for the APIs with circuit breaker logic. A pooled backend is created to contain these two backends. This configuration is used to demonstrate load balancing capabilities.
 
 ![APIM Resources](./images/lab-ai-gateway-apim-setup.svg)
 
@@ -64,14 +76,15 @@ Azure RBAC is configured so multiple types of authentication flows can be tested
 ## Features
 
 ### Security
-- **APIM in Internal Mode**: Traffic to and from APIM remains within virtual network
+- **APIM Inbound and Outbound Traffic Controlled**: Inbound traffic secured with either Private Endpoint or VNet injection and outbound traffic secured with VNet integration or VNet injection
 - **Entra ID Authentication**: APIM policy snippet is used to enforce Entra ID authentication to AI Foundry backends
-- **Private Endpoints**: Private connectivity to PaaS services
+- **Private Endpoints**: Private connectivity to PaaS services provisioned in the deployment
 - **Key Vault Integration**: APIM uses certificate sourced from Azure Key Vault for configuration of custom domains
+- **ACME and Let's Encrypt Integration**: Optionally provision a certificate from Let's Encrypt to support a custom domain
 
 ### Network & Connectivity
 - [Azure Firewall application and network rules](https://learn.microsoft.com/en-us/azure/api-management/virtual-network-reference) and [Network Security Groups](https://learn.microsoft.com/en-us/azure/api-management/api-management-using-with-internal-vnet#configure-nsg-rules) security rules are pre-configured in the base lab to support internal mode APIM deployed to the snet-apim subnet in the workload virtual network. Reference those templates to see the required rules. Note that many of these rules are only required for Classic and not v2. Ensure you review the latest documentation if you want to establish a minimum set of rules.
-- Access to the APIM instance is restricted to the virtual network. You should use the jump host from the base lab to interact with the instance.
+- Access to the APIM instance is restricted to the virtual network. You should use the jump host or establish a VPN using the base lab to interact with the instance.
 
 ### Monitoring & Logging
 - **Azure Monitor Integration**: Logs and diagnostics are turned on for all resources and are set to an Azure Log Analytics Workspace.
@@ -115,9 +128,7 @@ Before deployment, gather the following:
 
 1. **APIM DNS Namespace**: You must choose a custom DNS namespace for your APIM. This will be used to configure the custom domains for the APIM.
 
-2. **Certificate in PFX format**: You must upload a certificate to the workload Key Vault that will be used to configure the [APIM custom domains](https://learn.microsoft.com/en-us/azure/api-management/configure-custom-domain?tabs=custom).
-
-3. **Entra ID Tenant ID**: This is used by APIM policy to validate Entra ID access tokens sent to the AI Gateway.
+2. **Entra ID Tenant ID**: This is used by APIM policy to validate Entra ID access tokens sent to the API Management service.
 
 4. **Service Principal Principal ID**: This is the principal id (object id) of the service principal you have already created. This will allow for testing of the client credentials flow.
 
