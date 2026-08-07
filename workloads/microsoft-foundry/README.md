@@ -23,6 +23,12 @@ AI was used to help with the format of this README file so if there is an issue 
 - [Usage](#usage)
 
 ## Updates
+* **8/6/2026**
+  * Updated azurerm to 5.0.1 and azapi to 2.11.0
+  * Removed unused resources
+  * Added static timestamp for createdDate tag
+  * Updated Jupyter Notebook used modify managed vnet outbound rules
+
 * **7/6/2026**
   * Added more detail in comments
   * Added indicators to easily find dependencies. Indicators start with ! like !AGENTS to see resources that are provisioned when doing agent deployment

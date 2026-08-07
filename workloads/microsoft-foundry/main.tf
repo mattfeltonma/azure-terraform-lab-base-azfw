@@ -1,3 +1,12 @@
+########## Create base resources
+##########
+##########
+
+## Use time_static to generate a timestamp which will be used in created_date tag. Use this instead of timestamp
+## so Terraform doesn't freak out every time apply is run again
+##
+resource "time_static" "created" {}
+
 ########## Create resource group and Log Analytics Workspace
 ##########
 ##########
@@ -7,11 +16,10 @@
 resource "azurerm_resource_group" "rg_foundry" {
   name     = "rgmsf${var.region_code}${var.random_string}"
   location = var.region
-  tags     = var.tags
+  tags     = local.tags
 
   lifecycle {
     ignore_changes = [
-      tags["created_date"],
       tags["created_by"]
     ]
   }
@@ -23,14 +31,13 @@ resource "azurerm_log_analytics_workspace" "log_analytics_workspace_workload" {
   name                = "lawmsf${var.region_code}${var.random_string}"
   location            = var.region
   resource_group_name = azurerm_resource_group.rg_foundry.name
-  tags                = var.tags
+  tags                = local.tags
 
   sku               = "PerGB2018"
   retention_in_days = 30
 
   lifecycle {
     ignore_changes = [
-      tags["created_date"],
       tags["created_by"]
     ]
   }
@@ -51,11 +58,10 @@ resource "azurerm_network_security_perimeter" "nsp_ai_resources" {
   name                = "nspai${var.region_code}${var.random_string}"
   resource_group_name = azurerm_resource_group.rg_foundry.name
   location            = var.region
-  tags                = var.tags
+  tags                = local.tags
 
   lifecycle {
     ignore_changes = [
-      tags["created_date"],
       tags["created_by"]
     ]
   }
@@ -257,11 +263,10 @@ resource "azurerm_user_assigned_identity" "umi_foundry_resource" {
   name                = "umimsf${var.region_code}${var.random_string}"
   location            = var.region
   resource_group_name = azurerm_resource_group.rg_foundry.name
-  tags                = var.tags
+  tags                = local.tags
 
   lifecycle {
     ignore_changes = [
-      tags["created_date"],
       tags["created_by"]
     ]
   }
@@ -281,11 +286,10 @@ resource "azurerm_user_assigned_identity" "umi_ai_search" {
   name                = "umiais${var.region_code}${var.random_string}"
   location            = var.region
   resource_group_name = azurerm_resource_group.rg_foundry.name
-  tags                = var.tags
+  tags                = local.tags
 
   lifecycle {
     ignore_changes = [
-      tags["created_date"],
       tags["created_by"]
     ]
   }
@@ -328,7 +332,7 @@ resource "azurerm_key_vault" "key_vault_foundry_secrets" {
   resource_group_name = azurerm_resource_group.rg_foundry.name
 
   # !LAB
-  tags = merge(var.tags, { SecurityControl = "Ignore" })
+  tags = merge(local.tags, { SecurityControl = "Ignore" })
 
   sku_name  = "premium"
   tenant_id = data.azurerm_subscription.current.tenant_id
@@ -354,7 +358,6 @@ resource "azurerm_key_vault" "key_vault_foundry_secrets" {
 
   lifecycle {
     ignore_changes = [
-      tags["created_date"],
       tags["created_by"]
     ]
   }
@@ -452,7 +455,7 @@ resource "azurerm_key_vault" "key_vault_foundry_cmk" {
   name                = "kvfoundrycmk${var.region_code}${var.random_string}"
   location            = var.region
   resource_group_name = azurerm_resource_group.rg_foundry.name
-  tags = merge(var.tags, { SecurityControl = "Ignore" })
+  tags = merge(local.tags, { SecurityControl = "Ignore" })
 
   sku_name  = "premium"
   tenant_id = data.azurerm_subscription.current.tenant_id
@@ -478,7 +481,6 @@ resource "azurerm_key_vault" "key_vault_foundry_cmk" {
 
   lifecycle {
     ignore_changes = [
-      tags["created_date"],
       tags["created_by"]
     ]
   }
@@ -575,7 +577,6 @@ resource "azurerm_key_vault_key" "key_foundry_cmk" {
 
   lifecycle {
     ignore_changes = [
-      tags["created_date"],
       tags["created_by"]
     ]
   }
@@ -596,11 +597,10 @@ resource "azurerm_application_insights" "appins_foundry" {
   resource_group_name = azurerm_resource_group.rg_foundry.name
   workspace_id        = azurerm_log_analytics_workspace.log_analytics_workspace_workload.id
   application_type    = "web"
-  tags                = var.tags
+  tags                = local.tags
 
   lifecycle {
     ignore_changes = [
-      tags["created_date"],
       tags["created_by"]
     ]
   }
@@ -662,7 +662,7 @@ resource "azurerm_private_endpoint" "pe_key_vault_secrets_foundry" {
   name                          = "pe${azurerm_key_vault.key_vault_foundry_secrets[0].name}kv"
   location                      = var.region
   resource_group_name           = azurerm_resource_group.rg_foundry.name
-  tags                          = var.tags
+  tags                          = local.tags
   subnet_id                     = var.subnet_id_private_endpoints
   custom_network_interface_name = "nic${azurerm_key_vault.key_vault_foundry_secrets[0].name}kv"
   private_service_connection {
@@ -675,6 +675,12 @@ resource "azurerm_private_endpoint" "pe_key_vault_secrets_foundry" {
     name = "zoneconn${azurerm_key_vault.key_vault_foundry_secrets[0].name}kv"
     private_dns_zone_ids = [
       "/subscriptions/${var.subscription_id_infrastructure}/resourceGroups/${var.resource_group_name_dns}/providers/Microsoft.Network/privateDnsZones/privatelink.vaultcore.azure.net"
+    ]
+  }
+
+  lifecycle {
+    ignore_changes = [
+      tags["created_by"]
     ]
   }
 }
@@ -692,7 +698,7 @@ resource "azurerm_private_endpoint" "pe_key_vault_cmk_foundry" {
   name                          = "pe${azurerm_key_vault.key_vault_foundry_cmk[0].name}kv"
   location                      = var.region
   resource_group_name           = azurerm_resource_group.rg_foundry.name
-  tags                          = var.tags
+  tags                          = local.tags
   subnet_id                     = var.subnet_id_private_endpoints
   custom_network_interface_name = "nic${azurerm_key_vault.key_vault_foundry_cmk[0].name}kv"
   private_service_connection {
@@ -705,6 +711,12 @@ resource "azurerm_private_endpoint" "pe_key_vault_cmk_foundry" {
     name = "zoneconn${azurerm_key_vault.key_vault_foundry_cmk[0].name}kv"
     private_dns_zone_ids = [
       "/subscriptions/${var.subscription_id_infrastructure}/resourceGroups/${var.resource_group_name_dns}/providers/Microsoft.Network/privateDnsZones/privatelink.vaultcore.azure.net"
+    ]
+  }
+
+  lifecycle {
+    ignore_changes = [
+      tags["created_by"]
     ]
   }
 }
@@ -802,12 +814,11 @@ resource "azapi_resource" "foundry_resource" {
       ] : null
     }
     # !LAB
-    tags = merge(var.tags, { SecurityControl = "Ignore" })
+    tags = merge(local.tags, { SecurityControl = "Ignore" })
   }
 
   lifecycle {
     ignore_changes = [
-      body["properties"]["tags"]["created_date"],
       body["properties"]["tags"]["created_by"]
     ]
   }
@@ -998,7 +1009,12 @@ resource "azurerm_cognitive_deployment" "deployment_gpt_41" {
   model {
     format  = "OpenAI"
     name    = "gpt-4.1"
-    version = "2025-04-14"
+  }
+
+  lifecycle {
+    ignore_changes = [
+      model[0].version
+    ]
   }
 }
 
@@ -1026,7 +1042,12 @@ resource "azurerm_cognitive_deployment" "deployment_gpt_41_mini" {
   model {
     format  = "OpenAI"
     name    = "gpt-4.1-mini"
-    version = "2025-04-14"
+  }
+
+  lifecycle {
+    ignore_changes = [
+      model[0].version
+    ]
   }
 }
 
@@ -1074,7 +1095,7 @@ resource "azurerm_private_endpoint" "pe_foundry_resource" {
   name                = "pe${azapi_resource.foundry_resource.name}resource"
   location            = var.region
   resource_group_name = azurerm_resource_group.rg_foundry.name
-  tags                = var.tags
+  tags                = local.tags
   subnet_id           = var.subnet_id_private_endpoints
 
   custom_network_interface_name = "nic${azapi_resource.foundry_resource.name}resource"
@@ -1097,7 +1118,6 @@ resource "azurerm_private_endpoint" "pe_foundry_resource" {
 
   lifecycle {
     ignore_changes = [
-      tags["created_date"],
       tags["created_by"]
     ]
   }
@@ -1122,7 +1142,7 @@ resource "azurerm_cosmosdb_account" "cosmosdb_foundry" {
   name                = "cosdbmsf${var.region_code}${var.random_string}"
   location            = var.region
   resource_group_name = azurerm_resource_group.rg_foundry.name
-  tags                = var.tags
+  tags                = local.tags
 
   # General settings
   offer_type        = "Standard"
@@ -1153,7 +1173,6 @@ resource "azurerm_cosmosdb_account" "cosmosdb_foundry" {
 
   lifecycle {
     ignore_changes = [
-      tags["created_date"],
       tags["created_by"]
     ]
   }
@@ -1232,7 +1251,7 @@ resource "azurerm_search_service" "ai_search_foundry" {
   name                = "aismsf${var.region_code}${var.random_string}"
   resource_group_name = azurerm_resource_group.rg_foundry.name
   location            = var.region
-  tags                = var.tags
+  tags                = local.tags
 
   # TODO: 6/2026 Change this to use an UMI only once the search limitations are lifted
   # Use both a system-assigned managed identity and user-assigned managed identity to support
@@ -1263,7 +1282,6 @@ resource "azurerm_search_service" "ai_search_foundry" {
 
   lifecycle {
     ignore_changes = [
-      tags["created_date"],
       tags["created_by"]
     ]
   }
@@ -1324,7 +1342,7 @@ resource "azurerm_storage_account" "storage_account_foundry" {
   name                = "stmsf${var.region_code}${var.random_string}"
   resource_group_name = azurerm_resource_group.rg_foundry.name
   location            = var.region
-  tags                = merge(var.tags, { SecurityControl = "Ignore" })
+  tags                = merge(local.tags, { SecurityControl = "Ignore" })
 
   account_kind             = "StorageV2"
   account_tier             = "Standard"
@@ -1350,7 +1368,6 @@ resource "azurerm_storage_account" "storage_account_foundry" {
 
   lifecycle {
     ignore_changes = [
-      tags["created_date"],
       tags["created_by"]
     ]
   }
@@ -1493,7 +1510,7 @@ resource "azurerm_container_registry" "acr_foundry" {
   name                = "acrmsf${var.region_code}${var.random_string}"
   resource_group_name = azurerm_resource_group.rg_foundry.name
   location            = var.region
-  tags                = var.tags
+  tags                = local.tags
 
   # Use Premium SKU to support Private Endpoints
   sku           = "Premium"
@@ -1504,7 +1521,6 @@ resource "azurerm_container_registry" "acr_foundry" {
 
   lifecycle {
     ignore_changes = [
-      tags["created_date"],
       tags["created_by"]
     ]
   }
@@ -1549,7 +1565,7 @@ resource "azurerm_private_endpoint" "pe_cosmosdb_foundry" {
   name                = "pe${azurerm_cosmosdb_account.cosmosdb_foundry[0].name}cosmossql"
   location            = var.region
   resource_group_name = azurerm_resource_group.rg_foundry.name
-  tags                = var.tags
+  tags                = local.tags
   subnet_id           = var.subnet_id_private_endpoints
 
   custom_network_interface_name = "nic${azurerm_cosmosdb_account.cosmosdb_foundry[0].name}cosmossql"
@@ -1569,7 +1585,6 @@ resource "azurerm_private_endpoint" "pe_cosmosdb_foundry" {
 
   lifecycle {
     ignore_changes = [
-      tags["created_date"],
       tags["created_by"]
     ]
   }
@@ -1590,7 +1605,7 @@ resource "azurerm_private_endpoint" "pe_aisearch_foundry" {
   name                = "pe${azurerm_search_service.ai_search_foundry[0].name}searchservice"
   location            = var.region
   resource_group_name = azurerm_resource_group.rg_foundry.name
-  tags                = var.tags
+  tags                = local.tags
   subnet_id           = var.subnet_id_private_endpoints
 
   custom_network_interface_name = "nic${azurerm_search_service.ai_search_foundry[0].name}searchservice"
@@ -1611,7 +1626,6 @@ resource "azurerm_private_endpoint" "pe_aisearch_foundry" {
 
   lifecycle {
     ignore_changes = [
-      tags["created_date"],
       tags["created_by"]
     ]
   }
@@ -1633,7 +1647,7 @@ resource "azurerm_private_endpoint" "pe_storage_blob_foundry" {
   name                = "pe${azurerm_storage_account.storage_account_foundry[0].name}blob"
   location            = var.region
   resource_group_name = azurerm_resource_group.rg_foundry.name
-  tags                = var.tags
+  tags                = local.tags
   subnet_id           = var.subnet_id_private_endpoints
 
   custom_network_interface_name = "nic${azurerm_storage_account.storage_account_foundry[0].name}blob"
@@ -1653,7 +1667,6 @@ resource "azurerm_private_endpoint" "pe_storage_blob_foundry" {
 
   lifecycle {
     ignore_changes = [
-      tags["created_date"],
       tags["created_by"]
     ]
   }
@@ -1675,7 +1688,7 @@ resource "azurerm_private_endpoint" "pe_acr_foundry" {
   name                = "pe${azurerm_container_registry.acr_foundry[0].name}acr"
   location            = var.region
   resource_group_name = azurerm_resource_group.rg_foundry.name
-  tags                = var.tags
+  tags                = local.tags
   subnet_id           = var.subnet_id_private_endpoints
 
   custom_network_interface_name = "nic${azurerm_container_registry.acr_foundry[0].name}acr"
@@ -1695,7 +1708,6 @@ resource "azurerm_private_endpoint" "pe_acr_foundry" {
 
   lifecycle {
     ignore_changes = [
-      tags["created_date"],
       tags["created_by"]
     ]
   }
@@ -1852,6 +1864,8 @@ resource "time_sleep" "wait_managed_vnet_permissions_replication" {
 ##########
 ##########
 
+
+## !TODO: 8/2026 At this time, managed vnet is automatically provisioned. Need to circle back on this after chatting with PG
 ## !MANAGEDVNET
 ## !AGENTS
 ## Create a managed virtual network where Foundry agents will be deployed to
@@ -2271,8 +2285,8 @@ module "foundry_project_agents" {
   foundry_resource_id                = azapi_resource.foundry_resource.id
   foundry_resource_resource_group_id = azurerm_resource_group.rg_foundry.id
   region                             = var.region
-  #first_project                      = true
   project_number                     = 1
+  tags                               = local.tags
 
   # Basic settings
   agents                        = var.agents ? true : false
