@@ -589,9 +589,9 @@ resource "azurerm_cognitive_account" "ms_foundry_accounts" {
   }
 }
 
-## Deploy GPT 4o model to the Foundry accounts
+## Deploy GPT 4.1 model to the Foundry accounts
 ##
-resource "azurerm_cognitive_deployment" "gpt41_chat_model_deployments" {
+resource "azurerm_cognitive_deployment" "deployment_gpt41" {
   depends_on = [
     azurerm_cognitive_account.ms_foundry_accounts
   ]
@@ -601,14 +601,114 @@ resource "azurerm_cognitive_deployment" "gpt41_chat_model_deployments" {
   name                 = "gpt-4.1"
   cognitive_account_id = azurerm_cognitive_account.ms_foundry_accounts[each.key].id
 
+  # Use the default Responsible AI policy for the deployment
+  rai_policy_name = "Microsoft.DefaultV2"
+
   sku {
     name     = "GlobalStandard"
-    capacity = 100
+    capacity = 1000
   }
 
   model {
     format  = "OpenAI"
     name    = "gpt-4.1"
+  }
+
+  lifecycle {
+    ignore_changes = [
+      model[0].version
+    ]
+  }
+}
+
+## Deploy GPT 4.1-mini model to the Foundry accounts
+##
+resource "azurerm_cognitive_deployment" "deployment_gpt41_mini" {
+  depends_on = [
+    azurerm_cognitive_deployment.deployment_gpt41
+  ]
+
+  for_each = local.ms_foundry_regions
+
+  name                 = "gpt-4.1-mini"
+  cognitive_account_id = azurerm_cognitive_account.ms_foundry_accounts[each.key].id
+
+  # Use the default Responsible AI policy for the deployment
+  rai_policy_name = "Microsoft.DefaultV2"
+
+  sku {
+    name     = "GlobalStandard"
+    capacity = 1000
+  }
+
+  model {
+    format  = "OpenAI"
+    name    = "gpt-4.1-mini"
+  }
+
+  lifecycle {
+    ignore_changes = [
+      model[0].version
+    ]
+  }
+}
+
+## Deploy GPT 4.1 model to the Foundry accounts
+##
+resource "azurerm_cognitive_deployment" "deployment_text_embedding_3_large" {
+  depends_on = [
+    azurerm_cognitive_deployment.deployment_gpt41_mini
+  ]
+
+  for_each = local.ms_foundry_regions
+
+  name                 = "text-embedding-3-large"
+  cognitive_account_id = azurerm_cognitive_account.ms_foundry_accounts[each.key].id
+
+  # Use the default Responsible AI policy for the deployment
+  rai_policy_name = "Microsoft.DefaultV2"
+
+  sku {
+    name     = "GlobalStandard"
+    capacity = 1000
+  }
+
+  model {
+    format  = "OpenAI"
+    name    = "text-embedding-3-large"
+  }
+
+  lifecycle {
+    ignore_changes = [
+      model[0].version
+    ]
+  }
+}
+
+## Create a deployment for OpenAI's GPT-5.1
+##
+resource "azurerm_cognitive_deployment" "deployment_gpt_5_1" {
+  depends_on = [
+    azurerm_cognitive_deployment.deployment_text_embedding_3_large
+  ]
+
+  for_each = local.ms_foundry_regions
+
+  name                 = "gpt-5.1"
+  cognitive_account_id = azurerm_cognitive_account.ms_foundry_accounts[each.key].id
+
+  # Use the default Responsible AI policy for the deployment
+  rai_policy_name = "Microsoft.DefaultV2"
+
+  sku {
+    # Using global for maximum TPM; DataZone should be used for regulated customers
+    name     = "GlobalStandard"
+    capacity = 1000
+  }
+
+  model {
+    format  = "OpenAI"
+    name    = "gpt-5.1"
   }
 
   lifecycle {
@@ -655,7 +755,7 @@ resource "azurerm_private_endpoint" "pe_msfoundry_accounts" {
 
   depends_on = [
     azurerm_cognitive_account.ms_foundry_accounts,
-    azurerm_cognitive_deployment.gpt41_chat_model_deployments
+    azurerm_cognitive_deployment.deployment_text_embedding_3_large
   ]
 
   for_each = local.ms_foundry_regions
@@ -794,7 +894,6 @@ resource "time_sleep" "sleep_apim_umi_role_assignments" {
   ]
   create_duration = "120s"
 }
-
 
 ########### Create the API Management instance and its dependent resources
 ###########
@@ -1444,54 +1543,90 @@ resource "azurerm_api_management_api_policy" "apim_policy_openai_original" {
                   <issuer>https://sts.windows.net/${var.entra_id_tenant_id}/</issuer>
               </issuers>
           </validate-jwt>
-          <!-- Extract the Entra ID application id from the JWT -->
-          <set-variable name="appId" value="@(context.Request.Headers.GetValueOrDefault("Authorization",string.Empty).Split(' ').Last().AsJwt().Claims.GetValueOrDefault("appid", "none"))" />
-          <!-- Extract the Entra ID application id from the JWT -->
-          <set-variable name="userId" value="@(context.Request.Headers.GetValueOrDefault("Authorization",string.Empty).Split(' ').Last().AsJwt().Claims.GetValueOrDefault("upn", "none"))" />
-          <!-- Extract the Agent ID from the x-ms-foundry-agent-id header. This is only relevant for Foundry native agents -->
-          <set-variable name="agentId" value="@(context.Request.Headers.GetValueOrDefault("x-ms-foundry-agent-id", "none"))" />
-          <!-- Extract the project GUID from the x-ms-foundry-project-id header. This is only relevant for Foundry native agents -->
-          <set-variable name="projectId" value="@(context.Request.Headers.GetValueOrDefault("x-ms-foundry-project-id", "none"))" />
-          <!-- Extract the Foundry Project name from the "openai-project" header. This is only relevant for Foundry native agents -->
-          <set-variable name="projectName" value="@(context.Request.Headers.GetValueOrDefault("openai-project", "none"))" />
-          <!-- Extract the deployment name from the uri path -->
-          <set-variable name="uriPath" value="@(context.Request.OriginalUrl.Path)" />
-          <set-variable name="deploymentName" value="@(System.Text.RegularExpressions.Regex.Match((string)context.Variables["uriPath"], "/deployments/([^/]+)").Groups[1].Value)" />
-          <!-- Configure tracing to capture data that can be used to correlate user usage -->
-          <trace source="foundry-usage-data" severity="information">
-              <message>LLM Usage</message>
-              <metadata name="correlationId" value="@(context.RequestId.ToString())" />
-              <metadata name="userId" value="@((string)context.Variables["userId"])" />
-              <metadata name="appId" value="@((string)context.Variables["appId"])" />
-              <metadata name="agentId" value="@((string)context.Variables["agentId"])" />
-              <metadata name="projectId" value="@((string)context.Variables["projectId"])" />
-          </trace>
+        <!-- ++++++++++++++++Extract data from JWT++++++++++++++++ -->
+        <!-- Extract the Entra ID application id from the JWT -->
+        <set-variable name="appId" value="@(context.Request.Headers.GetValueOrDefault("Authorization",string.Empty).Split(' ').Last().AsJwt().Claims.GetValueOrDefault("appid", "none"))" />
+        <!-- Extract the user's UPN from the JWT -->
+        <set-variable name="jwt-user-id" value="@(context.Request.Headers.GetValueOrDefault("Authorization",string.Empty).Split(' ').Last().AsJwt().Claims.GetValueOrDefault("upn", "none"))" />
+        <!-- ++++++++++++++++Extract data from request headers++++++++++++++++ -->
+        <set-variable name="baggageMap" value="@{
+            var baggage = context.Request.Headers.GetValueOrDefault("baggage", "");
+            var map = new JObject();
+            foreach (var pair in baggage.Split(',').Select(kv => kv.Split('=')).Where(p => p.Length == 2))
+            {
+                map[pair[0].Trim()] = pair[1].Trim();
+            }
+            return map;
+        }" />
+        <!-- Extract the user_id from the baggage header -->
+        <set-variable name="baggage-user-id" value="@{
+            var map = (JObject)context.Variables["baggageMap"];
+            return map["user.id"]?.ToString() ?? "none";
+        }" />
+        <!-- Extract the Entra ID Agent Identity Blueprint ID -->
+        <set-variable name="baggage-entra-agent-blueprint-id" value="@{
+            var map = (JObject)context.Variables["baggageMap"];
+            return map["microsoft.a365.agent.blueprint.id"]?.ToString() ?? "none";
+        }" />
+        <!-- Extract the Entra ID Agent Identity ID -->
+        <set-variable name="baggage-entra-agent-id" value="@{
+            var map = (JObject)context.Variables["baggageMap"];
+            return map["gen_ai.agent.id"]?.ToString() ?? "none";
+        }" />
+        <!-- Extract the Agent ID from the x-ms-foundry-agent-id header. This is relevant for Foundry Prompt Agents -->
+        <set-variable name="x-ms-foundry-agent-id" value="@(context.Request.Headers.GetValueOrDefault("x-ms-foundry-agent-id", "none"))" />
+        <!-- Extract the project GUID from the x-ms-foundry-project-id header. This is relevant for Foundry Hosted Agents and Foundry Prompt Agents -->
+        <set-variable name="x-ms-foundry-project-id" value="@(context.Request.Headers.GetValueOrDefault("x-ms-foundry-project-id", "none"))" />
+        <!-- Extract the Foundry Project name from the "openai-project" header. This is only relevant for Foundry -->
+        <set-variable name="foundryprojectName" value="@(context.Request.Headers.GetValueOrDefault("openai-project", "none"))" />
+        <!-- Extract the deployment name from the uri path -->
+        <set-variable name="uriPath" value="@(context.Request.OriginalUrl.Path)" />
+        <set-variable name="deploymentName" value="@(System.Text.RegularExpressions.Regex.Match((string)context.Variables["uriPath"], "/deployments/([^/]+)").Groups[1].Value)" />
+        <!-- Configure tracing to capture data to enrich logs -->
+        <trace source="foundry-usage-data" severity="information">
+            <message>LLM Usage</message>
+            <metadata name="correlationId" value="@(context.RequestId.ToString())" />
+            <metadata name="appId" value="@((string)context.Variables["appId"])" />
+            <metadata name="entra-agent-blueprint-id" value="@((string)context.Variables["baggage-entra-agent-blueprint-id"])" />
+            <metadata name="entra-agent-id" value="@((string)context.Variables["baggage-entra-agent-id"])" />
+            <metadata name="traceUserId" value="@((string)context.Variables["baggage-user-id"])" />
+            <metadata name="foundry-agent-id" value="@((string)context.Variables["x-ms-foundry-agent-id"])" />
+            <metadata name="foundry-project-id" value="@((string)context.Variables["x-ms-foundry-project-id"])" />
+        </trace>
           <choose>
-            <!-- If the request isn't from a Foundry native agent and is instead an application or external agent -->
-            <when condition="@(context.Variables.GetValueOrDefault<string>("agentId") == "none" && context.Variables.GetValueOrDefault<string>("projectId") == "none")">
-              <!-- Throttle token usage based on the appid -->
-              <llm-token-limit counter-key="@(context.Variables.GetValueOrDefault<string>("appId","none"))" estimate-prompt-tokens="true" tokens-per-minute="10000" remaining-tokens-header-name="x-apim-remaining-token" tokens-consumed-header-name="x-apim-tokens-consumed" />
-              <!-- Emit token metrics to Application Insights -->
-              <llm-emit-token-metric namespace="openai-metrics">
-                  <dimension name="model" value="@(context.Variables.GetValueOrDefault<string>("deploymentName","None"))" />
-                  <dimension name="appId" value="@(context.Variables.GetValueOrDefault<string>("appId", "none"))" />
-              </llm-emit-token-metric>
+            <!-- If the request isn't coming from the Foundry Chat Playground or Foundry Agent -->
+            <when condition="@(context.Variables.GetValueOrDefault<string>("x-ms-foundry-project-id") == "none")">
+                <!-- Throttle token usage based on the appid -->
+                <llm-token-limit counter-key="@(context.Variables.GetValueOrDefault<string>("appId","none"))" estimate-prompt-tokens="true" tokens-per-minute="50000" remaining-tokens-header-name="x-apim-remaining-token" tokens-consumed-header-name="x-apim-tokens-consumed" />
+                <!-- Emit token metrics to Application Insights -->
+                <llm-emit-token-metric namespace="openai-metrics">
+                    <dimension name="model" value="@(context.Variables.GetValueOrDefault<string>("deploymentName","None"))" />
+                    <dimension name="appId" value="@(context.Variables.GetValueOrDefault<string>("appId", "none"))" />
+                </llm-emit-token-metric>
             </when>
-            <!-- If the request is from a Foundry native agent -->
+            <!-- If the request is from the Foundry Chat Playground or Foundry Agent -->
             <otherwise>
-              <!-- Throttle token usage based on the agentId -->
-              <llm-token-limit counter-key="@($"{context.Variables.GetValueOrDefault<string>("projectId")}_{context.Variables.GetValueOrDefault<string>("agentId")}")" estimate-prompt-tokens="true" tokens-per-minute="10000" remaining-tokens-header-name="x-apim-remaining-token" tokens-consumed-header-name="x-apim-tokens-consumed" />
-              <!-- Emit token metrics to Application Insights -->
-              <llm-emit-token-metric namespace="llm-metrics">
-                  <dimension name="model" value="@(context.Variables.GetValueOrDefault<string>("deploymentName","None"))" />
-                  <dimension name="projectId" value="@(context.Variables.GetValueOrDefault<string>("projectId","00000000-0000-0000-0000-000000000000"))" />
-              </llm-emit-token-metric>
+                <choose>
+                    <!-- Throttle token usage based on the Foundry Project ID and Foundry Agent ID for Prompt Agents -->
+                    <when condition="@(context.Variables.GetValueOrDefault<string>("x-ms-foundry-agent-id") != "none")">
+                        <llm-token-limit counter-key="@($"{context.Variables.GetValueOrDefault<string>("x-ms-foundry-project-id")}_{context.Variables.GetValueOrDefault<string>("x-ms-foundry-agent-id")}")" estimate-prompt-tokens="true" tokens-per-minute="50000" remaining-tokens-header-name="x-apim-remaining-token" tokens-consumed-header-name="x-apim-tokens-consumed" />
+                    </when>
+                    <!-- Throttle token usage based on the Foundry Project ID and Hosted Agent ID for Hosted Agents -->
+                    <when condition="@(context.Variables.GetValueOrDefault<string>("x-ms-foundry-agent-id") == "none" && context.Variables.GetValueOrDefault<string>("entra-agent-blueprint-id") != "none" && context.Variables.GetValueOrDefault<string>("x-ms-foundry-project-id") != "none")">
+                        <llm-token-limit counter-key="@($"{context.Variables.GetValueOrDefault<string>("x-ms-foundry-project-id")}_{context.Variables.GetValueOrDefault<string>("entra-agent-blueprint-id")}")" estimate-prompt-tokens="true" tokens-per-minute="50000" remaining-tokens-header-name="x-apim-remaining-token" tokens-consumed-header-name="x-apim-tokens-consumed" />
+                    </when>
+                </choose>
+                <!-- Emit token metrics to Application Insights -->
+                <llm-emit-token-metric namespace="llm-metrics">
+                    <dimension name="model" value="@(context.Variables.GetValueOrDefault<string>("deploymentName","None"))" />
+                    <dimension name="projectId" value="@(context.Variables.GetValueOrDefault<string>("x-ms-foundry-project-id","00000000-0000-0000-0000-000000000000"))" />
+                </llm-emit-token-metric>
             </otherwise>
-          </choose>
+        </choose>
           <choose>
-            <!-- If the request is from a Foundry native agent -->
-            <when condition="@(context.Variables.GetValueOrDefault<string>("agentId") != "none" && context.Variables.GetValueOrDefault<string>("projectId") != "none")">
-            <authentication-managed-identity resource="https://cognitiveservices.azure.com/" />
+            <!-- If the request is from a Foundry Prompt Agent or Foundry Host Agent swap to use the APIM's UMI to save me from having to add permissions for the agent identities -->
+            <when condition="@((context.Variables.GetValueOrDefault<string>("x-ms-foundry-agent-id") != "none" || context.Variables.GetValueOrDefault<string>("entra-agent-blueprint-id") != "none") && context.Variables.GetValueOrDefault<string>("x-ms-foundry-project-id") != "none")">
+            <authentication-managed-identity resource="https://cognitiveservices.azure.com/" client-id="${azurerm_user_assigned_identity.umi_apim.client_id}" />
             </when>
           </choose>
           <set-backend-service backend-id="${module.backend_pool_msfoundry_instances_openai_classic.name}" />
@@ -1527,54 +1662,90 @@ resource "azurerm_api_management_api_policy" "apim_policy_openai_v1" {
                   <issuer>https://sts.windows.net/${var.entra_id_tenant_id}/</issuer>
               </issuers>
           </validate-jwt>
-          <!-- Extract the Entra ID application id from the JWT -->
-          <set-variable name="appId" value="@(context.Request.Headers.GetValueOrDefault("Authorization",string.Empty).Split(' ').Last().AsJwt().Claims.GetValueOrDefault("appid", "none"))" />
-          <!-- Extract the Entra ID application id from the JWT -->
-          <set-variable name="userId" value="@(context.Request.Headers.GetValueOrDefault("Authorization",string.Empty).Split(' ').Last().AsJwt().Claims.GetValueOrDefault("upn", "none"))" />
-          <!-- Extract the Agent ID from the x-ms-foundry-agent-id header. This is only relevant for Foundry native agents -->
-          <set-variable name="agentId" value="@(context.Request.Headers.GetValueOrDefault("x-ms-foundry-agent-id", "none"))" />
-          <!-- Extract the project GUID from the x-ms-foundry-project-id header. This is only relevant for Foundry native agents -->
-          <set-variable name="projectId" value="@(context.Request.Headers.GetValueOrDefault("x-ms-foundry-project-id", "none"))" />
-          <!-- Extract the Foundry Project name from the "openai-project" header. This is only relevant for Foundry native agents -->
-          <set-variable name="projectName" value="@(context.Request.Headers.GetValueOrDefault("openai-project", "none"))" />
-          <!-- Extract the deployment name from the uri path -->
-          <set-variable name="uriPath" value="@(context.Request.OriginalUrl.Path)" />
-          <set-variable name="deploymentName" value="@(System.Text.RegularExpressions.Regex.Match((string)context.Variables["uriPath"], "/deployments/([^/]+)").Groups[1].Value)" />
-          <!-- Configure tracing to capture data that can be used to correlate user usage -->
-          <trace source="foundry-usage-data" severity="information">
-              <message>LLM Usage</message>
-              <metadata name="correlationId" value="@(context.RequestId.ToString())" />
-              <metadata name="userId" value="@((string)context.Variables["userId"])" />
-              <metadata name="appId" value="@((string)context.Variables["appId"])" />
-              <metadata name="agentId" value="@((string)context.Variables["agentId"])" />
-              <metadata name="projectId" value="@((string)context.Variables["projectId"])" />
-          </trace>
+        <!-- ++++++++++++++++Extract data from JWT++++++++++++++++ -->
+        <!-- Extract the Entra ID application id from the JWT -->
+        <set-variable name="appId" value="@(context.Request.Headers.GetValueOrDefault("Authorization",string.Empty).Split(' ').Last().AsJwt().Claims.GetValueOrDefault("appid", "none"))" />
+        <!-- Extract the user's UPN from the JWT -->
+        <set-variable name="jwt-user-id" value="@(context.Request.Headers.GetValueOrDefault("Authorization",string.Empty).Split(' ').Last().AsJwt().Claims.GetValueOrDefault("upn", "none"))" />
+        <!-- ++++++++++++++++Extract data from request headers++++++++++++++++ -->
+        <set-variable name="baggageMap" value="@{
+            var baggage = context.Request.Headers.GetValueOrDefault("baggage", "");
+            var map = new JObject();
+            foreach (var pair in baggage.Split(',').Select(kv => kv.Split('=')).Where(p => p.Length == 2))
+            {
+                map[pair[0].Trim()] = pair[1].Trim();
+            }
+            return map;
+        }" />
+        <!-- Extract the user_id from the baggage header -->
+        <set-variable name="baggage-user-id" value="@{
+            var map = (JObject)context.Variables["baggageMap"];
+            return map["user.id"]?.ToString() ?? "none";
+        }" />
+        <!-- Extract the Entra ID Agent Identity Blueprint ID -->
+        <set-variable name="baggage-entra-agent-blueprint-id" value="@{
+            var map = (JObject)context.Variables["baggageMap"];
+            return map["microsoft.a365.agent.blueprint.id"]?.ToString() ?? "none";
+        }" />
+        <!-- Extract the Entra ID Agent Identity ID -->
+        <set-variable name="baggage-entra-agent-id" value="@{
+            var map = (JObject)context.Variables["baggageMap"];
+            return map["gen_ai.agent.id"]?.ToString() ?? "none";
+        }" />
+        <!-- Extract the Agent ID from the x-ms-foundry-agent-id header. This is relevant for Foundry Prompt Agents -->
+        <set-variable name="x-ms-foundry-agent-id" value="@(context.Request.Headers.GetValueOrDefault("x-ms-foundry-agent-id", "none"))" />
+        <!-- Extract the project GUID from the x-ms-foundry-project-id header. This is relevant for Foundry Hosted Agents and Foundry Prompt Agents -->
+        <set-variable name="x-ms-foundry-project-id" value="@(context.Request.Headers.GetValueOrDefault("x-ms-foundry-project-id", "none"))" />
+        <!-- Extract the Foundry Project name from the "openai-project" header. This is only relevant for Foundry -->
+        <set-variable name="foundryprojectName" value="@(context.Request.Headers.GetValueOrDefault("openai-project", "none"))" />
+        <!-- Extract the deployment name from the uri path -->
+        <set-variable name="uriPath" value="@(context.Request.OriginalUrl.Path)" />
+        <set-variable name="deploymentName" value="@(System.Text.RegularExpressions.Regex.Match((string)context.Variables["uriPath"], "/deployments/([^/]+)").Groups[1].Value)" />
+        <!-- Configure tracing to capture data to enrich logs -->
+        <trace source="foundry-usage-data" severity="information">
+            <message>LLM Usage</message>
+            <metadata name="correlationId" value="@(context.RequestId.ToString())" />
+            <metadata name="appId" value="@((string)context.Variables["appId"])" />
+            <metadata name="entra-agent-blueprint-id" value="@((string)context.Variables["baggage-entra-agent-blueprint-id"])" />
+            <metadata name="entra-agent-id" value="@((string)context.Variables["baggage-entra-agent-id"])" />
+            <metadata name="traceUserId" value="@((string)context.Variables["baggage-user-id"])" />
+            <metadata name="foundry-agent-id" value="@((string)context.Variables["x-ms-foundry-agent-id"])" />
+            <metadata name="foundry-project-id" value="@((string)context.Variables["x-ms-foundry-project-id"])" />
+        </trace>
           <choose>
-            <!-- If the request isn't from a Foundry native agent and is instead an application or external agent -->
-            <when condition="@(context.Variables.GetValueOrDefault<string>("agentId") == "none" && context.Variables.GetValueOrDefault<string>("projectId") == "none")">
-              <!-- Throttle token usage based on the appid -->
-              <llm-token-limit counter-key="@(context.Variables.GetValueOrDefault<string>("appId","none"))" estimate-prompt-tokens="true" tokens-per-minute="10000" remaining-tokens-header-name="x-apim-remaining-token" tokens-consumed-header-name="x-apim-tokens-consumed" />
-              <!-- Emit token metrics to Application Insights -->
-              <llm-emit-token-metric namespace="openai-metrics">
-                  <dimension name="model" value="@(context.Variables.GetValueOrDefault<string>("deploymentName","None"))" />
-                  <dimension name="appId" value="@(context.Variables.GetValueOrDefault<string>("appId", "none"))" />
-              </llm-emit-token-metric>
+            <!-- If the request isn't coming from the Foundry Chat Playground or Foundry Agent -->
+            <when condition="@(context.Variables.GetValueOrDefault<string>("x-ms-foundry-project-id") == "none")">
+                <!-- Throttle token usage based on the appid -->
+                <llm-token-limit counter-key="@(context.Variables.GetValueOrDefault<string>("appId","none"))" estimate-prompt-tokens="true" tokens-per-minute="50000" remaining-tokens-header-name="x-apim-remaining-token" tokens-consumed-header-name="x-apim-tokens-consumed" />
+                <!-- Emit token metrics to Application Insights -->
+                <llm-emit-token-metric namespace="openai-metrics">
+                    <dimension name="model" value="@(context.Variables.GetValueOrDefault<string>("deploymentName","None"))" />
+                    <dimension name="appId" value="@(context.Variables.GetValueOrDefault<string>("appId", "none"))" />
+                </llm-emit-token-metric>
             </when>
-            <!-- If the request is from a Foundry native agent -->
+            <!-- If the request is from the Foundry Chat Playground or Foundry Agent -->
             <otherwise>
-              <!-- Throttle token usage based on the agentId -->
-              <llm-token-limit counter-key="@($"{context.Variables.GetValueOrDefault<string>("projectId")}_{context.Variables.GetValueOrDefault<string>("agentId")}")" estimate-prompt-tokens="true" tokens-per-minute="10000" remaining-tokens-header-name="x-apim-remaining-token" tokens-consumed-header-name="x-apim-tokens-consumed" />
-              <!-- Emit token metrics to Application Insights -->
-              <llm-emit-token-metric namespace="llm-metrics">
-                  <dimension name="model" value="@(context.Variables.GetValueOrDefault<string>("deploymentName","None"))" />
-                  <dimension name="projectId" value="@(context.Variables.GetValueOrDefault<string>("projectId","00000000-0000-0000-0000-000000000000"))" />
-              </llm-emit-token-metric>
+                <choose>
+                    <!-- Throttle token usage based on the Foundry Project ID and Foundry Agent ID for Prompt Agents -->
+                    <when condition="@(context.Variables.GetValueOrDefault<string>("x-ms-foundry-agent-id") != "none")">
+                        <llm-token-limit counter-key="@($"{context.Variables.GetValueOrDefault<string>("x-ms-foundry-project-id")}_{context.Variables.GetValueOrDefault<string>("x-ms-foundry-agent-id")}")" estimate-prompt-tokens="true" tokens-per-minute="50000" remaining-tokens-header-name="x-apim-remaining-token" tokens-consumed-header-name="x-apim-tokens-consumed" />
+                    </when>
+                    <!-- Throttle token usage based on the Foundry Project ID and Hosted Agent ID for Hosted Agents -->
+                    <when condition="@(context.Variables.GetValueOrDefault<string>("x-ms-foundry-agent-id") == "none" && context.Variables.GetValueOrDefault<string>("entra-agent-blueprint-id") != "none" && context.Variables.GetValueOrDefault<string>("x-ms-foundry-project-id") != "none")">
+                        <llm-token-limit counter-key="@($"{context.Variables.GetValueOrDefault<string>("x-ms-foundry-project-id")}_{context.Variables.GetValueOrDefault<string>("entra-agent-blueprint-id")}")" estimate-prompt-tokens="true" tokens-per-minute="50000" remaining-tokens-header-name="x-apim-remaining-token" tokens-consumed-header-name="x-apim-tokens-consumed" />
+                    </when>
+                </choose>
+                <!-- Emit token metrics to Application Insights -->
+                <llm-emit-token-metric namespace="llm-metrics">
+                    <dimension name="model" value="@(context.Variables.GetValueOrDefault<string>("deploymentName","None"))" />
+                    <dimension name="projectId" value="@(context.Variables.GetValueOrDefault<string>("x-ms-foundry-project-id","00000000-0000-0000-0000-000000000000"))" />
+                </llm-emit-token-metric>
             </otherwise>
-          </choose>
+        </choose>
           <choose>
-            <!-- If the request is from a Foundry native agent -->
-            <when condition="@(context.Variables.GetValueOrDefault<string>("agentId") != "none" && context.Variables.GetValueOrDefault<string>("projectId") != "none")">
-            <authentication-managed-identity resource="https://cognitiveservices.azure.com/" />
+            <!-- If the request is from a Foundry Prompt Agent or Foundry Host Agent swap to use the APIM's UMI to save me from having to add permissions for the agent identities -->
+            <when condition="@((context.Variables.GetValueOrDefault<string>("x-ms-foundry-agent-id") != "none" || context.Variables.GetValueOrDefault<string>("entra-agent-blueprint-id") != "none") && context.Variables.GetValueOrDefault<string>("x-ms-foundry-project-id") != "none")">
+            <authentication-managed-identity resource="https://cognitiveservices.azure.com/" client-id="${azurerm_user_assigned_identity.umi_apim.client_id}" />
             </when>
           </choose>
           <set-backend-service backend-id="${module.backend_pool_msfoundry_instances_openai_v1.name}" />
@@ -1730,7 +1901,7 @@ resource "azurerm_api_management_api_policy" "apim_policy_openai_model_gateway" 
     <policies>
       <inbound>
           <base />
-          <authentication-managed-identity resource="https://cognitiveservices.azure.com/" />
+          <authentication-managed-identity resource="https://cognitiveservices.azure.com/" client-id="${azurerm_user_assigned_identity.umi_apim.client_id}" />
           <set-backend-service backend-id="${module.backend_pool_msfoundry_instances_openai_classic.name}" />
       </inbound>
       <backend>
@@ -1784,7 +1955,7 @@ resource "azurerm_api_management_api_operation_policy" "apim_policy_openai_origi
   xml_content = <<XML
     <policies>
       <inbound>
-        <authentication-managed-identity resource="https://management.azure.com/" />
+        <authentication-managed-identity resource="https://management.azure.com/" client-id="${azurerm_user_assigned_identity.umi_apim.client_id}" />
         <rewrite-uri template="/deployments/{deploymentName}?api-version=${local.ai_services_arm_api_version}" copy-unmatched-params="false" />
         <!--Specify a Foundry deployment that has the models deployed -->
         <set-backend-service base-url="https://management.azure.com${azurerm_cognitive_account.ms_foundry_accounts[keys(local.ms_foundry_regions)[0]].id}" />
@@ -1833,7 +2004,7 @@ resource "azurerm_api_management_api_operation_policy" "apim_policy_openai_origi
   xml_content = <<XML
     <policies>
       <inbound>
-        <authentication-managed-identity resource="https://management.azure.com/" />
+        <authentication-managed-identity resource="https://management.azure.com/" client-id="${azurerm_user_assigned_identity.umi_apim.client_id}" />
         <rewrite-uri template="/deployments?api-version=${local.ai_services_arm_api_version}" copy-unmatched-params="false" />
         <!--Azure Resource Manager-->
         <set-backend-service base-url="https://management.azure.com${azurerm_cognitive_account.ms_foundry_accounts[keys(local.ms_foundry_regions)[0]].id}" />
@@ -1888,7 +2059,7 @@ resource "azurerm_api_management_api_operation_policy" "apim_policy_openai_v1_ge
   xml_content = <<XML
     <policies>
       <inbound>
-        <authentication-managed-identity resource="https://management.azure.com/" />
+        <authentication-managed-identity resource="https://management.azure.com/" client-id="${azurerm_user_assigned_identity.umi_apim.client_id}" />
         <rewrite-uri template="/deployments/{deploymentName}?api-version=${local.ai_services_arm_api_version}" copy-unmatched-params="false" />
         <!--Azure Resource Manager-->
         <set-backend-service base-url="https://management.azure.com${azurerm_cognitive_account.ms_foundry_accounts[keys(local.ms_foundry_regions)[0]].id}" />
@@ -1937,7 +2108,7 @@ resource "azurerm_api_management_api_operation_policy" "apim_policy_openai_v1_li
   xml_content = <<XML
     <policies>
       <inbound>
-        <authentication-managed-identity resource="https://management.azure.com/" />
+        <authentication-managed-identity resource="https://management.azure.com/" client-id="${azurerm_user_assigned_identity.umi_apim.client_id}" />
         <rewrite-uri template="/deployments?api-version=${local.ai_services_arm_api_version}" copy-unmatched-params="false" />
         <!--Azure Resource Manager-->
         <set-backend-service base-url="https://management.azure.com${azurerm_cognitive_account.ms_foundry_accounts[keys(local.ms_foundry_regions)[0]].id}" />
@@ -1992,7 +2163,7 @@ resource "azurerm_api_management_api_operation_policy" "apim_policy_openai_model
   xml_content = <<XML
     <policies>
       <inbound>
-        <authentication-managed-identity resource="https://management.azure.com/" />
+        <authentication-managed-identity resource="https://management.azure.com/" client-id="${azurerm_user_assigned_identity.umi_apim.client_id}" />
         <rewrite-uri template="/deployments/{deploymentName}?api-version=${local.ai_services_arm_api_version}" copy-unmatched-params="false" />
         <!--Azure Resource Manager-->
         <set-backend-service base-url="https://management.azure.com${azurerm_cognitive_account.ms_foundry_accounts[keys(local.ms_foundry_regions)[0]].id}" />
@@ -2041,7 +2212,7 @@ resource "azurerm_api_management_api_operation_policy" "apim_policy_openai_model
   xml_content = <<XML
     <policies>
       <inbound>
-        <authentication-managed-identity resource="https://management.azure.com/" />
+        <authentication-managed-identity resource="https://management.azure.com/" client-id="${azurerm_user_assigned_identity.umi_apim.client_id}" />
         <rewrite-uri template="/deployments?api-version=${local.ai_services_arm_api_version}" copy-unmatched-params="false" />
         <!--Azure Resource Manager-->
         <set-backend-service base-url="https://management.azure.com${azurerm_cognitive_account.ms_foundry_accounts[keys(local.ms_foundry_regions)[0]].id}" />

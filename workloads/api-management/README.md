@@ -19,6 +19,9 @@
 ## Updates
 
 ### 2026
+* **August 6th, 2026**
+  * Fixed some issues with API policies
+  * Updated LLM deployments for 4o to 4.1 and added 4.1-mini, text-embedding-3, and 5.1 and added Guardrails to each deployment
 * **August 4th, 2026**
   * Updated NSP resources to azurerm from azapi
   * Updated resource names from AI Foundry to MS Foundry

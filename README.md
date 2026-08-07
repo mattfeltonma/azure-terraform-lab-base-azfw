@@ -33,6 +33,20 @@ Hope any bit of this code helps save you some time or learn something new!
 ## Updates
 
 ### 2026
+* **August 6, 2026**
+  * API Management
+    * Renamed lab from AI Gateway to API Management
+    * Fixed some issue with API policie
+    * Added MCP Server API for Microsoft Learn MCP Server along with diagnostic settings examples
+    * Updated azurerm and azapi provider versions
+    * Removed model 4o and added 4.1, 4.1-mini, text-embedding-large-3, 5.1 to Foundry accounts
+    * Updated NSP deployment from azapi to azurerm
+    * Switched APIM to using UMI
+    * Disabled access keys on App Insights and switched to RBAC
+  * Microsoft Foundry
+    * Updated azurerm and azapi provider versions
+    * Cleaned up some junk
+    * Updated managed-vnet-notebook
 * **August 3, 2026**
   * Base Lab
     * Added Azure Firewall Policy for Premium SKU to make it easier to swap

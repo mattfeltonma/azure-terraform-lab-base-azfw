@@ -28,12 +28,6 @@ variable "apim_ai_gateway" {
   default = null
 }
 
-#variable "first_project" {
-#  description = "TEMPORARY: Set to true to create the first Foundry project within the Foundry resource. This is required for now because the BYOK will fail to create a connection if there are no projects associated to the Foundry resource"
-#  type        = bool
-#  default     = true
-#}
-
 variable "foundry_cmk_enabled" {
   description = "Specify whether the Foundry resource is encrypted with CMK"
   type        = bool
@@ -181,6 +175,12 @@ variable "shared_external_openai" {
     region      = string
   })
   default = null
+}
+
+variable "tags" {
+  description = "A map of tags to assign to the resources"
+  type        = map(string)
+  default     = {}
 }
 
 variable "user_object_id" {

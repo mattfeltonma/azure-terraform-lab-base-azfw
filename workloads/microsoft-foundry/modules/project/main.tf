@@ -11,6 +11,14 @@ resource "azurerm_user_assigned_identity" "foundry_project_umi" {
   name                = "umi${local.foundry_resource_name}project${var.project_number}"
   location            = var.region
   resource_group_name = local.foundry_resource_resource_group_name
+
+  tags = var.tags
+
+  lifecycle {
+    ignore_changes = [
+      tags["created_by"]
+    ]
+  }
 }
 
 ## Create the Foundry project
