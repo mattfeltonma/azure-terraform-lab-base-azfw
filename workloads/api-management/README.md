@@ -148,7 +148,7 @@ cd azure-terraform-lab-base-azfw/workloads/ai-gateway
 ### 2. Configure Variables
 Copy the example configuration:
 ```bash
-cp terraform.tfvars-example terraform.tfvars
+cp terraform-tfvars.sample terraform.tfvars
 ```
 
 Edit `terraform.tfvars` with your values. Ensure you read the description of the variables to understand the use. Many of these variables will draw from values of existing resources you delpoyed with the base lab.

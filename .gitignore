@@ -10,12 +10,7 @@ validate-aml.ipynb
 
 # Ignore implementation-specific Terraform files
 providers/
-terraform.tfstate
-terraform.tfstate-backup*
-terraform.tfvars
-terraform.tfvars-backup*
-terraform.tfstate.backup
-terraform.tfvars*
+*.tfvars
 terraform.tfstate*
 .terraform.lock.hcl
 .terraform.tfstate.lock.info
