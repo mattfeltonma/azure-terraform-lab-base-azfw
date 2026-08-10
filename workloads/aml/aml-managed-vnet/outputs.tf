@@ -14,7 +14,7 @@ output "aml_workspace_aml_workspace_id" {
 }
 
 output "log_analytics_workspace_id" {
-  value       = azurerm_log_analytics_workspace.law_workload.id
+  value       = azurerm_log_analytics_workspace.log_analytics_workspace_workload.id
   description = "The resource id of the AML Workspace Log Analytics Workspace"
 }
 
@@ -23,7 +23,7 @@ output "aml_workspace_private_endpoint_ip_address" {
   description = "The Private Endpoint IP address of the AML Workspace Private Endpoint"
 }
 
-output "aml_workspace_storage_account_id" {
-  value       = azurerm_storage_account.storage_account_aml_workspace.id
+output "aml_workspace_storage_account_default_id" {
+  value       = azurerm_storage_account.storage_account_default_aml_workspace.id
   description = "The resource id of the AML Workspace Storage Account"
 }

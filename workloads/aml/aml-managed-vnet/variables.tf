@@ -1,9 +1,3 @@
-variable "key_vault_cmk_rbac_enabled" {
-  description = "Sets the Key Vault to either support RBAC or Access Policies."
-  type        = bool
-  default     = false
-}
-
 variable "random_string" {
   description = "The random string to append to the resource name"
   type        = string

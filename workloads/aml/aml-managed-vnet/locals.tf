@@ -157,7 +157,7 @@ locals {
       category = "UserDefined"
       type     = "PrivateEndpoint"
       destination = {
-        serviceResourceId  = azurerm_storage_account.storage_account_aml_workspace.id
+        serviceResourceId  = azurerm_storage_account.storage_account_default_aml_workspace.id
         subresourceTarget  = "table"
       }
     }
@@ -165,7 +165,7 @@ locals {
       category = "UserDefined"
       type     = "PrivateEndpoint"
       destination = {
-        serviceResourceId  = azurerm_storage_account.storage_account_aml_workspace.id
+        serviceResourceId  = azurerm_storage_account.storage_account_default_aml_workspace.id
         subresourceTarget  = "queue"
       }
     }
@@ -177,7 +177,7 @@ locals {
       category = "UserDefined"
       type     = "PrivateEndpoint"
       destination = {
-        serviceResourceId  = azurerm_storage_account.storage_account_aml_workspace.id
+        serviceResourceId  = azurerm_storage_account.storage_account_data.id
         subresourceTarget  = "blob"
       }
     }
@@ -185,7 +185,7 @@ locals {
       category = "UserDefined"
       type     = "PrivateEndpoint"
       destination = {
-        serviceResourceId  = azurerm_storage_account.storage_account_aml_workspace.id
+        serviceResourceId  = azurerm_storage_account.storage_account_data.id
         subresourceTarget  = "file"
       }
     }
@@ -193,12 +193,11 @@ locals {
       category = "UserDefined"
       type     = "PrivateEndpoint"
       destination = {
-        serviceResourceId  = azurerm_storage_account.storage_account_aml_workspace.id
+        serviceResourceId  = azurerm_storage_account.storage_account_data.id
         subresourceTarget  = "dfs"
       }
     }
   }
-
 
   # AML managed virtual network outbound rules defined in variable for the template
   user_defined_outbound_custom_pe_rules = {
@@ -216,4 +215,16 @@ locals {
   ##### Create other local values
   compute_instance_name   = "vmci${var.region_code}${var.random_string}"
   compute_cluster_name    = "vmccb${var.region_code}${var.random_string}"
+
+  ##### Combine required and user-specified tags
+  # Add required tags and merge them with the provided tags
+  required_tags = {
+    created_date = time_static.created.rfc3339
+    created_by   = data.azurerm_client_config.identity_config.object_id
+  }
+
+  tags = merge(
+    var.tags,
+    local.required_tags
+  )
 }
