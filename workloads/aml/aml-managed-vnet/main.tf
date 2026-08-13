@@ -259,6 +259,8 @@ resource "azurerm_network_security_perimeter_access_rule" "access_rule_aml_key_v
     azurerm_network_security_perimeter_profile.profile_nsp_aml_key_vault_cmk[0]
   ]
 
+  count = var.workspace_encryption == "cmk" ? 1 : 0
+
   name                                  = "arkvcmktrustedsubs"
   network_security_perimeter_profile_id = azurerm_network_security_perimeter_profile.profile_nsp_aml_key_vault_cmk[0].id
   direction                             = "Inbound"
@@ -769,7 +771,7 @@ resource "azurerm_key_vault" "key_vault_cmk_aml_workspace" {
 
   # If the workspace uses a user-asigned managed identity configure the AML Workspace to use a RBAC
   # if it uses a system-assigned managed identity RBAC will not work and it will need to use access policies
-  rbac_authorization_enabled = var.workspace_managed_identity == "umi" ? true : false
+  rbac_authorization_enabled = var.key_vault_cmk_rbac_enabled ? true : false 
 
   # Turn on purge protection because it is required for CMK usage
   purge_protection_enabled   = true
@@ -781,7 +783,7 @@ resource "azurerm_key_vault" "key_vault_cmk_aml_workspace" {
   enabled_for_template_deployment = false
   # TODO: 8/2026 - Remove this section once NSP Links are fully GA
   network_acls {
-    default_action             = "Deny"
+    default_action             = "Allow"
     bypass                     = "AzureServices"
     virtual_network_subnet_ids = []
     # Only required for my lab environment based on its configuration
@@ -837,13 +839,95 @@ resource "azurerm_network_security_perimeter_association" "assoc_key_vault_cmk_a
   resource_id                           = azurerm_key_vault.key_vault_cmk_aml_workspace[0].id
 }
 
+## Required ONLY FOR MY LAB to allow the service principal my lab machine uses to deploy this template
+## to access the Key Vault when the AML workspace is configured with a system-assigned managed identity and
+## CMK encryption. It allows the service principal to check the state of the key
+resource "azurerm_key_vault_access_policy" "access_policy_terraform_aml_workspace_key_permissions" {
+  count = var.workspace_encryption == "cmk" && ( !var.key_vault_cmk_rbac_enabled || var.workspace_managed_identity == "smi") ? 1 : 0
+
+  depends_on = [
+    azurerm_key_vault.key_vault_cmk_aml_workspace,
+    azurerm_network_security_perimeter_association.assoc_key_vault_cmk_aml_workspace
+  ]
+
+  key_vault_id = azurerm_key_vault.key_vault_cmk_aml_workspace[0].id
+  tenant_id    = data.azurerm_client_config.current.tenant_id
+  object_id    = data.azurerm_client_config.current.object_id
+
+  key_permissions = [
+    "Get",
+    "Create",
+    "Delete",
+    "List",
+    "Update",
+    "Import",
+    "Recover",
+    "Backup",
+    "Restore",
+    "GetRotationPolicy",
+    "SetRotationPolicy",
+    "Rotate"
+  ]
+}
+
+## Grant the user-assigned managed identity for the AML workspace permissions to use keys in Key Vault for CMK encryption/decryption operations
+## This is only created when a user-assigned managed identity is set for the workspace, the workspace is set to use a CMK, and the Key Vault is set to use access policies
+resource "azurerm_key_vault_access_policy" "access_policy_umi_workspace_key_permissions" {
+
+  count = var.workspace_encryption == "cmk" && !var.key_vault_cmk_rbac_enabled && var.workspace_managed_identity == "umi" ? 1 : 0
+
+  depends_on = [
+    azurerm_key_vault_access_policy.access_policy_terraform_aml_workspace_key_permissions
+  ]
+
+  key_vault_id = azurerm_key_vault.key_vault_cmk_aml_workspace[0].id
+  tenant_id    = data.azurerm_client_config.current.tenant_id
+  object_id    = azurerm_user_assigned_identity.umi_aml_workspace[0].principal_id
+
+  # Minimum permissions required for CMK usage (encrypt/decrypt operations)
+  key_permissions = [
+    "Get",
+    "WrapKey",
+    "UnwrapKey",
+    "Sign",
+    "Recover"
+  ]
+}
+
+## Grant the system-assigned managed identity for the default storage account permissions to use keys in Key Vault for CMK encryption/decryption operations
+## This is only created when a user-assigned managed identity is set for the workspace, the workspace is set to use a CMK, and the Key Vault is set to use access policies
+resource "azurerm_key_vault_access_policy" "access_policy_smi_default_storage_account_key_permissions" {
+
+  count = var.workspace_encryption == "cmk" && !var.key_vault_cmk_rbac_enabled && var.workspace_managed_identity == "umi" ? 1 : 0
+
+  depends_on = [
+    azurerm_storage_account.storage_account_default_aml_workspace,
+    azurerm_key_vault_access_policy.access_policy_smi_default_storage_account_key_permissions
+  ]
+
+  key_vault_id = azurerm_key_vault.key_vault_cmk_aml_workspace[0].id
+  tenant_id    = data.azurerm_client_config.current.tenant_id
+  object_id    = azurerm_storage_account.storage_account_default_aml_workspace.identity[0].principal_id
+
+  # Minimum permissions required for CMK usage (encrypt/decrypt operations)
+  key_permissions = [
+    "Get",
+    "WrapKey",
+    "UnwrapKey",
+    "Recover"
+  ]
+}
+
 ## Create the CMK that will be used to encrypt the AML Workspace
 ##
 resource "azurerm_key_vault_key" "key_cmk_aml_workspace" {
   count = var.workspace_encryption == "cmk" ? 1 : 0
 
   depends_on = [
-    azurerm_key_vault.key_vault_cmk_aml_workspace
+    azurerm_key_vault.key_vault_cmk_aml_workspace,
+    azurerm_key_vault_access_policy.access_policy_terraform_aml_workspace_key_permissions,
+    azurerm_key_vault_access_policy.access_policy_umi_workspace_key_permissions,
+    azurerm_key_vault_access_policy.access_policy_smi_default_storage_account_key_permissions
   ]
 
   name         = "cmkamlws"
@@ -865,34 +949,68 @@ resource "azurerm_key_vault_key" "key_cmk_aml_workspace" {
   }
 }
 
-## Required ONLY FOR MY LAB to allow the service principal my lab machine uses to deploy this template
-## to access the Key Vault when the AML workspace is configured with a system-assigned managed identity and
-## CMK encryption. It allows the service principal to check the state of the key
-resource "azurerm_key_vault_access_policy" "access_policy_terraform_aml_workspace_key_permissions" {
-  count = var.workspace_encryption == "cmk" && var.workspace_managed_identity == "smi" ? 1 : 0
+## Create an Azure RBAC role assignment on the workspace Key Vault granting the storage account system-assigned managed identity
+## the Key Vault Crypto Service Encryption User role. This grants the storage account to use the CMK in the Key Vault for encryption operations.
+## This is only required if the workspace is configured to use a user-assigned managed identity and the Key Vault is configured to use RBAC for access control
+resource "azurerm_role_assignment" "workspace_smi_storage_account_key_vault_key_vault_crypto_service_encryption_user" {
+  count = var.workspace_encryption == "cmk" && var.key_vault_cmk_rbac_enabled && var.workspace_managed_identity == "umi" ? 1 : 0
 
   depends_on = [
-    azurerm_key_vault.key_vault_cmk_aml_workspace
+    azurerm_key_vault.key_vault_cmk_aml_workspace,
+    azurerm_storage_account.storage_account_default_aml_workspace
   ]
 
-  key_vault_id = azurerm_key_vault.key_vault_cmk_aml_workspace[0].id
-  tenant_id    = data.azurerm_client_config.current.tenant_id
-  object_id    = data.azurerm_client_config.current.object_id
+  name                 = uuidv5("dns", "${azurerm_storage_account.storage_account_default_aml_workspace.identity[0].principal_id}${azurerm_key_vault.key_vault_cmk_aml_workspace[0].name}keyvaultserviceencryptionuser")
+  scope                = azurerm_key_vault.key_vault_cmk_aml_workspace[0].id
+  role_definition_name = "Key Vault Crypto Service Encryption User"
+  principal_id         = azurerm_storage_account.storage_account_default_aml_workspace.identity[0].principal_id
+}
 
-  key_permissions = [
-    "Get",
-    "Create",
-    "Delete",
-    "List",
-    "Update",
-    "Import",
-    "Recover",
-    "Backup",
-    "Restore",
-    "GetRotationPolicy",
-    "SetRotationPolicy",
-    "Rotate"
+## Sleep for 120 seconds to allow RBAC role assignment to propagate before creating encryption scope
+##
+resource "time_sleep" "wait_120_seconds_for_storage_key_vault_rbac_propagation" {
+  count = var.workspace_encryption == "cmk" && var.key_vault_cmk_rbac_enabled && var.workspace_managed_identity == "umi" ? 1 : 0
+
+  depends_on = [
+    azurerm_role_assignment.workspace_smi_storage_account_key_vault_key_vault_crypto_service_encryption_user
   ]
+
+  create_duration = "120s"
+}
+
+## Create an encryption scope for the default storage account that uses the CMK in the Key Vault for encryption operations for the storage account. 
+## This is only required if the workspace is configured to use a user-assigned managed identity and the Key Vault is configured to use access policies for permissions management
+resource "azapi_resource" "encryption_scope_default_storage_account" {
+  count = var.workspace_encryption == "cmk" && var.workspace_managed_identity == "umi" ? 1 : 0
+
+  depends_on = [
+    azurerm_key_vault_access_policy.access_policy_terraform_aml_workspace_key_permissions,
+    azurerm_key_vault_access_policy.access_policy_umi_workspace_key_permissions,
+    azurerm_key_vault_access_policy.access_policy_smi_default_storage_account_key_permissions,
+    time_sleep.wait_120_seconds_for_storage_key_vault_rbac_propagation
+  ]
+
+  type      = "Microsoft.Storage/storageAccounts/encryptionScopes@2026-04-01"
+  name      = "cmk-default"
+  parent_id = azurerm_storage_account.storage_account_default_aml_workspace.id
+
+  body = {
+    properties = {
+      source = "Microsoft.KeyVault"
+      state = "Enabled"
+      keyVaultProperties = {
+        keyUri = azurerm_key_vault_key.key_cmk_aml_workspace[0].id
+      }
+      requireInfrastructureEncryption = true
+    }
+  }
+
+  lifecycle {
+    ignore_changes = [
+      # Deal with the stupidity of Azure APIs returning different case sensitivity
+      body.properties.source
+    ]
+  }
 }
 
 ########## Create the private endpoints for the supporting resources
@@ -1495,6 +1613,22 @@ resource "azurerm_role_assignment" "workspace_umi_workspace_storage_account_data
 
 ## Create an Azure RBAC role assignment on the workspace Key Vault granting the AML workspace user-assigned managed identity
 ## the Key Vault Crypto User role. This grants the workspace permission to use the CMK in the Key Vault for encryption operations.
+#resource "azurerm_role_assignment" "workspace_umi_workspace_key_vault_cmk_key_vault_administrator" {
+#  count = var.workspace_encryption == "cmk" && var.workspace_managed_identity == "umi" ? 1 : 0
+
+#  depends_on = [
+#    azurerm_key_vault.key_vault_cmk_aml_workspace,
+#    azurerm_user_assigned_identity.umi_aml_workspace
+#  ]
+
+#  name                 = uuidv5("dns", "${azurerm_user_assigned_identity.umi_aml_workspace[0].principal_id}${azurerm_key_vault.key_vault_cmk_aml_workspace[0].name}keyvaultadministrator")
+#  scope                = azurerm_key_vault.key_vault_cmk_aml_workspace[0].id
+#  role_definition_name = "Key Vault Administrator"
+#  principal_id         = azurerm_user_assigned_identity.umi_aml_workspace[0].principal_id
+#}
+
+## Create an Azure RBAC role assignment on the workspace Key Vault granting the AML workspace user-assigned managed identity
+## the Key Vault Crypto User role. This grants the workspace permission to use the CMK in the Key Vault for encryption operations.
 resource "azurerm_role_assignment" "workspace_umi_workspace_key_vault_key_vault_crypto_user" {
   count = var.workspace_encryption == "cmk" && var.workspace_managed_identity == "umi" ? 1 : 0
 
@@ -1523,6 +1657,7 @@ resource "time_sleep" "workspace_umi_required_role_assignments" {
     azurerm_role_assignment.workspace_umi_workspace_storage_account_default_queue_data_contributor,
     azurerm_role_assignment.workspace_umi_workspace_storage_account_default_private_endpoint_blob_reader,
     azurerm_role_assignment.workspace_umi_workspace_storage_account_data_private_endpoint_blob_reader,
+    #azurerm_role_assignment.workspace_umi_workspace_key_vault_cmk_key_vault_administrator
     azurerm_role_assignment.workspace_umi_workspace_key_vault_key_vault_crypto_user
   ]
 
@@ -1561,11 +1696,16 @@ resource "azapi_resource" "aml_workspace" {
     # CMK-specific
     azurerm_key_vault.key_vault_cmk_aml_workspace,
     azurerm_key_vault_key.key_cmk_aml_workspace,
+    #azurerm_role_assignment.workspace_umi_workspace_key_vault_cmk_key_vault_administrator,
     azurerm_role_assignment.workspace_umi_workspace_key_vault_key_vault_crypto_user,
-    azurerm_key_vault_access_policy.access_policy_terraform_aml_workspace_key_permissions
+    azurerm_key_vault_access_policy.access_policy_terraform_aml_workspace_key_permissions,
+    azurerm_key_vault_access_policy.access_policy_umi_workspace_key_permissions,
+    azurerm_key_vault_access_policy.access_policy_smi_default_storage_account_key_permissions,
+    azurerm_role_assignment.workspace_smi_storage_account_key_vault_key_vault_crypto_service_encryption_user,
+    azapi_resource.encryption_scope_default_storage_account
   ]
 
-  type                      = "Microsoft.MachineLearningServices/workspaces@2026-05-01"
+  type                      = "Microsoft.MachineLearningServices/workspaces@2026-03-01"
   name                      = "amlws${var.region_code}${var.random_string}"
   parent_id                 = azurerm_resource_group.rg_aml_workspace.id
   location                  = var.region
@@ -1897,6 +2037,7 @@ resource "time_sleep" "wait_aml_workspace_smi_role_assignments" {
 resource "azurerm_user_assigned_identity" "umi_compute_instance" {
   depends_on = [
     azapi_resource.aml_workspace,
+    azurerm_key_vault_access_policy.access_policy_umi_workspace_key_permissions,
     time_sleep.wait_aml_workspace_smi_role_assignments
   ]
 

@@ -3,6 +3,12 @@ variable "random_string" {
   type        = string
 }
 
+variable "key_vault_cmk_rbac_enabled" {
+  description = "Set to true to enable RBAC for the Key Vault used to store the key for CMK encryption"
+  type        = bool
+  default     = false
+}
+
 variable "resource_group_name_dns" {
   description = "The name of the resource group where the Private DNS Zones exist in the infrastructure subscription"
   type        = string
