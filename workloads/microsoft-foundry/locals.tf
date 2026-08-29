@@ -11,5 +11,4 @@ locals {
     var.tags,
     local.required_tags
   )
-
 }

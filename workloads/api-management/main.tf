@@ -1200,7 +1200,7 @@ module "backend_circuit_breaker_msfoundry_instance_openai_v1" {
   source       = "./modules/backend-circuit-breaker"
   apim_id      = azurerm_api_management.apim.id
   backend_name = "${azurerm_cognitive_account.ms_foundry_accounts[each.key].name}v1"
-  url          = "https://${azurerm_cognitive_account.ms_foundry_accounts[each.key].name}.openai.azure.com/openai/v1"
+  url          = "https://${azurerm_cognitive_account.ms_foundry_accounts[each.key].name}.services.ai.azure.com/openai/v1"
 }
 
 ## Create backend pool with Microsoft Foundry backends

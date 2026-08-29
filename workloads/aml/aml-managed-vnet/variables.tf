@@ -1,12 +1,12 @@
-variable "key_vault_cmk_rbac_enabled" {
-  description = "Sets the Key Vault to either support RBAC or Access Policies."
-  type        = bool
-  default     = false
-}
-
 variable "random_string" {
   description = "The random string to append to the resource name"
   type        = string
+}
+
+variable "key_vault_cmk_rbac_enabled" {
+  description = "Set to true to enable RBAC for the Key Vault used to store the key for CMK encryption"
+  type        = bool
+  default     = false
 }
 
 variable "resource_group_name_dns" {
