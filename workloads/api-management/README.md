@@ -19,6 +19,8 @@
 ## Updates
 
 ### 2026
+* **August 29th, 20206**
+  * Changed backend endpoints to point to services.ai.azure.com vs openai.azure.com
 * **August 6th, 2026**
   * Fixed some issues with API policies
   * Updated LLM deployments for 4o to 4.1 and added 4.1-mini, text-embedding-3, and 5.1 and added Guardrails to each deployment
