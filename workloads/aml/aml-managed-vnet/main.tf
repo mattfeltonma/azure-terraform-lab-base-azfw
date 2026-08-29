@@ -1657,7 +1657,6 @@ resource "time_sleep" "workspace_umi_required_role_assignments" {
     azurerm_role_assignment.workspace_umi_workspace_storage_account_default_queue_data_contributor,
     azurerm_role_assignment.workspace_umi_workspace_storage_account_default_private_endpoint_blob_reader,
     azurerm_role_assignment.workspace_umi_workspace_storage_account_data_private_endpoint_blob_reader,
-    #azurerm_role_assignment.workspace_umi_workspace_key_vault_cmk_key_vault_administrator
     azurerm_role_assignment.workspace_umi_workspace_key_vault_key_vault_crypto_user
   ]
 
@@ -1696,7 +1695,6 @@ resource "azapi_resource" "aml_workspace" {
     # CMK-specific
     azurerm_key_vault.key_vault_cmk_aml_workspace,
     azurerm_key_vault_key.key_cmk_aml_workspace,
-    #azurerm_role_assignment.workspace_umi_workspace_key_vault_cmk_key_vault_administrator,
     azurerm_role_assignment.workspace_umi_workspace_key_vault_key_vault_crypto_user,
     azurerm_key_vault_access_policy.access_policy_terraform_aml_workspace_key_permissions,
     azurerm_key_vault_access_policy.access_policy_umi_workspace_key_permissions,
@@ -2344,6 +2342,10 @@ resource "azurerm_machine_learning_compute_cluster" "aml_compute_cluster" {
 ########## for environment builds
 ##########
 resource "null_resource" "aml_patch_image_build_compute" {
+  depends_on = [
+    azurerm_machine_learning_compute_cluster.aml_compute_cluster
+  ]
+
   triggers = {
     always_run = timestamp()
   }
