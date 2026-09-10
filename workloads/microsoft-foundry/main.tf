@@ -1248,9 +1248,10 @@ resource "azurerm_search_service" "ai_search_foundry" {
     azurerm_network_security_perimeter_profile.profile_nsp_foundry_ai_resources
   ]
 
-  name                = "aismsf${var.region_code}${var.random_string}"
+  # TODO: 9/2026 Remove hardcoded Search region once capacity isn't a shit show
+  name                = "aismsfcnc${var.random_string}"
   resource_group_name = azurerm_resource_group.rg_foundry.name
-  location            = var.region
+  location            = "canadacentral"
   tags                = local.tags
 
   # TODO: 6/2026 Change this to use an UMI only once the search limitations are lifted

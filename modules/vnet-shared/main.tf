@@ -198,7 +198,7 @@ resource "azurerm_route_table" "rt_dnsin" {
   resource_group_name = var.resource_group_name
   tags                = var.tags
 
-  bgp_route_propagation_enabled = true
+  bgp_route_propagation_enabled = false
 
   route {
     name                   = "udr-default"
@@ -222,7 +222,7 @@ resource "azurerm_route_table" "rt_dnsout" {
   resource_group_name = var.resource_group_name
   tags                = var.tags
 
-  bgp_route_propagation_enabled = true
+  bgp_route_propagation_enabled = false
 
   route {
     name                   = "udr-default"
@@ -246,7 +246,7 @@ resource "azurerm_route_table" "rt_tools" {
   resource_group_name = var.resource_group_name
   tags                = var.tags
 
-  bgp_route_propagation_enabled = true
+  bgp_route_propagation_enabled = false
 
   route {
     name                   = "udr-default"

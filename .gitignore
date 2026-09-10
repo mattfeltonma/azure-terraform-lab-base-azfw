@@ -28,8 +28,10 @@ venv
 .venv
 .env*
 
-# Ignore AI Gateway specific artifacts
+# Ignore LetsEncrypt files
 signed-cert.pem
+letsencrypt*
+
 
 # Temporary ignores
 apim-connection-setup

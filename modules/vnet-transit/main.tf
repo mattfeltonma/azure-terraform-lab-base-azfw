@@ -1219,7 +1219,7 @@ resource "azurerm_firewall" "azure_firewall" {
     public_ip_address_id = azurerm_public_ip.pip_azure_firewall.id
   }
 
-  tags = merge(var.tags, { cycle = "true" })
+  tags = merge(var.tags, { cycle = "true", CostControl = "Ignore" })
 
   lifecycle {
     ignore_changes = [

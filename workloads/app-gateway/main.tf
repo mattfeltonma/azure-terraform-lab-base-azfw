@@ -1,24 +1,32 @@
-########## Create resource group and Log Analytics Workspace
+########## Create base resources
 ##########
 ##########
 
-## Create resource group the resources in this deployment will be deployed to
+## Use time_static to generate a timestamp which will be used in created_date tag. Use this instead of timestamp
+## so Terraform doesn't freak out every time apply is run again
+##
+resource "time_static" "created" {}
+
+########## Create a resource group for the workload resources
+##########
+##########
+
+## Create resource group where resources in this template will be deployed to
 ##
 resource "azurerm_resource_group" "rg_app_gateway" {
   name     = "rgappgw${var.region_code}${var.random_string}"
   location = var.region
-  tags     = var.tags
+  tags     = local.tags
 
   lifecycle {
     ignore_changes = [
-      tags["created_date"],
       tags["created_by"]
     ]
   }
 }
-
-## Create a Log Analytics Workspace that all resources specific to this workload will
-## write configured resource logs and metrics to
+ 
+## Create Log Analytics Workspace for the resources created in this deployment
+##
 resource "azurerm_log_analytics_workspace" "log_analytics_workspace_workload" {
   name                = "lawappgw${var.region_code}${var.random_string}"
   location            = var.region
@@ -27,11 +35,10 @@ resource "azurerm_log_analytics_workspace" "log_analytics_workspace_workload" {
   sku               = "PerGB2018"
   retention_in_days = 30
 
-  tags = var.tags
+  tags = local.tags
 
   lifecycle {
     ignore_changes = [
-      tags["created_date"],
       tags["created_by"]
     ]
   }
@@ -41,38 +48,36 @@ resource "azurerm_log_analytics_workspace" "log_analytics_workspace_workload" {
 ########## that support the Application Gateway instance
 ##########
 
+
 ## Create a Network Security Perimeter that will be used to restrict access to resources that support
 ## the Application Gateway instance
-resource "azapi_resource" "nsp_app_gateway_resources" {
+resource "azurerm_network_security_perimeter" "nsp_app_gateway_resources" {
   depends_on = [
     azurerm_resource_group.rg_app_gateway,
     azurerm_log_analytics_workspace.log_analytics_workspace_workload
   ]
 
-  type      = "Microsoft.Network/networkSecurityPerimeters@2024-07-01"
-  name      = "nspappgw${var.region_code}${var.random_string}"
-  location  = var.region
-  parent_id = azurerm_resource_group.rg_app_gateway.id
-  tags      = var.tags
+  name                = "nspappgw${var.region_code}${var.random_string}"
+  resource_group_name = azurerm_resource_group.rg_app_gateway.name
+  location            = var.region
+  tags                = local.tags
 
   lifecycle {
     ignore_changes = [
-      tags["created_date"],
       tags["created_by"]
     ]
   }
-
 }
 
 ## Create diagnostic settings for Network Security Perimeter
 ##
 resource "azurerm_monitor_diagnostic_setting" "diag_nsp_app_gateway_resources" {
   depends_on = [
-    azapi_resource.nsp_app_gateway_resources
+    azurerm_network_security_perimeter.nsp_app_gateway_resources
   ]
 
   name                       = "diag-base"
-  target_resource_id         = azapi_resource.nsp_app_gateway_resources.id
+  target_resource_id         = azurerm_network_security_perimeter.nsp_app_gateway_resources.id
   log_analytics_workspace_id = azurerm_log_analytics_workspace.log_analytics_workspace_workload.id
 
   enabled_log {
@@ -130,65 +135,43 @@ resource "azurerm_monitor_diagnostic_setting" "diag_nsp_app_gateway_resources" {
 
 ## Create a Network Security Perimeter profile that will be associated with the Key Vault instance used
 ## to store the certificate used for the custom domain name of the Application Gateway.
-resource "azapi_resource" "profile_nsp_key_vault_app_gateway" {
+resource "azurerm_network_security_perimeter_profile" "profile_nsp_key_vault_app_gateway" {
   depends_on = [
-    azapi_resource.nsp_app_gateway_resources
+    azurerm_network_security_perimeter.nsp_app_gateway_resources
   ]
 
-  type      = "Microsoft.Network/networkSecurityPerimeters/profiles@2024-07-01"
-  name      = "pkvappgw"
-  location  = var.region
-  parent_id = azapi_resource.nsp_app_gateway_resources.id
+  name                          = "pkvappgw"
+  network_security_perimeter_id = azurerm_network_security_perimeter.nsp_app_gateway_resources.id
 }
 
 ## Create an access rule to allow the Application Gateway service to connect to the Key Vault instance
 ## to pull the certificate to associate it with the custom domain name of the Application Gateway
-resource "azapi_resource" "access_rule_key_vault_app_gateway_sub_id" {
+resource "azurerm_network_security_perimeter_access_rule" "access_rule_key_vault_app_gateway_sub_id" {
   depends_on = [
-    azapi_resource.profile_nsp_key_vault_app_gateway
+    azurerm_network_security_perimeter_profile.profile_nsp_key_vault_app_gateway
   ]
 
-  type                      = "Microsoft.Network/networkSecurityPerimeters/profiles/accessRules@2024-07-01"
-  name                      = "arkvappgwtrustedsubs"
-  location                  = var.region
-  parent_id                 = azapi_resource.profile_nsp_key_vault_app_gateway.id
-  schema_validation_enabled = false
-
-  body = {
-    properties = {
-      direction = "Inbound"
-      # Allow the subscription containing the Application Gateway to bypass the NSP
-      subscriptions = [
-        {
-          id = data.azurerm_subscription.current.id
-        }
-      ]
-    }
-  }
+  name                                  = "arkvappgwtrustedsubs"
+  network_security_perimeter_profile_id = azurerm_network_security_perimeter_profile.profile_nsp_key_vault_app_gateway.id
+  direction                             = "Inbound"
+  subscription_ids                        = [
+    data.azurerm_subscription.current.id
+  ]
 }
 
 ## Create an access rule to allow the machine deploying the Terraform resources data plane access to the Key Vault
 ## Only required for my shitty lab
-resource "azapi_resource" "access_rule_key_vault_app_gateway_ipprefix" {
+resource "azurerm_network_security_perimeter_access_rule" "access_rule_key_vault_app_gateway_ipprefix" {
   depends_on = [
-    azapi_resource.access_rule_key_vault_app_gateway_sub_id
+    azurerm_network_security_perimeter_access_rule.access_rule_key_vault_app_gateway_sub_id
   ]
 
-  type                      = "Microsoft.Network/networkSecurityPerimeters/profiles/accessRules@2024-07-01"
-  name                      = "arkvappgwtrustedips"
-  location                  = var.region
-  parent_id                 = azapi_resource.profile_nsp_key_vault_app_gateway.id
-  schema_validation_enabled = false
-
-  body = {
-    properties = {
-      direction = "Inbound"
-      # This address prefix exception is only required for this lab
-      addressPrefixes = [
-        "${var.trusted_ip}/32"
-      ]
-    }
-  }
+  name                                  = "arkvappgwtrustedips"
+  network_security_perimeter_profile_id = azurerm_network_security_perimeter_profile.profile_nsp_key_vault_app_gateway.id
+  direction                             = "Inbound"
+  address_prefixes = [
+    "${var.trusted_ip}/32"
+  ]
 }
 
 ########## Create an Azure Key Vault instance and supporting resources to store the certificate used for the custom domain name
@@ -207,9 +190,9 @@ resource "azurerm_key_vault" "key_vault_app_gateway_custom_domain" {
   location            = var.region
   resource_group_name = azurerm_resource_group.rg_app_gateway.name
   # Adding tag specific to my environment. Not needed outside my environment
-  # TODO: Remove this tag when NSPs support cross-NSP links which will allow diagnostic
+  # TODO: 8/2026 Remove this tag when NSPs support cross-NSP links which will allow diagnostic
   # logs to be delivered outside the NSP
-  tags = merge(var.tags, { SecurityControl = "Ignore" })
+  tags = merge(local.tags, { SecurityControl = "Ignore" })
 
   sku_name  = "premium"
   tenant_id = data.azurerm_subscription.current.tenant_id
@@ -220,7 +203,7 @@ resource "azurerm_key_vault" "key_vault_app_gateway_custom_domain" {
   # Disable purge protection since this is a lab
   purge_protection_enabled = false
 
-  # TODO: 3/2026 This is set to true for now to allow the IP exception that is specific to my environment. Once NSPs support cross-NSP links (which will address diagnostic log delivery issue)
+  # TODO: 8/2026 This is set to true for now to allow the IP exception that is specific to my environment. Once NSPs support cross-NSP links (which will address diagnostic log delivery issue)
   # then this can be set to false and the network_acls section can be removed and instead rely on NSP ruleset.
   public_network_access_enabled = true
   network_acls {
@@ -234,7 +217,6 @@ resource "azurerm_key_vault" "key_vault_app_gateway_custom_domain" {
 
   lifecycle {
     ignore_changes = [
-      tags["created_date"],
       tags["created_by"]
     ]
   }
@@ -260,41 +242,25 @@ resource "azurerm_monitor_diagnostic_setting" "diag_key_vault_app_gateway_custom
   }
 }
 
-## Create a Network Security Perimeter resource assocation to associate the Key Vault with the NSP profile
-##
-resource "azapi_resource" "assoc_app_gateway_key_vault_custom_domain" {
+resource "azurerm_network_security_perimeter_association" "assoc_app_gateway_env_key_vault_custom_domain" {
   depends_on = [
-    azapi_resource.access_rule_key_vault_app_gateway_ipprefix,
-    azapi_resource.access_rule_key_vault_app_gateway_sub_id,
+    azurerm_network_security_perimeter_access_rule.access_rule_key_vault_app_gateway_ipprefix,
+    azurerm_network_security_perimeter_access_rule.access_rule_key_vault_app_gateway_sub_id,
     azurerm_key_vault.key_vault_app_gateway_custom_domain
   ]
 
-  type                      = "Microsoft.Network/networkSecurityPerimeters/resourceAssociations@2024-07-01"
-  name                      = "raappgwkv"
-  location                  = var.region
-  parent_id                 = azapi_resource.nsp_app_gateway_resources.id
-  schema_validation_enabled = false
-
-  body = {
-    properties = {
-      # TODO: 3/2026 Typically don't enforce since no NSP links yet, but need to in order to restrict network access to Key Vault
-      # while supporting App Gateway to pull from it
-      accessMode = "Enforced"
-      privateLinkResource = {
-        id = azurerm_key_vault.key_vault_app_gateway_custom_domain.id
-      }
-      profile = {
-        id = azapi_resource.profile_nsp_key_vault_app_gateway.id
-      }
-    }
-  }
+  name = "raappgwkv"
+  # TODO: 8/2026 Switch NSP to enforced mode once cross NSP links are introduced. This will resolve diagnostic settings delivery of signals being blocked by NSP
+  access_mode                           = "Learning"
+  network_security_perimeter_profile_id = azurerm_network_security_perimeter_profile.profile_nsp_key_vault_app_gateway.id
+  resource_id                           = azurerm_key_vault.key_vault_app_gateway_custom_domain.id
 }
 
 ## Create a Private Endpoint to the Key Vault
 ## 
 resource "azurerm_private_endpoint" "private_endpoint_key_vault_app_gateway" {
   depends_on = [
-    azapi_resource.assoc_app_gateway_key_vault_custom_domain
+    azurerm_network_security_perimeter_association.assoc_app_gateway_env_key_vault_custom_domain
   ]
 
   name                = "pekvappgw${var.region_code}${var.random_string}"
@@ -316,7 +282,7 @@ resource "azurerm_private_endpoint" "private_endpoint_key_vault_app_gateway" {
     ]
   }
 
-  tags = var.tags
+  tags = local.tags
 }
 
 ## Link the Azure Private DNS Zone for Key Vault to the virtual network the Application Gateway is deployed to. Not sure why, but this is documented as being required
@@ -327,8 +293,7 @@ resource "azurerm_private_dns_zone_virtual_network_link" "link_key_vault_app_gat
   ]
 
   name                  = "linkappgw${var.region_code}${var.random_string}"
-  resource_group_name   = var.resource_group_name_dns
-  private_dns_zone_name = "privatelink.vaultcore.azure.net"
+  private_dns_zone_id = "/subscriptions/${var.subscription_id_infrastructure}/resourceGroups/${var.resource_group_name_dns}/providers/Microsoft.Network/privateDnsZones/privatelink.vaultcore.azure.net"
   virtual_network_id    = local.app_gateway_virtual_network_id
 }
 
@@ -340,7 +305,7 @@ resource "azurerm_private_dns_zone_virtual_network_link" "link_key_vault_app_gat
 ##
 resource "azurerm_key_vault_certificate" "app_gateway_certificate" {
   depends_on = [
-    azapi_resource.assoc_app_gateway_key_vault_custom_domain,
+    azurerm_network_security_perimeter_association.assoc_app_gateway_env_key_vault_custom_domain,
     azurerm_private_endpoint.private_endpoint_key_vault_app_gateway,
     azurerm_key_vault.key_vault_app_gateway_custom_domain
   ]
@@ -526,7 +491,7 @@ resource "azurerm_web_application_firewall_policy" "app_gateway_waf_policy" {
   name                = "wafpolicyappgw${var.region_code}${var.random_string}"
   resource_group_name = azurerm_resource_group.rg_app_gateway.name
   location            = var.region
-  tags                = var.tags
+  tags                = local.tags
 
   policy_settings {
     enabled                     = true
@@ -553,7 +518,15 @@ resource "azurerm_public_ip" "app_gateway_public_ip" {
   allocation_method   = "Static"
   sku                 = "Standard"
 
-  tags = var.tags
+  tags = local.tags
+
+  lifecycle {
+    ignore_changes = [
+      tags["created_by"],
+      # Ignore ip_tags property due to MCAPS policy
+      ip_tags
+    ]
+  }
 }
 
 ## Create the Application Gateway instance
@@ -568,7 +541,7 @@ resource "azurerm_application_gateway" "app_gateway" {
   name                = "appgw${var.region_code}${var.random_string}"
   location            = var.region
   resource_group_name = azurerm_resource_group.rg_app_gateway.name
-  tags                = var.tags
+  tags                = merge(local.tags, {CostControl = "Ignore"})
 
   identity {
     type = "UserAssigned"
