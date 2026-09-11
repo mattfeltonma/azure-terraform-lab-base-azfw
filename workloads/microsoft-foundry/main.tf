@@ -274,8 +274,8 @@ resource "azurerm_user_assigned_identity" "umi_foundry_resource" {
 
 ## !CONTENTUNDERSTANDING
 ## !AGENTS
-## TODO: 6/2026 Remove this comment when the UMI restrictions are lifted. Restrictions includes inability to use UMI to interact with storage account in same region. 
-## TODO: 6/2026 See this link: https://learn.microsoft.com/en-us/azure/search/search-how-to-managed-identities?tabs=portal-sys%2Cportal-user#supported-scenarios
+## TODO: 9/2026 Remove this comment when the UMI restrictions are lifted. Restrictions includes inability to use UMI to interact with storage account in same region. 
+## See this link: https://learn.microsoft.com/en-us/azure/search/search-how-to-managed-identities?tabs=portal-sys%2Cportal-user#supported-scenarios
 ## Create a user-assigned managed identity that will be assigned to the AI Search instance
 ## This identity will be used to access models within the Foundry resource when using specific features in
 ## AI Search such as creating embeddings as part of the Knowledge Sources feature
