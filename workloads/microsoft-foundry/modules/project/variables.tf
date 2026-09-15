@@ -28,6 +28,11 @@ variable "apim_ai_gateway" {
   default = null
 }
 
+variable "bring_your_own_agent_resources" {
+  description = "Specify whether to bring your own agent resources including an AI Search, CosmosDB, and Storage Account. This will create the project-level capability host configured with all three resources"
+  type        = bool
+}
+
 variable "foundry_cmk_enabled" {
   description = "Specify whether the Foundry resource is encrypted with CMK"
   type        = bool

@@ -69,6 +69,12 @@ variable "apim_ai_gateway" {
   default = null
 }
 
+variable "bring_your_own_agent_resources" {
+  description = "Specify whether to bring your own agent resources including an AI Search, CosmosDB, and Storage Account. This will create a CosmosDB and project-level capability host configured with all three resources"
+  type        = bool
+  default     = false
+}
+
 variable "deploy_key_vault_connection_secrets" {
   description = "Set to true to create an Azure Key Vault to store secrets for connections used by agents created within Foundry resource and projects that use key-based authentication"
   type        = bool

@@ -222,7 +222,7 @@ resource "azurerm_network_security_perimeter_access_rule" "access_rule_foundry_k
   ]
 }
 
-## TODO: 6/2026 CosmosDB support is still in public preview so it isn't added to this profile; remove this comment when it goes GA
+## TODO: 9/2026 CosmosDB support is still in public preview so it isn't added to this profile; remove this comment when it goes GA
 ## !CONTENTUNDERSTANDING
 ## !AGENTS
 ## Create a Network Security Perimeter profile which will contain the Foundry resource, AI Search instance, CosmosDB instance (agents), and Azure Storage Account (agents)
@@ -274,8 +274,8 @@ resource "azurerm_user_assigned_identity" "umi_foundry_resource" {
 
 ## !CONTENTUNDERSTANDING
 ## !AGENTS
-## TODO: 6/2026 Remove this comment when the UMI restrictions are lifted. Restrictions includes inability to use UMI to interact with storage account in same region. 
-## TODO: 6/2026 See this link: https://learn.microsoft.com/en-us/azure/search/search-how-to-managed-identities?tabs=portal-sys%2Cportal-user#supported-scenarios
+## TODO: 9/2026 Remove this comment when the UMI restrictions are lifted. Restrictions includes inability to use UMI to interact with storage account in same region. 
+## See this link: https://learn.microsoft.com/en-us/azure/search/search-how-to-managed-identities?tabs=portal-sys%2Cportal-user#supported-scenarios
 ## Create a user-assigned managed identity that will be assigned to the AI Search instance
 ## This identity will be used to access models within the Foundry resource when using specific features in
 ## AI Search such as creating embeddings as part of the Knowledge Sources feature
@@ -723,7 +723,7 @@ resource "azurerm_private_endpoint" "pe_key_vault_cmk_foundry" {
 
 ######### Create Foundry resource, diagnostic settings, and associate with Network Security Perimeter
 ######### 
-######### TODO: 6/2026 Switch to azurerm when it fully supports all required options
+######### TODO: 9/2026 Switch to azurerm when it fully supports all required options
 
 ## Create the Microsoft Foundry resource/account
 ## 
@@ -793,10 +793,10 @@ resource "azapi_resource" "foundry_resource" {
 
       # Network-related controls
 
-      # TODO: 6/2026 Set public network access to Disabled and remove the network_acls section once NSPs support cross-NSP links (which will address diagnostic log delivery issue)
+      # TODO: 9/2026 Set public network access to Disabled and remove the network_acls section once NSPs support cross-NSP links (which will address diagnostic log delivery issue)
       publicNetworkAccess = "Disabled"
       networkAcls = {
-        defaultAction = "Allow"
+        defaultAction = "Deny"
         bypass        = "AzureServices"
         ipRules = []
         virtualNetworkRules = []
@@ -862,7 +862,7 @@ resource "azurerm_network_security_perimeter_association" "assoc_foundry_resourc
   ]
 
   name = "assocfoundryresource"
-  # TODO: 6/2026 Switch NSP to enforced mode once cross NSP links are introduced. This will resolve diagnostic settings delivery of signals being blocked by NSP
+  # TODO: 9/2026 Switch NSP to enforced mode once cross NSP links are introduced. This will resolve diagnostic settings delivery of signals being blocked by NSP
   access_mode                           = "Learning"
   network_security_perimeter_profile_id = azurerm_network_security_perimeter_profile.profile_nsp_foundry_ms_foundry.id
   resource_id                           = azapi_resource.foundry_resource.id
@@ -1088,6 +1088,7 @@ resource "azurerm_cognitive_deployment" "deployment_text_embedding_3_large" {
 resource "azurerm_private_endpoint" "pe_foundry_resource" {
   depends_on = [
     azapi_resource.foundry_resource,
+    azurerm_network_security_perimeter_association.assoc_foundry_resource,
     azurerm_cognitive_account_customer_managed_key.foundry_cmk,
     azurerm_cognitive_deployment.deployment_text_embedding_3_large
   ]
@@ -1127,12 +1128,13 @@ resource "azurerm_private_endpoint" "pe_foundry_resource" {
 ########## AI Search and Azure Storage Account will be created when using Content Understanding even if not using agents
 ##########
 
-## TODO: 6/2026 Add this to a Network Security Perimeter once Cosmos Network Security Perimeter integration is GA
+## TODO: 9/2026 Add this to a Network Security Perimeter once Cosmos Network Security Perimeter integration is GA
 ## !AGENTS
+## !BYORRESOURCES
 ## Create Cosmos DB account to store messages/responses, conversation history, agent metadata
 ##
 resource "azurerm_cosmosdb_account" "cosmosdb_foundry" {
-  count = var.agents ? 1 : 0
+  count = var.agents && var.bring_your_own_agent_resources ? 1 : 0
 
   depends_on = [
     azurerm_resource_group.rg_foundry,
@@ -1179,10 +1181,11 @@ resource "azurerm_cosmosdb_account" "cosmosdb_foundry" {
 }
 
 ## !AGENTS
+## !BYORRESOURCES
 ## Create diagnostic settings for the CosmosDB account
 ##
 resource "azurerm_monitor_diagnostic_setting" "diag_cosmosdb" {
-  count = var.agents ? 1 : 0
+  count = var.agents && var.bring_your_own_agent_resources ? 1 : 0
 
   depends_on = [
     azurerm_cosmosdb_account.cosmosdb_foundry
@@ -1254,7 +1257,7 @@ resource "azurerm_search_service" "ai_search_foundry" {
   location            = "canadacentral"
   tags                = local.tags
 
-  # TODO: 6/2026 Change this to use an UMI only once the search limitations are lifted
+  # TODO: 9/2026 Change this to use an UMI only once the search limitations are lifted
   # Use both a system-assigned managed identity and user-assigned managed identity to support
   # the limitations documented https://learn.microsoft.com/en-us/azure/search/search-security-managed-identity?tabs=portal#limitations
   #
@@ -1278,7 +1281,7 @@ resource "azurerm_search_service" "ai_search_foundry" {
 
   # Disable public network access and rely on Private Endpoints and firewall exception or NSP
   public_network_access_enabled = false
-  # TODO: 6/2026 Remove the network_rule_bypass_option section once NSPs support cross-NSP links (which will address diagnostic log delivery issue)
+  # TODO: 9/2026 Remove the network_rule_bypass_option section once NSPs support cross-NSP links (which will address diagnostic log delivery issue)
   network_rule_bypass_option = "AzureServices"
 
   lifecycle {
@@ -1320,7 +1323,7 @@ resource "azurerm_network_security_perimeter_association" "assoc_foundry_ai_sear
   ]
 
   name = "assocfoundryaisearch"
-  # TODO: 6/2026 Switch NSP to enforced mode once cross NSP links are introduced. This will resolve diagnostic settings delivery of signals being blocked by NSP
+  # TODO: 9/2026 Switch NSP to enforced mode once cross NSP links are introduced. This will resolve diagnostic settings delivery of signals being blocked by NSP
   access_mode                           = "Learning"
   network_security_perimeter_profile_id = azurerm_network_security_perimeter_profile.profile_nsp_foundry_ai_resources[0].id
   resource_id                           = azurerm_search_service.ai_search_foundry[0].id
@@ -1355,7 +1358,7 @@ resource "azurerm_storage_account" "storage_account_foundry" {
   # Disable public access for blob containers
   allow_nested_items_to_be_public = false
 
-  # TODO: 6/2026 Remove network_acls section and set public access to false to rely on NSP rules once cross NSP links are supported to address the issue of diagnostic settings delivery of signals being blocked by NSP
+  # TODO: 9/2026 Remove network_acls section and set public access to false to rely on NSP rules once cross NSP links are supported to address the issue of diagnostic settings delivery of signals being blocked by NSP
   public_network_access_enabled = true
 
   network_rules {
@@ -1491,7 +1494,7 @@ resource "azurerm_network_security_perimeter_association" "assoc_foundry_storage
   ]
 
   name = "assocfoundrystorageaccount"
-  # TODO: 6/2026 Switch NSP to enforced mode once cross NSP links are introduced. This will resolve diagnostic settings delivery of signals being blocked by NSP
+  # TODO: 9/2026 Switch NSP to enforced mode once cross NSP links are introduced. This will resolve diagnostic settings delivery of signals being blocked by NSP
   access_mode                           = "Learning"
   network_security_perimeter_profile_id = azurerm_network_security_perimeter_profile.profile_nsp_foundry_ai_resources[0].id
   resource_id                           = azurerm_storage_account.storage_account_foundry[0].id
@@ -1517,7 +1520,7 @@ resource "azurerm_container_registry" "acr_foundry" {
   sku           = "Premium"
   admin_enabled = false
 
-  # TODO: 6/2026 Modify this to disabled once hosted agents supports a private ACR
+  # TODO: 9/2026 Modify this to disabled once hosted agents supports a private ACR
   public_network_access_enabled = true
 
   lifecycle {
@@ -1553,10 +1556,11 @@ resource "azurerm_monitor_diagnostic_setting" "diag_acr_foundry" {
 ##########
 
 ## !AGENTS
+## !BYORRESOURCES
 ## Create Private Endpoint for the CosmosDB account used for the standard agent configuration
 ##
 resource "azurerm_private_endpoint" "pe_cosmosdb_foundry" {
-  count = var.agents ? 1 : 0
+  count = var.agents && var.bring_your_own_agent_resources ? 1 : 0
 
   depends_on = [
     azurerm_cosmosdb_account.cosmosdb_foundry,
@@ -1738,7 +1742,7 @@ resource "azurerm_role_assignment" "umi_foundry_resource_azure_ai_enterprise_net
   principal_id         = azurerm_user_assigned_identity.umi_foundry_resource[0].principal_id
 }
 
-## TODO: 6/2026 Remove this once the Azure AI Enterprise Network Connection Approver role is updated to include the Microsoft.ContainerRegistry/registries/read permission
+## TODO: 9/2026 Remove this once the Azure AI Enterprise Network Connection Approver role is updated to include the Microsoft.ContainerRegistry/registries/read permission
 ## !UMI
 ## !AGENTS
 ## !MANAGEDVNET
@@ -1800,7 +1804,7 @@ resource "azurerm_role_assignment" "smi_foundry_azure_ai_enterprise_network_conn
   principal_id         = azapi_resource.foundry_resource.output.identity.principalId
 }
 
-## TODO: 6/2026 Remove this once the Azure AI Enterprise Network Connection Approver role is updated to include the Microsoft.ContainerRegistry/registries/read permission
+## TODO: 9/2026 Remove this once the Azure AI Enterprise Network Connection Approver role is updated to include the Microsoft.ContainerRegistry/registries/read permission
 ## !SMI
 ## !AGENTS
 ## !MANAGEDVNET
@@ -1865,58 +1869,10 @@ resource "time_sleep" "wait_managed_vnet_permissions_replication" {
 ##########
 ##########
 
-
-## !TODO: 8/2026 At this time, managed vnet is automatically provisioned. Need to circle back on this after chatting with PG
 ## !MANAGEDVNET
 ## !AGENTS
-## Create a managed virtual network where Foundry agents will be deployed to
+## TODO: As of 9/2026 the managed virtual network is automatically provisioned by the platform. This will patch it to lock it down
 ##
-#resource "azapi_resource" "foundry_managed_virtual_network" {
-#  count = var.agents && var.agent_service_outbound_networking.type == "managed_virtual_network" ? 1 : 0
-#
-#  depends_on = [
-#    # Wait for creation of Foundry resource
-#    azapi_resource.foundry_resource,
-#    azurerm_private_endpoint.pe_foundry_resource,
-#    azurerm_network_security_perimeter_association.assoc_foundry_resource,
-#    # Wait for creation of resources required for standard agent with bring-your-own resources
-#    azurerm_cosmosdb_account.cosmosdb_foundry,
-#    azurerm_search_service.ai_search_foundry,
-#    azurerm_storage_account.storage_account_foundry,
-#    azurerm_private_endpoint.pe_aisearch_foundry,
-#    azurerm_private_endpoint.pe_cosmosdb_foundry,
-#    azurerm_private_endpoint.pe_storage_blob_foundry,
-#    # Wait for Azure Container Registry used for Foundry hosted agents
-#    azurerm_container_registry.acr_foundry,
-#    azurerm_private_endpoint.pe_acr_foundry,
-#    # Wait for permissions required for managed virtual network to be replicated across Azure
-#    time_sleep.wait_managed_vnet_permissions_replication
-#  ]
-
-#  type                      = "Microsoft.CognitiveServices/accounts/managedNetworks@2026-05-15-preview"
-#  name                      = "default"
-#  parent_id                 = azapi_resource.foundry_resource.id
-#  schema_validation_enabled = false
-
-#  body = {
-#    properties = {
-#      managedNetwork = {
-        # Ensure use of v2 managed virtual network
-#        managedNetworkKind = "V2"
-
-        # Restrict all outbound access unless excplicitly allowed via outbound rules
-#        isolationMode = "AllowOnlyApprovedOutbound"
-
-        # Use Standard SKU if there is a use case for FQDN rule; keeping disabled because I'm cheap
-        #firewallSku = "Standard"
-
-        # Create the managed virtual network immediately
-#        provisionNetworkNow = true
-#      }
-#    }
-#  }
-#}
-
 resource "azapi_resource_action" "foundry_managed_virtual_network" {
   count = var.agents && var.agent_service_outbound_networking.type == "managed_virtual_network" ? 1 : 0
 
@@ -2053,10 +2009,11 @@ resource "azapi_resource" "managed_vnet_outbound_rule_private_endpoint_storage_a
 
 ## !MANAGEDVNET
 ## !AGENTS
+## !BYORESOURCES
 ## Create outbound rule to create the managed private endpoint for the CosmosDB account in the managed virtual network
 ##
 resource "azapi_resource" "managed_vnet_outbound_rule_private_endpoint_cosmosdb_account_sql" {
-  count = var.agents && var.agent_service_outbound_networking.type == "managed_virtual_network" ? 1 : 0
+  count = var.agents && var.agent_service_outbound_networking.type == "managed_virtual_network" && var.bring_your_own_agent_resources ? 1 : 0
 
   depends_on = [
     azapi_resource.managed_vnet_outbound_rule_private_endpoint_storage_account_blob
@@ -2292,6 +2249,7 @@ module "foundry_project_agents" {
   # Basic settings
   agents                        = var.agents ? true : false
   project_managed_identity_type = var.project_managed_identity_type
+  bring_your_own_agent_resources = var.bring_your_own_agent_resources
 
   ## Support CMK
   foundry_cmk_enabled = var.foundry_encryption == "cmk" ? true : false
@@ -2299,8 +2257,8 @@ module "foundry_project_agents" {
 
   ## Required info for project-level connections
   shared_agent_ai_search_resource_id          = azurerm_search_service.ai_search_foundry[0].id
-  shared_agent_cosmosdb_account_resource_id   = azurerm_cosmosdb_account.cosmosdb_foundry[0].id
-  shared_agent_cosmosdb_account_endpoint      = azurerm_cosmosdb_account.cosmosdb_foundry[0].endpoint
+  shared_agent_cosmosdb_account_resource_id   = var.bring_your_own_agent_resources == true ? azurerm_cosmosdb_account.cosmosdb_foundry[0].id : null
+  shared_agent_cosmosdb_account_endpoint      = var.bring_your_own_agent_resources == true ? azurerm_cosmosdb_account.cosmosdb_foundry[0].endpoint : null
   shared_agent_storage_account_resource_id    = azurerm_storage_account.storage_account_foundry[0].id
   shared_agent_storage_account_blob_endpoint  = azurerm_storage_account.storage_account_foundry[0].primary_blob_endpoint
   shared_agent_container_registry_resource_id = azurerm_container_registry.acr_foundry[0].id
