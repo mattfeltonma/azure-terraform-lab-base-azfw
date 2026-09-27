@@ -72,15 +72,15 @@ resource "time_sleep" "wait_project_identities" {
   create_duration = "10s"
 }
 
-
 ########## Create Foundry project-level connections to support the project capability host
 ##########
 ##########
 
+## !BYORESOURCES
 ## Create the Foundry project connection to CosmosDB
 ##
 resource "azapi_resource" "conn_project_cosmosdb_foundry" {
-  count = var.agents ? 1 : 0
+  count = var.agents && var.bring_your_own_agent_resources ? 1 : 0
 
   depends_on = [
     time_sleep.wait_project_identities
@@ -454,10 +454,11 @@ resource "azapi_resource" "conn_project_bing_grounding_search_foundry" {
 ##########
 ##########
 
+## !BYORESOURCES
 ## Create a role assignment granting the CosmosDB Operator RBAC role on the CosmosDB account to the Foundry project system-managed identity
 ##
 resource "azurerm_role_assignment" "cosmosdb_operator_foundry_project" {
-  count = var.agents ? 1 : 0
+  count = var.agents && var.bring_your_own_agent_resources ? 1 : 0
 
   depends_on = [
     azapi_resource.foundry_project,
@@ -561,15 +562,15 @@ resource "azapi_resource" "foundry_project_capability_host" {
   body = {
     properties = {
       capabilityHostKind = "Agents"
-      vectorStoreConnections = [
-        azapi_resource.conn_project_ai_search_foundry[0].name
-      ]
-      storageConnections = [
-        azapi_resource.conn_project_storage_foundry[0].name
-      ]
-      threadStorageConnections = [
-        azapi_resource.conn_project_cosmosdb_foundry[0].name
-      ]
+      vectorStoreConnections = var.bring_your_own_agent_resources ? [
+        try(azapi_resource.conn_project_cosmosdb_foundry[0].name, null)
+      ] : []
+      storageConnections = var.bring_your_own_agent_resources ? [
+        try(azapi_resource.conn_project_storage_foundry[0].name, null)
+      ] : []
+      threadStorageConnections = var.bring_your_own_agent_resources ? [
+        try(azapi_resource.conn_project_cosmosdb_foundry[0].name, null)
+      ] : []
 
       # If using an external OpenAI resource, add that connection to the capability host
       aiServicesConnections = var.shared_external_openai != null ? local.agent_external_openai_connection_name : null
@@ -584,7 +585,7 @@ resource "azapi_resource" "foundry_project_capability_host" {
 ## Create an Azure RBAC role assignment granting the project managed identity the CosmosDB Built-in Data Contributor role
 ## on the CosmosDB account to allow data plane access
 resource "azurerm_cosmosdb_sql_role_assignment" "cosmosdb_db_sql_role_aifp_account" {
-  count = var.agents ? 1 : 0
+  count = var.agents && var.bring_your_own_agent_resources ? 1 : 0
 
   depends_on = [
     azapi_resource.foundry_project_capability_host
@@ -600,7 +601,7 @@ resource "azurerm_cosmosdb_sql_role_assignment" "cosmosdb_db_sql_role_aifp_accou
 ## Create the necessary data plane role assignments to the Azure Storage Account containers created by the AI Foundry Project
 ##
 resource "azurerm_role_assignment" "storage_blob_data_owner_foundry_project" {
-  count = var.agents ? 1 : 0
+  count = var.agents && var.bring_your_own_agent_resources ? 1 : 0
 
   depends_on = [
     azapi_resource.foundry_project_capability_host
