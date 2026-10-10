@@ -9,8 +9,8 @@ output "policy_id_standard" {
 }
 
 output "policy_id_premium" {
-  value       = azurerm_firewall_policy.firewall_policy_premium.id
-  description = "The id of the premium Azure Firewall Policy"
+  value       = var.firewall_premium_policy ? azurerm_firewall_policy.firewall_policy_premium[0].id : null
+  description = "The id of the premium Azure Firewall Policy, or null if not created"
 }
 
 output "resource_group_name_transit" {

@@ -12,7 +12,7 @@ data "azapi_resource" "firewall_policy_current_standard" {
 }
 
 data "azapi_resource" "firewall_policy_current_premium" {
-  for_each = var.environment_details
+  for_each = var.firewall_premium_policy ? var.environment_details : {}
 
   type        = "Microsoft.Network/firewallPolicies@2026-01-01"
   resource_id = module.vnet_transit[each.key].policy_id_premium

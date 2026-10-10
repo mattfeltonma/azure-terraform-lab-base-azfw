@@ -298,6 +298,56 @@ resource "azurerm_monitor_diagnostic_setting" "diag_vng_vpn_gateway" {
   }
 }
 
+## Create Local Network Gateway
+##
+resource "azurerm_local_network_gateway" "lgw_lab" {
+
+  name                = "lngonprem${var.region_code}${var.random_string}"
+  location            = var.region
+  resource_group_name = var.resource_group_name
+
+  gateway_address = var.vpn_lab_gateway_ip
+  address_space   = ["${var.vpn_lab_bgp_peer_ip}/32"]
+  bgp_settings {
+    asn                 = var.vpn_lab_bgp_asn
+    bgp_peering_address = var.vpn_lab_bgp_peer_ip
+  }
+
+  tags = var.tags
+
+  lifecycle {
+    ignore_changes = [
+      tags["created_by"]
+    ]
+  }
+}
+
+## Create S2S VPN Connection
+##
+resource "azurerm_virtual_network_gateway_connection" "vpn_connection" {
+  name                = "connlab${var.region_code}${var.random_string}"
+  location            = var.region
+  resource_group_name = var.resource_group_name
+  tags                = var.tags
+
+  type                = "IPsec"
+  bgp_enabled         = true
+  connection_mode     = "Default"
+  connection_protocol = "IKEv2"
+
+  virtual_network_gateway_id = azurerm_virtual_network_gateway.vgw_vpn.id
+  local_network_gateway_id   = azurerm_local_network_gateway.lgw_lab.id
+
+  shared_key = var.vpn_lab_shared_key
+
+  lifecycle {
+    ignore_changes = [
+      tags["created_by"]
+    ]
+  }
+}
+
+
 ########## Create Azure Firewall and supporting resources
 ##########
 
@@ -432,6 +482,7 @@ resource "azurerm_firewall_policy" "firewall_policy_standard" {
 ## Create Azure Firewall Policy for the Premium SKU
 ##
 resource "azurerm_firewall_policy" "firewall_policy_premium" {
+  count = var.firewall_premium_policy ? 1 : 0
 
   name                = "fpazfwprem${var.region_code}${var.random_string}"
   resource_group_name = var.resource_group_name
@@ -475,10 +526,10 @@ resource "azurerm_firewall_policy_rule_collection_group" "rule_collection_group_
     azurerm_ip_group.ip_group_apim
   ]
 
-  for_each = {
-    "standard" = azurerm_firewall_policy.firewall_policy_standard.id
-    "premium"  = azurerm_firewall_policy.firewall_policy_premium.id
-  }
+  for_each = merge(
+    { "standard" = azurerm_firewall_policy.firewall_policy_standard.id },
+    var.firewall_premium_policy ? { "premium" = azurerm_firewall_policy.firewall_policy_premium[0].id } : {}
+  )
 
   name               = "MyEnterpriseRuleCollectionGroup"
   firewall_policy_id = each.value
@@ -671,10 +722,10 @@ resource "azurerm_firewall_policy_rule_collection_group" "rule_collection_group_
     azurerm_firewall_policy_rule_collection_group.rule_collection_group_enterprise
   ]
 
-  for_each = {
-    "standard" = azurerm_firewall_policy.firewall_policy_standard.id
-    "premium"  = azurerm_firewall_policy.firewall_policy_premium.id
-  }
+  for_each = merge(
+    { "standard" = azurerm_firewall_policy.firewall_policy_standard.id },
+    var.firewall_premium_policy ? { "premium" = azurerm_firewall_policy.firewall_policy_premium[0].id } : {}
+  )
 
   name               = "MyWorkloadApimRuleCollectionGroup"
   firewall_policy_id = each.value
@@ -959,10 +1010,10 @@ resource "azurerm_firewall_policy_rule_collection_group" "rule_collection_group_
     azurerm_firewall_policy_rule_collection_group.rule_collection_group_workload_apim
   ]
 
-  for_each = {
-    "standard" = azurerm_firewall_policy.firewall_policy_standard.id
-    "premium"  = azurerm_firewall_policy.firewall_policy_premium.id
-  }
+  for_each = merge(
+    { "standard" = azurerm_firewall_policy.firewall_policy_standard.id },
+    var.firewall_premium_policy ? { "premium" = azurerm_firewall_policy.firewall_policy_premium[0].id } : {}
+  )
 
   name               = "MyWorkloadAmlComputeRuleCollectionGroup"
   firewall_policy_id = each.value
