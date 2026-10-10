@@ -122,19 +122,6 @@ variable "shared_app_insights_connection_string" {
   default     = null
 }
 
-variable "shared_bing_grounding_search_resource_id" {
-  description = "The resource id of the Bing Grounding Search resource to connect to the Foundry project"
-  type        = string
-  default     = null
-}
-
-variable "shared_bing_grounding_search_api_key" {
-  description = "The API key of the Bing Grounding Search resource to connect to the Foundry project"
-  type        = string
-  sensitive   = true
-  default     = null
-}
-
 variable "shared_agent_ai_search_resource_id" {
   description = "The resource id of the AI Search resource to connect to the Foundry project"
   type        = string

@@ -16,6 +16,12 @@ variable "environment_details" {
   }))
 }
 
+variable "firewall_premium_policy" {
+  description = "Whether to create the Premium SKU Azure Firewall Policy. Not creating it will save costs"
+  type        = bool
+  default     = false
+}
+
 variable "key_vault_admin" {
   description = "The object id of the user or service principal to assign the Key Vault Administrator role to"
   type        = string
@@ -71,3 +77,25 @@ variable "tags" {
   description = "The tags to apply to the resources"
   type        = map(string)
 }
+
+variable "vpn_lab_bgp_asn" {
+  description = "The BGP ASN of the router the S2S VPN will be established with"
+  type        = number
+}
+
+variable "vpn_lab_bgp_peer_ip" {
+  description = "The BGP peer IP address of the router the S2S VPN will be established with"
+  type        = string
+}
+
+variable "vpn_lab_gateway_ip" {
+  description = "The public IP address of the router the S2S VPN will be established with"
+  type        = string
+}
+
+variable "vpn_lab_shared_key" {
+  description = "The shared key for the S2S VPN connection with the lab router"
+  type        = string
+  sensitive = true
+}
+

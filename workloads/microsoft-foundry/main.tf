@@ -623,26 +623,6 @@ resource "time_sleep" "wait_appins" {
 ########## with Foundry agents like domain filtering
 ##########
 
-## !AGENTS
-## Create a Grounding with Bing Custom Search resource
-##
-resource "azapi_resource" "bing_grounding_custom_search_foundry" {
-  count = var.agents ? 1 : 0
-
-  type                      = "Microsoft.Bing/accounts@2020-06-10"
-  name                      = "bingmsf${var.region_code}${var.random_string}"
-  parent_id                 = azurerm_resource_group.rg_foundry.id
-  location                  = "global"
-  schema_validation_enabled = false
-
-  body = {
-    sku = {
-      name = "G2"
-    }
-    kind = "Bing.GroundingCustomSearch"
-  }
-}
-
 ######### Create Private Endpoints for optional Key Vault resources used to store CMK and connection secrets
 #########
 #########
@@ -738,7 +718,6 @@ resource "azapi_resource" "foundry_resource" {
     azurerm_private_endpoint.pe_key_vault_secrets_foundry,
     ## Wait for creation of optional resources used to support agent tool usage and tracing
     time_sleep.wait_appins,
-    azapi_resource.bing_grounding_custom_search_foundry,
     ## Wait for creation of optional Key Vaults and CMK if configured
     azurerm_key_vault.key_vault_foundry_secrets,
     azurerm_key_vault.key_vault_foundry_cmk,
@@ -1252,7 +1231,7 @@ resource "azurerm_search_service" "ai_search_foundry" {
   ]
 
   # TODO: 9/2026 Remove hardcoded Search region once capacity isn't a shit show
-  name                = "aismsfcnc${var.random_string}"
+  name                = "aismsfcncxjm151"
   resource_group_name = azurerm_resource_group.rg_foundry.name
   location            = "canadacentral"
   tags                = local.tags
@@ -2217,7 +2196,6 @@ module "foundry_project_agents" {
     azurerm_private_endpoint.pe_cosmosdb_foundry,
     azurerm_private_endpoint.pe_storage_blob_foundry,
     azurerm_private_endpoint.pe_acr_foundry,
-    azapi_resource.bing_grounding_custom_search_foundry,
     azurerm_application_insights.appins_foundry,
     # Wait for managed VNet and outbound rules to be created
     #azapi_resource.foundry_managed_virtual_network,
@@ -2262,8 +2240,6 @@ module "foundry_project_agents" {
   shared_agent_storage_account_resource_id    = azurerm_storage_account.storage_account_foundry[0].id
   shared_agent_storage_account_blob_endpoint  = azurerm_storage_account.storage_account_foundry[0].primary_blob_endpoint
   shared_agent_container_registry_resource_id = azurerm_container_registry.acr_foundry[0].id
-  shared_bing_grounding_search_resource_id    = azapi_resource.bing_grounding_custom_search_foundry[0].id
-  shared_bing_grounding_search_api_key        = data.azapi_resource_action.bing_api_keys[0].output.key1
   shared_app_insights_resource_id       = azurerm_application_insights.appins_foundry[0].id
   shared_app_insights_connection_string = azurerm_application_insights.appins_foundry[0].connection_string
   shared_external_openai                      = var.external_openai

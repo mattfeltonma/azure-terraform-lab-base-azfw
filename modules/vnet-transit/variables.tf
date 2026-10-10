@@ -33,6 +33,12 @@ variable "dns_servers" {
   default    = ["168.63.129.16"]
 }
 
+variable "firewall_premium_policy" {
+  description = "Whether to create the Premium SKU Azure Firewall Policy"
+  type        = bool
+  default     = true
+}
+
 variable "private_resolver_inbound_endpoint_subnet_cidr" {
   description = "The address space to assign to the subnet hosting the Private DNS Resolver inbound endpoints"
   type        = string
@@ -111,4 +117,25 @@ variable "vnet_cidr_ss" {
 variable "vnet_cidr_wl" {
   description = "The address spaces to assigned to the workload virtual networks"
   type        = list(string)
+}
+
+variable "vpn_lab_bgp_asn" {
+  description = "The BGP ASN of the router the S2S VPN will be established with"
+  type        = number
+}
+
+variable "vpn_lab_bgp_peer_ip" {
+  description = "The BGP peer IP address of the router the S2S VPN will be established with"
+  type        = string
+}
+
+variable "vpn_lab_gateway_ip" {
+  description = "The public IP address of the router the S2S VPN will be established with"
+  type        = string
+}
+
+variable "vpn_lab_shared_key" {
+  description = "The shared key for the S2S VPN connection with the lab router"
+  type        = string
+  sensitive = true
 }

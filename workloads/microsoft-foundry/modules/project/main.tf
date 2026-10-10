@@ -185,7 +185,7 @@ resource "azapi_resource" "conn_project_appins_foundry" {
   body = {
     properties = {
       category      = "AppInsights"
-      isSharedToAll = true
+      isSharedToAll = false
       target        = var.shared_app_insights_resource_id
       authType      = "ApiKey"
 
@@ -219,12 +219,7 @@ resource "azapi_resource" "conn_project_acr_foundry" {
     properties = {
       category = "ContainerRegistry"
       target   = "${local.agent_container_registry_name}.azurecr.io"
-      authType = "ManagedIdentity"
-      credentials = {
-        clientId = var.project_managed_identity_type == "umi" ? azurerm_user_assigned_identity.foundry_project_umi[0].principal_id : azapi_resource.foundry_project.output.identity.principalId
-        resourceId = var.shared_agent_container_registry_resource_id
-      }
-      isSharedToAll = true
+      authType = "ProjectManagedIdentity"
       metadata = {
         ResourceId = var.shared_agent_container_registry_resource_id
       }
@@ -413,43 +408,6 @@ resource "azapi_resource" "conn_project_external_openai_foundry" {
   }
 }
 
-########## Create Foundry project-level connections to support some of the built-in tools
-##########
-##########
-
-## Create a Foundry project connection to the Bing Grounding Search instance
-##
-resource "azapi_resource" "conn_project_bing_grounding_search_foundry" {
-  count = var.agents ? 1 : 0
-
-  depends_on = [
-    time_sleep.wait_project_identities,
-    azapi_resource.conn_project_external_openai_foundry
-  ]
-
-  type                      = "Microsoft.CognitiveServices/accounts/projects/connections@2026-05-01"
-  name                      = local.agent_bing_grounding_search_connection_name
-  parent_id                 = azapi_resource.foundry_project.id
-  schema_validation_enabled = false
-
-  body = {
-    name = local.agent_bing_grounding_search_connection_name
-    properties = {
-      category = "GroundingWithBingSearch"
-      target   = "https://api.bing.microsoft.com/"
-      authType = "ApiKey"
-      credentials = {
-        key = var.shared_bing_grounding_search_api_key
-      }
-      metadata = {
-        ApiType    = "Azure"
-        ResourceId = var.shared_bing_grounding_search_resource_id
-        type       = "bing_grounding"
-      }
-    }
-  }
-}
-
 ########## Create required non-human role assignments for the Foundry project system-managed identity or user-assigned managed identity to provision the project capability host
 ##########
 ##########
@@ -527,8 +485,7 @@ resource "time_sleep" "wait_rbac" {
     ## The connection resources created for the Foundry project
     azapi_resource.conn_project_ai_search_foundry,
     azapi_resource.conn_project_cosmosdb_foundry,
-    azapi_resource.conn_project_storage_foundry,
-    azapi_resource.conn_project_bing_grounding_search_foundry
+    azapi_resource.conn_project_storage_foundry
   ]
   create_duration = "120s"
 }
@@ -550,7 +507,6 @@ resource "azapi_resource" "foundry_project_capability_host" {
     azapi_resource.conn_project_storage_foundry,
     azapi_resource.conn_project_cosmosdb_foundry,
     azapi_resource.conn_project_external_openai_foundry,
-    azapi_resource.conn_project_bing_grounding_search_foundry,
     azapi_resource.conn_project_appins_foundry,
     azapi_resource.conn_project_acr_foundry
   ]

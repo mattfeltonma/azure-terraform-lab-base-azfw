@@ -84,11 +84,22 @@ resource "azurerm_subnet" "subnet_app_gateway" {
   ]
   default_outbound_access_enabled = false
   private_endpoint_network_policies = "Enabled"
+
+  lifecycle {
+    # This subnet will typically be delegated to don't bust it once it's done
+    ignore_changes = [
+      delegation
+    ]
+  }
 }
 
 ## Create subnet for used for Azure Machine Learning injected compute
 ##
 resource "azurerm_subnet" "subnet_amlcpt" {
+  depends_on = [
+    azurerm_subnet.subnet_app_gateway
+  ]
+
   name                 = "snet-amlcpt"
   resource_group_name  = var.resource_group_name
   virtual_network_name = azurerm_virtual_network.vnet_workload.name
@@ -102,6 +113,9 @@ resource "azurerm_subnet" "subnet_amlcpt" {
 ## Create subnet for API Management
 ##
 resource "azurerm_subnet" "subnet_apim" {
+  depends_on = [
+    azurerm_subnet.subnet_amlcpt
+  ]
   name                 = "snet-apim"
   resource_group_name  = var.resource_group_name
   virtual_network_name = azurerm_virtual_network.vnet_workload.name
@@ -110,11 +124,21 @@ resource "azurerm_subnet" "subnet_apim" {
   ]
   default_outbound_access_enabled = false
   private_endpoint_network_policies = "Enabled"
+
+  lifecycle {
+    # This subnet will typically be delegated to don't bust it once it's done
+    ignore_changes = [
+      delegation
+    ]
+  }
 }
 
 ## Create subnet for application tier
 ##
 resource "azurerm_subnet" "subnet_app" {
+  depends_on = [
+    azurerm_subnet.subnet_apim
+  ]
   name                 = "snet-app"
   resource_group_name  = var.resource_group_name
   virtual_network_name = azurerm_virtual_network.vnet_workload.name
@@ -123,11 +147,21 @@ resource "azurerm_subnet" "subnet_app" {
   ]
   default_outbound_access_enabled = false
   private_endpoint_network_policies = "Enabled"
+
+  lifecycle {
+    # This subnet will typically be delegated to don't bust it once it's done
+    ignore_changes = [
+      delegation
+    ]
+  }
 }
 
 ## Create subnet for data tier
 ##
 resource "azurerm_subnet" "subnet_data" {
+  depends_on = [
+    azurerm_subnet.subnet_app
+  ]
   name                 = "snet-data"
   resource_group_name  = var.resource_group_name
   virtual_network_name = azurerm_virtual_network.vnet_workload.name
@@ -141,6 +175,9 @@ resource "azurerm_subnet" "subnet_data" {
 ## Create subnet for management components
 ##
 resource "azurerm_subnet" "subnet_mgmt" {
+  depends_on = [
+    azurerm_subnet.subnet_data
+  ]
   name                 = "snet-mgmt"
   resource_group_name  = var.resource_group_name
   virtual_network_name = azurerm_virtual_network.vnet_workload.name
@@ -154,6 +191,9 @@ resource "azurerm_subnet" "subnet_mgmt" {
 ## Create subnet for supporting services
 ##
 resource "azurerm_subnet" "subnet_svc" {
+  depends_on = [
+    azurerm_subnet.subnet_mgmt
+  ]
   name                 = "snet-svc"
   resource_group_name  = var.resource_group_name
   virtual_network_name = azurerm_virtual_network.vnet_workload.name
@@ -167,6 +207,9 @@ resource "azurerm_subnet" "subnet_svc" {
 ## Create subnet that is used for virtual network integration
 ##
 resource "azurerm_subnet" "subnet_vint" {
+  depends_on = [
+    azurerm_subnet.subnet_svc
+  ]
   name                 = "snet-vint"
   resource_group_name  = var.resource_group_name
   virtual_network_name = azurerm_virtual_network.vnet_workload.name
@@ -175,6 +218,13 @@ resource "azurerm_subnet" "subnet_vint" {
   ]
   default_outbound_access_enabled = false
   private_endpoint_network_policies = "Enabled"
+
+  lifecycle {
+    # This subnet will typically be delegated to don't bust it once it's done
+    ignore_changes = [
+      delegation
+    ]
+  }
 }
 
 ## Peer the virtual network with the transit virtual network
@@ -280,7 +330,7 @@ resource "azurerm_route_table" "route_table_amlcpt" {
 
   lifecycle {
     ignore_changes = [
-      tags["created_by"]
+      tags["created_by"],
     ]
   }
 }

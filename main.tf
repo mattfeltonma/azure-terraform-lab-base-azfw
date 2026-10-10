@@ -164,6 +164,15 @@ module "vnet_transit" {
   address_space_onpremises = var.address_space_onpremises
   address_space_azure = var.address_space_cloud
 
+  # Pass settings for VPN settings
+  vpn_lab_bgp_asn       = var.vpn_lab_bgp_asn
+  vpn_lab_bgp_peer_ip     = var.vpn_lab_bgp_peer_ip
+  vpn_lab_gateway_ip     = var.vpn_lab_gateway_ip
+  vpn_lab_shared_key    = var.vpn_lab_shared_key
+
+  # Pass the flag indicating whether to create the Premium SKU Azure Firewall Policy
+  firewall_premium_policy = var.firewall_premium_policy
+
   # Pass the CIDR blocks for APIM and AML compute subnets, which are used in Azure Firewall rules
   address_space_apim = each.key == "primary" ? [
     cidrsubnet(local.vnet_cidr_wl1_pri, 3, 2),
@@ -353,6 +362,8 @@ resource "null_resource" "update_firewall_dns_policy_standard" {
       try(data.azapi_resource.firewall_policy_current_standard[each.key].output.properties.dnsSettings.servers, []) ==
       [module.vnet_shared[each.key].private_resolver_inbound_endpoint_ip]
     )
+    # Force this to run on every apply
+    always_run = timestamp()
   }
 
   provisioner "local-exec" {
@@ -365,7 +376,7 @@ resource "null_resource" "update_firewall_dns_policy_premium" {
     null_resource.update_firewall_dns_policy_standard
   ]
 
-  for_each = var.environment_details
+  for_each = var.firewall_premium_policy ? var.environment_details : {}
 
   # Trigger if Azure Firewall Policy changes,if DNS resolver IP changes, or if the
   # firewall policy's actual DNS servers no longer match the expected resolver IP
@@ -376,6 +387,8 @@ resource "null_resource" "update_firewall_dns_policy_premium" {
       try(data.azapi_resource.firewall_policy_current_premium[each.key].output.properties.dnsSettings.servers, []) ==
       [module.vnet_shared[each.key].private_resolver_inbound_endpoint_ip]
     )
+      # Force this to run on every apply
+    always_run = timestamp()
   }
 
   provisioner "local-exec" {
