@@ -33,6 +33,19 @@ Hope any bit of this code helps save you some time or learn something new!
 ## Updates
 
 ### 2026
+* **October 9, 2026**
+  * Base lab
+    * Added S2S VPN, Local Network Gateway
+    * Added lifecycle policy to workload virtual networks to ignore delegation
+    * Made Azure Firewall Premium policy deployment optional to save costs
+
+  * Microsoft Foundry
+    * Removed Bing Grounding Resource since Bing API has been deprecated and WebSearch tool will be 
+      eventually supplanted by WebIq
+  
+  * Power Platform
+    * Added workload plugin for Power Platform environment with VNet support
+
 * **August 6, 2026**
   * API Management
     * Renamed lab from AI Gateway to API Management
