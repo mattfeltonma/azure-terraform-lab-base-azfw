@@ -33,6 +33,7 @@ Hope any bit of this code helps save you some time or learn something new!
 ## Updates
 
 ### 2026
+* **November 18, 2026**
   * MS Foundry
     * Added WebIQ resource
     * Updated model gateway connection code
