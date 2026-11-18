@@ -619,9 +619,36 @@ resource "time_sleep" "wait_appins" {
   create_duration = "60s"
 }
 
-########## Create Grounding with Bing Custom Search resoure to support advanced WebSearch use cases
-########## with Foundry agents like domain filtering
+########## Create WebIQ Account that can be used by agents to ground in web data
 ##########
+##########
+
+## !AGENTS
+## Create WebIQ Account for agent grounding in web data
+##
+##
+resource "azapi_resource" "web_iq_account" {
+  count = var.agents ? 1 : 0
+
+  depends_on = [
+    azurerm_resource_group.rg_foundry
+  ]
+
+  type                      = "Microsoft.WebIQ/accounts@2026-06-01-preview"
+  name                      = "webiqmsf${var.region_code}${var.random_string}"
+  parent_id                 = azurerm_resource_group.rg_foundry.id
+  location                  = "Global"
+  schema_validation_enabled = false
+
+  body = {
+    kind = "WebIQ.Grounding"
+    sku = {
+      "name" = "G3"
+    }
+    tags = local.tags
+  }
+}
+
 
 ######### Create Private Endpoints for optional Key Vault resources used to store CMK and connection secrets
 #########
@@ -928,7 +955,7 @@ resource "azurerm_cognitive_account_customer_managed_key" "foundry_cmk" {
   cognitive_account_id = azapi_resource.foundry_resource.id
   key_vault_key_id     = azurerm_key_vault_key.key_foundry_cmk[0].id
 }
-
+ 
 ######### Create some model deployments to muck around with
 #########
 #########

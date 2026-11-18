@@ -1,40 +1,27 @@
-resource "azapi_resource" "backend" {
-  type                      = "Microsoft.ApiManagement/service/backends@2024-05-01"
-  name                      = var.backend_name
-  parent_id                 = var.apim_id
-  schema_validation_enabled = true
-  body = {
-    properties = {
-      circuitBreaker = {
-        rules = [
-          {
-            failureCondition = {
-              count = 1,
-              errorReasons = [
-                "The backend service is throttling"
-              ],
-              interval = "PT10S",
-              statusCodeRanges = [
-                {
-                  max = 429
-                  min = 429,
-                },
-                {
-                  max = 503
-                  min = 500,
-                }
-              ]
-            }
-            name             = "breakThrottling"
-            tripDuration     = "PT10S"
-            acceptRetryAfter = true
-          }
-        ]
+resource "azurerm_api_management_backend" "backend" {
+  name                 = var.backend_name
+  api_management_name = var.apim_management_name
+  resource_group_name    = var.apim_resource_group_name
+
+  protocol             = "http"
+  url                  = var.url
+
+  circuit_breaker_rule {
+    name = "breakThrottling"
+    trip_duration = "PT10S"
+    failure_condition {
+      interval_duration = "PT10S"
+      count = 1
+
+      status_code_range {
+        min = 429
+        max = 429
       }
-      description = "This is an API Management backend for resource ${var.backend_name}"
-      type        = "single"
-      protocol = "http"
-      url         = var.url
+
+      status_code_range {
+        min = 500
+        max = 503
+      }
     }
   }
 }

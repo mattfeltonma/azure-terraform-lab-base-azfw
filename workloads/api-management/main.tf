@@ -548,7 +548,7 @@ resource "azurerm_application_insights" "appins_api_management" {
   }
 }
 
-########### Create the Foundry accounts, deploy the GPT 4.1 model, and create a Private Endpoint
+########### Create the Foundry accounts, deploy the GPT 5.4, 5.4-mini models, and create a Private Endpoint
 ########### for the Foundry account
 ###########
 
@@ -589,61 +589,87 @@ resource "azurerm_cognitive_account" "ms_foundry_accounts" {
   }
 }
 
-## Deploy GPT 4.1 model to the Foundry accounts
+## Create two projects per Foundry account to demonstrate project-based billing
 ##
-resource "azurerm_cognitive_deployment" "deployment_gpt41" {
+resource "azapi_resource" "ms_foundry_project1" {
   depends_on = [
     azurerm_cognitive_account.ms_foundry_accounts
   ]
 
   for_each = local.ms_foundry_regions
 
-  name                 = "gpt-4.1"
-  cognitive_account_id = azurerm_cognitive_account.ms_foundry_accounts[each.key].id
+  type      = "Microsoft.CognitiveServices/accounts/projects@2026-03-01"
+  name      = "project1msf${each.value.region_code}${var.random_string}"
+  parent_id = azurerm_cognitive_account.ms_foundry_accounts[each.key].id
+  location  = azurerm_cognitive_account.ms_foundry_accounts[each.key].location
+  tags      = local.tags
 
-  # Use the default Responsible AI policy for the deployment
-  rai_policy_name = "Microsoft.DefaultV2"
-
-  sku {
-    name     = "GlobalStandard"
-    capacity = 1000
+  identity {
+    type = "SystemAssigned"
   }
 
-  model {
-    format  = "OpenAI"
-    name    = "gpt-4.1"
+  body = {
+    properties = {
+      description = "This is sample project1"
+      displayName = "project1"
+    }
   }
 
-  lifecycle {
-    ignore_changes = [
-      model[0].version
-    ]
-  }
+  schema_validation_enabled = false
 }
 
-## Deploy GPT 4.1-mini model to the Foundry accounts
-##
-resource "azurerm_cognitive_deployment" "deployment_gpt41_mini" {
+resource "azapi_resource" "ms_foundry_project2" {
   depends_on = [
-    azurerm_cognitive_deployment.deployment_gpt41
+    azapi_resource.ms_foundry_project1
   ]
 
   for_each = local.ms_foundry_regions
 
-  name                 = "gpt-4.1-mini"
+  type      = "Microsoft.CognitiveServices/accounts/projects@2026-03-01"
+  name      = "project2msf${each.value.region_code}${var.random_string}"
+  parent_id = azurerm_cognitive_account.ms_foundry_accounts[each.key].id
+  location  = azurerm_cognitive_account.ms_foundry_accounts[each.key].location
+  tags      = local.tags
+
+  identity {
+    type = "SystemAssigned"
+  }
+
+  body = {
+    properties = {
+      description = "This is sample project2"
+      displayName = "project2"
+    }
+  }
+
+  schema_validation_enabled = false
+}
+
+## Deploy GPT 5.4 model to the Foundry accounts for use with Content Understanding
+##
+resource "azurerm_cognitive_deployment" "deployment_gpt54" {
+  depends_on = [
+    azurerm_cognitive_account.ms_foundry_accounts,
+    azapi_resource.ms_foundry_project1,
+    azapi_resource.ms_foundry_project2
+  ]
+
+  for_each = local.ms_foundry_regions
+
+  name                 = "gpt-5.4"
   cognitive_account_id = azurerm_cognitive_account.ms_foundry_accounts[each.key].id
 
   # Use the default Responsible AI policy for the deployment
   rai_policy_name = "Microsoft.DefaultV2"
 
   sku {
-    name     = "GlobalStandard"
-    capacity = 1000
+    name     = "DataZoneStandard"
+    capacity = 150
   }
 
   model {
     format  = "OpenAI"
-    name    = "gpt-4.1-mini"
+    name    = "gpt-5.4"
   }
 
   lifecycle {
@@ -653,11 +679,43 @@ resource "azurerm_cognitive_deployment" "deployment_gpt41_mini" {
   }
 }
 
-## Deploy GPT 4.1 model to the Foundry accounts
+## Deploy GPT 5.4-mini model to the Foundry accounts for use with Content Understanding
+##
+resource "azurerm_cognitive_deployment" "deployment_gpt54_mini" {
+  depends_on = [
+    azurerm_cognitive_deployment.deployment_gpt54
+  ]
+
+  for_each = local.ms_foundry_regions
+
+  name                 = "gpt-5.4-mini"
+  cognitive_account_id = azurerm_cognitive_account.ms_foundry_accounts[each.key].id
+
+  # Use the default Responsible AI policy for the deployment
+  rai_policy_name = "Microsoft.DefaultV2"
+
+  sku {
+    name     = "DataZoneStandard"
+    capacity = 150
+  }
+
+  model {
+    format  = "OpenAI"
+    name    = "gpt-5.4-mini"
+  }
+
+  lifecycle {
+    ignore_changes = [
+      model[0].version
+    ]
+  }
+}
+
+## Deploy GPT text_embedding_3_large model to the Foundry accounts for use with Content Understanding
 ##
 resource "azurerm_cognitive_deployment" "deployment_text_embedding_3_large" {
   depends_on = [
-    azurerm_cognitive_deployment.deployment_gpt41_mini
+    azurerm_cognitive_deployment.deployment_gpt54_mini
   ]
 
   for_each = local.ms_foundry_regions
@@ -685,7 +743,7 @@ resource "azurerm_cognitive_deployment" "deployment_text_embedding_3_large" {
   }
 }
 
-## Create a deployment for OpenAI's GPT-5.1
+## Create a deployment for OpenAI's GPT-5.1 for general use
 ##
 resource "azurerm_cognitive_deployment" "deployment_gpt_5_1" {
   depends_on = [
@@ -854,9 +912,9 @@ resource "azurerm_role_assignment" "umi_apim_appinsights_metrics_publisher" {
 }
 
 ## Create Azure RBAC Role assignment granting the user-assigned managed identity associated with the
-## API Management service the Cognitive Services OpenAI User role on the MS Foundry accounts
+## API Management service the Foundry User role on the MS Foundry accounts
 ## hosting LLMs
-resource "azurerm_role_assignment" "umi_apim_foundry_account_cognitive_services_openai_user" {
+resource "azurerm_role_assignment" "umi_apim_foundry_account_foundry_user" {
   depends_on = [
     time_sleep.sleep_apim_umi_propagation
   ]
@@ -864,7 +922,37 @@ resource "azurerm_role_assignment" "umi_apim_foundry_account_cognitive_services_
   for_each = local.ms_foundry_regions
 
   scope                = azurerm_cognitive_account.ms_foundry_accounts[each.key].id
-  role_definition_name = "Cognitive Services OpenAI User"
+  role_definition_name = "Foundry User"
+  principal_id         = azurerm_user_assigned_identity.umi_apim.principal_id
+}
+
+## Create Azure RBAC Role assignment granting the user-assigned managed identity associated with the
+## API Management service the Foundry User role on the MS Foundry account project 1
+## hosting LLMs
+resource "azurerm_role_assignment" "umi_apim_foundry_project_1_foundry_user" {
+  depends_on = [
+    time_sleep.sleep_apim_umi_propagation
+  ]
+  
+  for_each = local.ms_foundry_regions
+
+  scope                = azapi_resource.ms_foundry_project1[each.key].id
+  role_definition_name = "Foundry User"
+  principal_id         = azurerm_user_assigned_identity.umi_apim.principal_id
+}
+
+## Create Azure RBAC Role assignment granting the user-assigned managed identity associated with the
+## API Management service the Foundry User role on the MS Foundry account project 2
+## hosting LLMs
+resource "azurerm_role_assignment" "umi_apim_foundry_project_2_foundry_user" {
+  depends_on = [
+    time_sleep.sleep_apim_umi_propagation
+  ]
+  
+  for_each = local.ms_foundry_regions
+
+  scope                = azapi_resource.ms_foundry_project2[each.key].id
+  role_definition_name = "Foundry User"
   principal_id         = azurerm_user_assigned_identity.umi_apim.principal_id
 }
 
@@ -873,7 +961,7 @@ resource "azurerm_role_assignment" "umi_apim_foundry_account_cognitive_services_
 ## to support the bring-your-own-model feature of the Foundry Agent Service
 resource "azurerm_role_assignment" "umi_apim_foundry_account_cognitive_services_user" {
   depends_on = [
-    azurerm_role_assignment.umi_apim_foundry_account_cognitive_services_openai_user
+    azurerm_role_assignment.umi_apim_foundry_account_foundry_user
   ]
 
   for_each = local.ms_foundry_regions
@@ -889,8 +977,9 @@ resource "time_sleep" "sleep_apim_umi_role_assignments" {
   depends_on = [
     azurerm_role_assignment.umi_apim_secrets_key_vault_key_vault_secret_user,
     azurerm_role_assignment.umi_apim_appinsights_metrics_publisher,
-    azurerm_role_assignment.umi_apim_foundry_account_cognitive_services_openai_user,
-    azurerm_role_assignment.umi_apim_foundry_account_cognitive_services_user
+    azurerm_role_assignment.umi_apim_foundry_project_1_foundry_user,
+    azurerm_role_assignment.umi_apim_foundry_project_2_foundry_user,
+    azurerm_role_assignment.umi_apim_foundry_account_cognitive_services_user,
   ]
   create_duration = "120s"
 }
@@ -1151,9 +1240,9 @@ resource "azapi_update_resource" "apim_disable_public_network_access" {
 ###########
 ###########
 
-## Create circuit breaker backends for Microsoft Foundry instances hosting the models used with the OpenAI classic API
+## Create circuit breaker backends for Microsoft Foundry account and project endpoints for OpenAI v1 APIs
 ##
-module "backend_circuit_breaker_msfoundry_instance_openai_classic" {
+module "backend_circuit_breaker_msfoundry_instance_openai_accounts" {
   depends_on = [
     azurerm_api_management.apim,
     azurerm_cognitive_account.ms_foundry_accounts
@@ -1162,24 +1251,97 @@ module "backend_circuit_breaker_msfoundry_instance_openai_classic" {
   for_each = local.ms_foundry_regions
 
   source       = "./modules/backend-circuit-breaker"
-  apim_id      = azurerm_api_management.apim.id
-  backend_name = "${azurerm_cognitive_account.ms_foundry_accounts[each.key].name}classic"
-  url          = "https://${azurerm_cognitive_account.ms_foundry_accounts[each.key].name}.openai.azure.com/openai"
+  apim_management_name = azurerm_api_management.apim.name
+  apim_resource_group_name = azurerm_api_management.apim.resource_group_name
+  backend_name = "${azurerm_cognitive_account.ms_foundry_accounts[each.key].name}openai"
+  url          = "https://${azurerm_cognitive_account.ms_foundry_accounts[each.key].name}.services.ai.azure.com/openai/v1"
 }
 
-## Create backend pool with Microsoft Foundry backends
-##
-module "backend_pool_msfoundry_instances_openai_classic" {
+module "backend_circuit_breaker_msfoundry_instance_openai_project1" {
   depends_on = [
-    module.backend_circuit_breaker_msfoundry_instance_openai_classic
+    azurerm_api_management.apim,
+    azapi_resource.ms_foundry_project1
+  ]
+
+  for_each = local.ms_foundry_regions
+
+  source       = "./modules/backend-circuit-breaker"
+  apim_management_name = azurerm_api_management.apim.name
+  apim_resource_group_name = azurerm_api_management.apim.resource_group_name
+  backend_name = "${azurerm_cognitive_account.ms_foundry_accounts[each.key].name}project1openai"
+  url          = "https://${azurerm_cognitive_account.ms_foundry_accounts[each.key].name}.services.ai.azure.com/api/projects/project1/openai/v1"
+}
+
+module "backend_circuit_breaker_msfoundry_instance_openai_project2" {
+  depends_on = [
+    azurerm_api_management.apim,
+    azapi_resource.ms_foundry_project2
+  ]
+
+  for_each = local.ms_foundry_regions
+
+  source       = "./modules/backend-circuit-breaker"
+  apim_management_name = azurerm_api_management.apim.name
+  apim_resource_group_name = azurerm_api_management.apim.resource_group_name
+  backend_name = "${azurerm_cognitive_account.ms_foundry_accounts[each.key].name}project2openai"
+  url          = "https://${azurerm_cognitive_account.ms_foundry_accounts[each.key].name}.services.ai.azure.com/api/projects/project2/openai/v1"
+}
+
+## Create backend pools for Foundry account and project endpoints for OpenAI v1 APIs
+##
+
+# This pool demonstrates session based affinity for the backend pool for use cases like responses and batch
+module "backend_pool_msfoundry_instances_openai_accounts_stateful" {
+  depends_on = [
+    module.backend_circuit_breaker_msfoundry_instance_openai_accounts
   ]
 
   source    = "./modules/backend-pool"
-  pool_name = "foundry-pool-openai-classic"
+  pool_name = "foundry-accounts-pool-openai-sf"
   apim_id   = azurerm_api_management.apim.id
 
   backends = [
-    for foundry_backend in module.backend_circuit_breaker_msfoundry_instance_openai_classic :
+    for foundry_backend in module.backend_circuit_breaker_msfoundry_instance_openai_accounts :
+    {
+      id       = foundry_backend.id
+      priority = 1
+    }
+  ]
+  session_affinity = true
+}
+
+# This pool demonstrates a backend pool without state for things like ChatCompletions
+module "backend_pool_msfoundry_instances_openai_accounts_stateless" {
+  depends_on = [
+    module.backend_circuit_breaker_msfoundry_instance_openai_accounts
+  ]
+
+  source    = "./modules/backend-pool"
+  pool_name = "foundry-accounts-pool-openai-sl"
+  apim_id   = azurerm_api_management.apim.id
+
+  backends = [
+    for foundry_backend in module.backend_circuit_breaker_msfoundry_instance_openai_accounts :
+    {
+      id       = foundry_backend.id
+      priority = 1
+    }
+  ]
+  session_affinity = false
+}
+
+module "backend_pool_msfoundry_instances_openai_project1" {
+  depends_on = [
+    module.backend_pool_msfoundry_instances_openai_accounts_stateful,
+    module.backend_pool_msfoundry_instances_openai_accounts_stateless
+  ]
+
+  source    = "./modules/backend-pool"
+  pool_name = "foundry-project1-pool-openai"
+  apim_id   = azurerm_api_management.apim.id
+
+  backends = [
+    for foundry_backend in module.backend_circuit_breaker_msfoundry_instance_openai_project1 :
     {
       id       = foundry_backend.id
       priority = 1
@@ -1187,9 +1349,29 @@ module "backend_pool_msfoundry_instances_openai_classic" {
   ]
 }
 
-## Create circuit breaker backends for Microsoft Foundry instances hosting the models used with the OpenAI v1 API
+module "backend_pool_msfoundry_instances_openai_project2" {
+  depends_on = [
+    module.backend_pool_msfoundry_instances_openai_accounts_stateful,
+    module.backend_pool_msfoundry_instances_openai_accounts_stateless
+  ]
+
+  source    = "./modules/backend-pool"
+  pool_name = "foundry-project2-pool-openai"
+  apim_id   = azurerm_api_management.apim.id
+
+  backends = [
+    for foundry_backend in module.backend_circuit_breaker_msfoundry_instance_openai_project2 :
+    {
+      id       = foundry_backend.id
+      priority = 1
+    }
+  ]
+}
+
+## Create circuit breaker backends for Microsoft Foundry account and project endpoints for Anthropic APIs
 ##
-module "backend_circuit_breaker_msfoundry_instance_openai_v1" {
+
+module "backend_circuit_breaker_msfoundry_instance_anthropic_accounts" {
   depends_on = [
     azurerm_api_management.apim,
     azurerm_cognitive_account.ms_foundry_accounts
@@ -1198,24 +1380,91 @@ module "backend_circuit_breaker_msfoundry_instance_openai_v1" {
   for_each = local.ms_foundry_regions
 
   source       = "./modules/backend-circuit-breaker"
-  apim_id      = azurerm_api_management.apim.id
-  backend_name = "${azurerm_cognitive_account.ms_foundry_accounts[each.key].name}v1"
-  url          = "https://${azurerm_cognitive_account.ms_foundry_accounts[each.key].name}.services.ai.azure.com/openai/v1"
+  apim_management_name = azurerm_api_management.apim.name
+  apim_resource_group_name = azurerm_api_management.apim.resource_group_name
+  backend_name = "${azurerm_cognitive_account.ms_foundry_accounts[each.key].name}anthropic"
+  url          = "https://${azurerm_cognitive_account.ms_foundry_accounts[each.key].name}.services.ai.azure.com/anthropic"
 }
 
-## Create backend pool with Microsoft Foundry backends
-##
-module "backend_pool_msfoundry_instances_openai_v1" {
+module "backend_circuit_breaker_msfoundry_instance_anthropic_project1" {
   depends_on = [
-    module.backend_circuit_breaker_msfoundry_instance_openai_v1
+    azurerm_api_management.apim,
+    azapi_resource.ms_foundry_project1
+  ]
+
+  for_each = local.ms_foundry_regions
+
+  source       = "./modules/backend-circuit-breaker"
+  apim_management_name = azurerm_api_management.apim.name
+  apim_resource_group_name = azurerm_api_management.apim.resource_group_name
+  backend_name = "${azurerm_cognitive_account.ms_foundry_accounts[each.key].name}anthropicproject1"
+  url          = "https://${azurerm_cognitive_account.ms_foundry_accounts[each.key].name}.services.ai.azure.com/api/projects/project1/anthropic"
+}
+
+module "backend_circuit_breaker_msfoundry_instance_anthropic_project2" {
+  depends_on = [
+    azurerm_api_management.apim,
+    azapi_resource.ms_foundry_project2
+  ]
+
+  for_each = local.ms_foundry_regions
+
+  source       = "./modules/backend-circuit-breaker"
+  apim_management_name = azurerm_api_management.apim.name
+  apim_resource_group_name = azurerm_api_management.apim.resource_group_name
+  backend_name = "${azurerm_cognitive_account.ms_foundry_accounts[each.key].name}anthropicproject2"
+  url          = "https://${azurerm_cognitive_account.ms_foundry_accounts[each.key].name}.services.ai.azure.com/api/projects/project2/anthropic"
+}
+
+## Create backend pools for Foundry account and project endpoints for Anthropic APIs
+##
+module "backend_pool_msfoundry_instances_anthropic_accounts" {
+  depends_on = [
+    module.backend_circuit_breaker_msfoundry_instance_anthropic_accounts
   ]
 
   source    = "./modules/backend-pool"
-  pool_name = "foundry-pool-openai-v1"
+  pool_name = "foundry-accounts-pool-anthropic"
   apim_id   = azurerm_api_management.apim.id
 
   backends = [
-    for foundry_backend in module.backend_circuit_breaker_msfoundry_instance_openai_v1 :
+    for foundry_backend in module.backend_circuit_breaker_msfoundry_instance_anthropic_accounts :
+    {
+      id       = foundry_backend.id
+      priority = 1
+    }
+  ]
+}
+
+module "backend_pool_msfoundry_instances_anthropic_project1" {
+  depends_on = [
+    module.backend_circuit_breaker_msfoundry_instance_anthropic_project1
+  ]
+
+  source    = "./modules/backend-pool"
+  pool_name = "foundry-project1-pool-anthropic"
+  apim_id   = azurerm_api_management.apim.id
+
+  backends = [
+    for foundry_backend in module.backend_circuit_breaker_msfoundry_instance_anthropic_project1 :
+    {
+      id       = foundry_backend.id
+      priority = 1
+    }
+  ]
+}
+
+module "backend_pool_msfoundry_instances_anthropic_project2" {
+  depends_on = [
+    module.backend_circuit_breaker_msfoundry_instance_anthropic_project2
+  ]
+
+  source    = "./modules/backend-pool"
+  pool_name = "foundry-project2-pool-anthropic"
+  apim_id   = azurerm_api_management.apim.id
+
+  backends = [
+    for foundry_backend in module.backend_circuit_breaker_msfoundry_instance_anthropic_project2 :
     {
       id       = foundry_backend.id
       priority = 1
@@ -1341,43 +1590,43 @@ resource "azapi_resource" "diag_hello_world_api_monitor" {
   }
 }
 
-########### Create APIs for the classic OpenAI API, OpenAI v1 API, and the Foundry AI Model Inference API and create
+########### Create two APIs with one for Foundry account and one for Foundry projects using OpenAI v1 API and
 ########### diagnostic settings for both the App Insights Logger and Azure Monitor Logger
 ###########
 
-## Create an API for the OpenAI Inferencing API
+## Create an API for the Foundry account OpenAI v1 API
 ##
-resource "azurerm_api_management_api" "openai_original" {
+resource "azurerm_api_management_api" "openai_account" {
   depends_on = [
-    azurerm_api_management_api.hello_world,
-    module.backend_pool_msfoundry_instances_openai_classic
+    module.backend_pool_msfoundry_instances_openai_accounts_stateful,
+    module.backend_pool_msfoundry_instances_openai_accounts_stateless
   ]
 
-  name                  = "azure-openai-original"
+  name                  = "azure-openai-account"
   resource_group_name   = azurerm_resource_group.rg_apim.name
   api_management_name   = azurerm_api_management.apim.name
   revision              = "1"
-  display_name          = "Azure OpenAI Inferencing and Authoring API"
-  path                  = "openai"
+  display_name          = "Foundry Account OpenAI v1 API"
+  path                  = "openai-account"
   api_type              = "http"
   protocols             = ["https"]
   subscription_required = false
   import {
     content_format = "openapi+json"
-    content_value  = file("${path.module}/api-specs/2025-04-01-preview-aoai-inferencing.json")
+    content_value  = file("${path.module}/api-specs/azure-v1-v1-generated.json")
   }
 }
 
-## Create diagnostic setting for the OpenAI original API for Application Insights
+## Create diagnostic setting for the Foundry account OpenAI v1 API for Application Insights
 ## 
-resource "azapi_resource" "diag_openai_original_api_appsinights" {
+resource "azapi_resource" "diag_openai_account_api_appsinights" {
   depends_on = [
-    azurerm_api_management_api.openai_original
+    azurerm_api_management_api.openai_account
   ]
 
   type                      = "Microsoft.ApiManagement/service/apis/diagnostics@2025-09-01-preview"
   name                      = "applicationinsights"
-  parent_id                 = azurerm_api_management_api.openai_original.id
+  parent_id                 = azurerm_api_management_api.openai_account.id
   schema_validation_enabled = false
   body = {
     properties = {
@@ -1395,16 +1644,16 @@ resource "azapi_resource" "diag_openai_original_api_appsinights" {
   }
 }
 
-## Create diagnostic setting for the OpenAI original API for Azure Monitor
+## Create diagnostic setting for the Foundry account OpenAI v1 API for Azure Monitor
 ##
-resource "azapi_resource" "diag_openai_original_api_monitor" {
+resource "azapi_resource" "diag_openai_account_api_monitor" {
   depends_on = [
-    azurerm_api_management_api.openai_original
+    azurerm_api_management_api.openai_account
   ]
 
   type                      = "Microsoft.ApiManagement/service/apis/diagnostics@2025-09-01-preview"
   name                      = "azuremonitor"
-  parent_id                 = azurerm_api_management_api.openai_original.id
+  parent_id                 = azurerm_api_management_api.openai_account.id
   schema_validation_enabled = false
   body = {
     properties = {
@@ -1431,20 +1680,20 @@ resource "azapi_resource" "diag_openai_original_api_monitor" {
   }
 }
 
-## Create an API for the v1 OpenAI API
+## Create an API for the Foundry projects OpenAI v1 API
 ##
-resource "azurerm_api_management_api" "openai_v1" {
+resource "azurerm_api_management_api" "openai_projects" {
   depends_on = [
-    azurerm_api_management_api.openai_original,
-    module.backend_pool_msfoundry_instances_openai_v1
+    module.backend_pool_msfoundry_instances_openai_project1,
+    module.backend_pool_msfoundry_instances_openai_project2 
   ]
 
-  name                  = "azure-openai-v1"
+  name                  = "azure-openai-project1"
   resource_group_name   = azurerm_resource_group.rg_apim.name
   api_management_name   = azurerm_api_management.apim.name
   revision              = "1"
-  display_name          = "Azure OpenAI v1 API"
-  path                  = "openai-v1"
+  display_name          = "Foundry Projects OpenAI v1 API"
+  path                  = "openai-projects"
   api_type              = "http"
   protocols             = ["https"]
   subscription_required = false
@@ -1454,16 +1703,16 @@ resource "azurerm_api_management_api" "openai_v1" {
   }
 }
 
-## Create diagnostic setting for the OpenAI original API for Application Insights
+## Create diagnostic setting for the Foundry projects OpenAI v1 API for Application Insights
 ## 
-resource "azapi_resource" "diag_openai_v1_api_appsinights" {
+resource "azapi_resource" "diag_openai_projects_api_appsinsights" {
   depends_on = [
-    azurerm_api_management_api.openai_v1
+    azurerm_api_management_api.openai_projects
   ]
 
   type                      = "Microsoft.ApiManagement/service/apis/diagnostics@2025-09-01-preview"
   name                      = "applicationinsights"
-  parent_id                 = azurerm_api_management_api.openai_v1.id
+  parent_id                 = azurerm_api_management_api.openai_projects.id
   schema_validation_enabled = false
   body = {
     properties = {
@@ -1481,16 +1730,271 @@ resource "azapi_resource" "diag_openai_v1_api_appsinights" {
   }
 }
 
-## Create diagnostic setting for the OpenAI v1 API for Azure Monitor
+## Create diagnostic setting for the Foundry projects OpenAI v1 API for Azure Monitor
 ##
-resource "azapi_resource" "diag_openai_v1_api_monitor" {
+resource "azapi_resource" "diag_openai_projects_api_monitor" {
   depends_on = [
-    azurerm_api_management_api.openai_v1
+    azurerm_api_management_api.openai_projects
   ]
 
   type                      = "Microsoft.ApiManagement/service/apis/diagnostics@2025-09-01-preview"
   name                      = "azuremonitor"
-  parent_id                 = azurerm_api_management_api.openai_v1.id
+  parent_id                 = azurerm_api_management_api.openai_projects.id
+  schema_validation_enabled = false
+  body = {
+    properties = {
+      loggerId    = "${azurerm_api_management.apim.id}/loggers/azuremonitor"
+      alwaysLog   = "allErrors"
+      verbosity   = "information"
+      logClientIp = true
+      sampling = {
+        percentage   = 100.0
+        samplingType = "fixed"
+      }
+      largeLanguageModel = {
+        logs = "enabled"
+        requests = {
+          maxSizeInBytes = 262144
+          messages       = "all"
+        }
+        responses = {
+          maxSizeInBytes = 262144
+          messages       = "all"
+        }
+      }
+    }
+  }
+}
+
+########### Create two APIs with one for Foundry account and one for Foundry projects custom Anthropic API and
+########### diagnostic settings for both the App Insights Logger and Azure Monitor Logger
+###########
+
+## Create an API for the Foundry account for Anthropic API
+##
+resource "azurerm_api_management_api" "anthropic_account" {
+  depends_on = [
+    module.backend_pool_msfoundry_instances_anthropic_accounts
+  ]
+
+  name                  = "azure-anthropic-account"
+  resource_group_name   = azurerm_resource_group.rg_apim.name
+  api_management_name   = azurerm_api_management.apim.name
+  revision              = "1"
+  display_name          = "Foundry Account Anthropic API"
+  path                  = "anthropic-account"
+  api_type              = "http"
+  protocols             = ["https"]
+  subscription_required = false
+}
+
+## Create operations for the Foundry account Anthropic API
+##
+resource "azurerm_api_management_api_operation" "anthropic_account_messages" {
+  depends_on = [
+    azurerm_api_management_api.anthropic_account
+  ]
+
+  operation_id        = "post-messages"
+  api_name            = azurerm_api_management_api.anthropic_account.name
+  api_management_name = azurerm_api_management.apim.name
+  resource_group_name = azurerm_resource_group.rg_apim.name
+  display_name        = "Create a Message"
+  method              = "POST"
+  url_template        = "/v1/messages"
+}
+
+resource "azurerm_api_management_api_operation" "anthropic_account_count_tokens" {
+  depends_on = [
+    azurerm_api_management_api.anthropic_account
+  ]
+
+  operation_id        = "post-messages-count-tokens"
+  api_name            = azurerm_api_management_api.anthropic_account.name
+  api_management_name = azurerm_api_management.apim.name
+  resource_group_name = azurerm_resource_group.rg_apim.name
+  display_name        = "Count Message Tokens"
+  method              = "POST"
+  url_template        = "/v1/messages/count_tokens"
+}
+
+resource "azurerm_api_management_api_operation" "anthropic_account_models" {
+  depends_on = [
+    azurerm_api_management_api.anthropic_account
+  ]
+
+  operation_id        = "get-models"
+  api_name            = azurerm_api_management_api.anthropic_account.name
+  api_management_name = azurerm_api_management.apim.name
+  resource_group_name = azurerm_resource_group.rg_apim.name
+  display_name        = "List Models"
+  method              = "GET"
+  url_template        = "/v1/models"
+}
+
+## Create diagnostic setting for the Foundry account Anthropic API for Application Insights
+## 
+resource "azapi_resource" "diag_anthropic_account_api_appsinsights" {
+  depends_on = [
+    azurerm_api_management_api.anthropic_account
+  ]
+
+  type                      = "Microsoft.ApiManagement/service/apis/diagnostics@2025-09-01-preview"
+  name                      = "applicationinsights"
+  parent_id                 = azurerm_api_management_api.anthropic_account.id
+  schema_validation_enabled = false
+  body = {
+    properties = {
+      loggerId    = "${azurerm_api_management.apim.id}/loggers/logger-appinsights"
+      alwaysLog   = "allErrors"
+      verbosity   = "information"
+      logClientIp = true
+      httpCorrelationProtocol = "W3C"
+      metrics = true
+      sampling = {
+        percentage   = 100.0
+        samplingType = "fixed"
+      }
+    }
+  }
+}
+
+## Create diagnostic setting for the Foundry account Anthropic API for Azure Monitor
+##
+resource "azapi_resource" "diag_anthropic_account_api_monitor" {
+  depends_on = [
+    azurerm_api_management_api.anthropic_account
+  ]
+
+  type                      = "Microsoft.ApiManagement/service/apis/diagnostics@2025-09-01-preview"
+  name                      = "azuremonitor"
+  parent_id                 = azurerm_api_management_api.anthropic_account.id
+  schema_validation_enabled = false
+  body = {
+    properties = {
+      loggerId    = "${azurerm_api_management.apim.id}/loggers/azuremonitor"
+      alwaysLog   = "allErrors"
+      verbosity   = "information"
+      logClientIp = true
+      sampling = {
+        percentage   = 100.0
+        samplingType = "fixed"
+      }
+      largeLanguageModel = {
+        logs = "enabled"
+        requests = {
+          maxSizeInBytes = 262144
+          messages       = "all"
+        }
+        responses = {
+          maxSizeInBytes = 262144
+          messages       = "all"
+        }
+      }
+    }
+  }
+}
+
+## Create an API for the Foundry projects Anthropic API
+##
+resource "azurerm_api_management_api" "anthropic_projects" {
+  depends_on = [
+    module.backend_pool_msfoundry_instances_anthropic_project1,
+    module.backend_pool_msfoundry_instances_anthropic_project2 
+  ]
+
+  name                  = "azure-anthropic-project1"
+  resource_group_name   = azurerm_resource_group.rg_apim.name
+  api_management_name   = azurerm_api_management.apim.name
+  revision              = "1"
+  display_name          = "Foundry Projects Anthropic API"
+  path                  = "anthropic-projects"
+  api_type              = "http"
+  protocols             = ["https"]
+  subscription_required = false
+}
+
+## Create operations for the Foundry projects Anthropic API
+##
+resource "azurerm_api_management_api_operation" "anthropic_projects_messages" {
+  depends_on = [
+    azurerm_api_management_api.anthropic_projects
+  ]
+
+  operation_id        = "post-messages"
+  api_name            = azurerm_api_management_api.anthropic_projects.name
+  api_management_name = azurerm_api_management.apim.name
+  resource_group_name = azurerm_resource_group.rg_apim.name
+  display_name        = "Create a Message"
+  method              = "POST"
+  url_template        = "/v1/messages"
+}
+
+resource "azurerm_api_management_api_operation" "anthropic_projects_count_tokens" {
+  depends_on = [
+    azurerm_api_management_api.anthropic_projects
+  ]
+
+  operation_id        = "post-messages-count-tokens"
+  api_name            = azurerm_api_management_api.anthropic_projects.name
+  api_management_name = azurerm_api_management.apim.name
+  resource_group_name = azurerm_resource_group.rg_apim.name
+  display_name        = "Count Message Tokens"
+  method              = "POST"
+  url_template        = "/v1/messages/count_tokens"
+}
+
+resource "azurerm_api_management_api_operation" "anthropic_projects_models" {
+  depends_on = [
+    azurerm_api_management_api.anthropic_projects
+  ]
+
+  operation_id        = "get-models"
+  api_name            = azurerm_api_management_api.anthropic_projects.name
+  api_management_name = azurerm_api_management.apim.name
+  resource_group_name = azurerm_resource_group.rg_apim.name
+  display_name        = "List Models"
+  method              = "GET"
+  url_template        = "/v1/models"
+}
+
+## Create diagnostic setting for the Foundry projects Anthropic API for Application Insights
+## 
+resource "azapi_resource" "diag_anthropic_projects_api_appinsights" {
+  depends_on = [
+    azurerm_api_management_api.anthropic_projects
+  ]
+
+  type                      = "Microsoft.ApiManagement/service/apis/diagnostics@2025-09-01-preview"
+  name                      = "applicationinsights"
+  parent_id                 = azurerm_api_management_api.anthropic_projects.id
+  schema_validation_enabled = false
+  body = {
+    properties = {
+      loggerId    = "${azurerm_api_management.apim.id}/loggers/logger-appinsights"
+      alwaysLog   = "allErrors"
+      verbosity   = "information"
+      logClientIp = true
+      httpCorrelationProtocol = "W3C"
+      metrics = true
+      sampling = {
+        percentage   = 100.0
+        samplingType = "fixed"
+      }
+    }
+  }
+}
+
+## Create diagnostic setting for the Foundry projects Anthropic API for Azure Monitor
+##
+resource "azapi_resource" "diag_anthropic_projects_api_monitor" {
+  depends_on = [
+    azurerm_api_management_api.anthropic_projects
+  ]
+
+  type                      = "Microsoft.ApiManagement/service/apis/diagnostics@2025-09-01-preview"
+  name                      = "azuremonitor"
+  parent_id                 = azurerm_api_management_api.anthropic_projects.id
   schema_validation_enabled = false
   body = {
     properties = {
@@ -1521,17 +2025,16 @@ resource "azapi_resource" "diag_openai_v1_api_monitor" {
 ###########
 ###########
 
-## Create an API Management policy for the OpenAI original API
-## 
-resource "azurerm_api_management_api_policy" "apim_policy_openai_original" {
+## Create an API Management policy for Foundry account OpenAI v1 API
+##
+resource "azurerm_api_management_api_policy" "apim_policy_openai_account" {
   depends_on = [
-    azurerm_api_management_api.openai_original
+    azurerm_api_management_api.openai_account
   ]
 
-  api_name            = azurerm_api_management_api.openai_original.name
+  api_name            = azurerm_api_management_api.openai_account.name
   api_management_name = azurerm_api_management.apim.name
   resource_group_name = azurerm_resource_group.rg_apim.name
-
   xml_content = <<XML
     <policies>
       <inbound>
@@ -1629,7 +2132,155 @@ resource "azurerm_api_management_api_policy" "apim_policy_openai_original" {
             <authentication-managed-identity resource="https://cognitiveservices.azure.com/" client-id="${azurerm_user_assigned_identity.umi_apim.client_id}" />
             </when>
           </choose>
-          <set-backend-service backend-id="${module.backend_pool_msfoundry_instances_openai_classic.name}" />
+<choose>
+    <when condition='@{
+        var segments = context.Request.OriginalUrl.Path.ToLowerInvariant().Split(&apos;/&apos;);
+        return segments.Contains("responses") || segments.Contains("batches") || segments.Contains("files");
+    }'>
+        <set-backend-service backend-id="${module.backend_pool_msfoundry_instances_openai_accounts_stateful.name}" />
+    </when>
+    <otherwise>
+        <set-backend-service backend-id="${module.backend_pool_msfoundry_instances_openai_accounts_stateless.name}" />
+    </otherwise>
+</choose>
+      </inbound>
+      <backend>
+          <forward-request />
+      </backend>
+<outbound>
+    <base />
+</outbound>
+  </policies>
+XML
+}
+
+## Create an API Management policy for Foundry projects OpenAI v1 API
+##
+resource "azurerm_api_management_api_policy" "apim_policy_openai_projects" {
+  depends_on = [
+    azurerm_api_management_api.openai_projects
+  ]
+
+  api_name            = azurerm_api_management_api.openai_projects.name
+  api_management_name = azurerm_api_management.apim.name
+  resource_group_name = azurerm_resource_group.rg_apim.name
+  xml_content = <<XML
+    <policies>
+      <inbound>
+          <base />
+          <!-- Evaluate the JWT and ensure it was issued by the right Entra ID tenant -->
+          <validate-jwt header-name="Authorization" failed-validation-httpcode="403" failed-validation-error-message="Forbidden">
+              <openid-config url="https://login.microsoftonline.com/${var.entra_id_tenant_id}/v2.0/.well-known/openid-configuration" />
+              <issuers>
+                  <issuer>https://sts.windows.net/${var.entra_id_tenant_id}/</issuer>
+              </issuers>
+          </validate-jwt>
+        <!-- ++++++++++++++++Extract data from JWT++++++++++++++++ -->
+        <!-- Extract the Entra ID application id from the JWT -->
+        <set-variable name="appId" value="@(context.Request.Headers.GetValueOrDefault("Authorization",string.Empty).Split(' ').Last().AsJwt().Claims.GetValueOrDefault("appid", "none"))" />
+        <!-- Extract the user's UPN from the JWT -->
+        <set-variable name="jwt-user-id" value="@(context.Request.Headers.GetValueOrDefault("Authorization",string.Empty).Split(' ').Last().AsJwt().Claims.GetValueOrDefault("upn", "none"))" />
+        <!-- ++++++++++++++++Extract data from request headers++++++++++++++++ -->
+        <set-variable name="baggageMap" value="@{
+            var baggage = context.Request.Headers.GetValueOrDefault("baggage", "");
+            var map = new JObject();
+            foreach (var pair in baggage.Split(',').Select(kv => kv.Split('=')).Where(p => p.Length == 2))
+            {
+                map[pair[0].Trim()] = pair[1].Trim();
+            }
+            return map;
+        }" />
+        <!-- Extract the user_id from the baggage header -->
+        <set-variable name="baggage-user-id" value="@{
+            var map = (JObject)context.Variables["baggageMap"];
+            return map["user.id"]?.ToString() ?? "none";
+        }" />
+        <!-- Extract the Entra ID Agent Identity Blueprint ID -->
+        <set-variable name="baggage-entra-agent-blueprint-id" value="@{
+            var map = (JObject)context.Variables["baggageMap"];
+            return map["microsoft.a365.agent.blueprint.id"]?.ToString() ?? "none";
+        }" />
+        <!-- Extract the Entra ID Agent Identity ID -->
+        <set-variable name="baggage-entra-agent-id" value="@{
+            var map = (JObject)context.Variables["baggageMap"];
+            return map["gen_ai.agent.id"]?.ToString() ?? "none";
+        }" />
+        <!-- Extract the Agent ID from the x-ms-foundry-agent-id header. This is relevant for Foundry Prompt Agents -->
+        <set-variable name="x-ms-foundry-agent-id" value="@(context.Request.Headers.GetValueOrDefault("x-ms-foundry-agent-id", "none"))" />
+        <!-- Extract the project GUID from the x-ms-foundry-project-id header. This is relevant for Foundry Hosted Agents and Foundry Prompt Agents -->
+        <set-variable name="x-ms-foundry-project-id" value="@(context.Request.Headers.GetValueOrDefault("x-ms-foundry-project-id", "none"))" />
+        <!-- Extract the Foundry Project name from the "openai-project" header. This is only relevant for Foundry -->
+        <set-variable name="foundryprojectName" value="@(context.Request.Headers.GetValueOrDefault("openai-project", "none"))" />
+        <!-- Extract the deployment name from the uri path -->
+        <set-variable name="uriPath" value="@(context.Request.OriginalUrl.Path)" />
+        <set-variable name="deploymentName" value="@(System.Text.RegularExpressions.Regex.Match((string)context.Variables["uriPath"], "/deployments/([^/]+)").Groups[1].Value)" />
+        <!-- Configure tracing to capture data to enrich logs -->
+        <trace source="foundry-usage-data" severity="information">
+            <message>LLM Usage</message>
+            <metadata name="correlationId" value="@(context.RequestId.ToString())" />
+            <metadata name="appId" value="@((string)context.Variables["appId"])" />
+            <metadata name="entra-agent-blueprint-id" value="@((string)context.Variables["baggage-entra-agent-blueprint-id"])" />
+            <metadata name="entra-agent-id" value="@((string)context.Variables["baggage-entra-agent-id"])" />
+            <metadata name="traceUserId" value="@((string)context.Variables["baggage-user-id"])" />
+            <metadata name="foundry-agent-id" value="@((string)context.Variables["x-ms-foundry-agent-id"])" />
+            <metadata name="foundry-project-id" value="@((string)context.Variables["x-ms-foundry-project-id"])" />
+        </trace>
+          <choose>
+            <!-- If the request isn't coming from the Foundry Chat Playground or Foundry Agent -->
+            <when condition="@(context.Variables.GetValueOrDefault<string>("x-ms-foundry-project-id") == "none")">
+                <!-- Throttle token usage based on the appid -->
+                <llm-token-limit counter-key="@(context.Variables.GetValueOrDefault<string>("appId","none"))" estimate-prompt-tokens="true" tokens-per-minute="50000" remaining-tokens-header-name="x-apim-remaining-token" tokens-consumed-header-name="x-apim-tokens-consumed" />
+                <!-- Emit token metrics to Application Insights -->
+                <llm-emit-token-metric namespace="openai-metrics">
+                    <dimension name="model" value="@(context.Variables.GetValueOrDefault<string>("deploymentName","None"))" />
+                    <dimension name="appId" value="@(context.Variables.GetValueOrDefault<string>("appId", "none"))" />
+                </llm-emit-token-metric>
+            </when>
+            <!-- If the request is from the Foundry Chat Playground or Foundry Agent -->
+            <otherwise>
+                <choose>
+                    <!-- Throttle token usage based on the Foundry Project ID and Foundry Agent ID for Prompt Agents -->
+                    <when condition="@(context.Variables.GetValueOrDefault<string>("x-ms-foundry-agent-id") != "none")">
+                        <llm-token-limit counter-key="@($"{context.Variables.GetValueOrDefault<string>("x-ms-foundry-project-id")}_{context.Variables.GetValueOrDefault<string>("x-ms-foundry-agent-id")}")" estimate-prompt-tokens="true" tokens-per-minute="50000" remaining-tokens-header-name="x-apim-remaining-token" tokens-consumed-header-name="x-apim-tokens-consumed" />
+                    </when>
+                    <!-- Throttle token usage based on the Foundry Project ID and Hosted Agent ID for Hosted Agents -->
+                    <when condition="@(context.Variables.GetValueOrDefault<string>("x-ms-foundry-agent-id") == "none" && context.Variables.GetValueOrDefault<string>("entra-agent-blueprint-id") != "none" && context.Variables.GetValueOrDefault<string>("x-ms-foundry-project-id") != "none")">
+                        <llm-token-limit counter-key="@($"{context.Variables.GetValueOrDefault<string>("x-ms-foundry-project-id")}_{context.Variables.GetValueOrDefault<string>("entra-agent-blueprint-id")}")" estimate-prompt-tokens="true" tokens-per-minute="50000" remaining-tokens-header-name="x-apim-remaining-token" tokens-consumed-header-name="x-apim-tokens-consumed" />
+                    </when>
+                </choose>
+                <!-- Emit token metrics to Application Insights -->
+                <llm-emit-token-metric namespace="llm-metrics">
+                    <dimension name="model" value="@(context.Variables.GetValueOrDefault<string>("deploymentName","None"))" />
+                    <dimension name="projectId" value="@(context.Variables.GetValueOrDefault<string>("x-ms-foundry-project-id","00000000-0000-0000-0000-000000000000"))" />
+                </llm-emit-token-metric>
+            </otherwise>
+        </choose>
+          <choose>
+            <!-- If the request is from a Foundry Prompt Agent or Foundry Host Agent swap to use the APIM's UMI to save me from having to add permissions for the agent identities -->
+            <when condition="@((context.Variables.GetValueOrDefault<string>("x-ms-foundry-agent-id") != "none" || context.Variables.GetValueOrDefault<string>("entra-agent-blueprint-id") != "none") && context.Variables.GetValueOrDefault<string>("x-ms-foundry-project-id") != "none")">
+            <authentication-managed-identity resource="https://cognitiveservices.azure.com/" client-id="${azurerm_user_assigned_identity.umi_apim.client_id}" />
+            </when>
+          </choose>
+          <choose>
+            <!-- If the x-custom-foundry-project header is set to 1 -->
+            <when condition="@(context.Request.Headers.GetValueOrDefault("x-custom-foundry-project", "") == "1")">
+              <set-backend-service backend-id="${module.backend_pool_msfoundry_instances_openai_project1.name}" />
+            </when>
+            <!-- If the x-custom-foundry-project header is set to 2 -->
+            <when condition="@(context.Request.Headers.GetValueOrDefault("x-custom-foundry-project", "") == "2")">
+              <set-backend-service backend-id="${module.backend_pool_msfoundry_instances_openai_project2.name}" />
+            </when>
+            <otherwise>
+              <!-- If x-custom-foundry-project header isn't 1 or 2 send an error bad project message -->
+              <return-response>
+                <set-status code="400" reason="Bad Request" />
+                <set-header name="Content-Type" exists-action="override">
+                  <value>application/json</value>
+                </set-header>
+                <set-body>@("{\"error\": \"Invalid x-custom-foundry-project header value.\"}")</set-body>
+              </return-response>
+            </otherwise>
+          </choose>
       </inbound>
       <backend>
           <forward-request />
@@ -1641,14 +2292,14 @@ resource "azurerm_api_management_api_policy" "apim_policy_openai_original" {
 XML
 }
 
-## Create an API Management policy for the OpenAI v1 API
+## Create an API Management policy for Foundry account Anthropic API
 ##
-resource "azurerm_api_management_api_policy" "apim_policy_openai_v1" {
+resource "azurerm_api_management_api_policy" "apim_policy_anthropic_account" {
   depends_on = [
-    azurerm_api_management_api.openai_v1
+    azurerm_api_management_api.anthropic_account
   ]
 
-  api_name            = azurerm_api_management_api.openai_v1.name
+  api_name            = azurerm_api_management_api.anthropic_account.name
   api_management_name = azurerm_api_management.apim.name
   resource_group_name = azurerm_resource_group.rg_apim.name
   xml_content = <<XML
@@ -1748,7 +2399,145 @@ resource "azurerm_api_management_api_policy" "apim_policy_openai_v1" {
             <authentication-managed-identity resource="https://cognitiveservices.azure.com/" client-id="${azurerm_user_assigned_identity.umi_apim.client_id}" />
             </when>
           </choose>
-          <set-backend-service backend-id="${module.backend_pool_msfoundry_instances_openai_v1.name}" />
+          <set-backend-service backend-id="${module.backend_pool_msfoundry_instances_anthropic_accounts.name}" />
+      </inbound>
+      <backend>
+          <forward-request />
+      </backend>
+      <outbound>
+          <base />
+      </outbound>
+  </policies>
+XML
+}
+
+## Create an API Management policy for Foundry projects Anthropic API
+##
+resource "azurerm_api_management_api_policy" "apim_policy_anthropic_projects" {
+  depends_on = [
+    azurerm_api_management_api.anthropic_projects
+  ]
+
+  api_name            = azurerm_api_management_api.anthropic_projects.name
+  api_management_name = azurerm_api_management.apim.name
+  resource_group_name = azurerm_resource_group.rg_apim.name
+  xml_content = <<XML
+    <policies>
+      <inbound>
+          <base />
+          <!-- Evaluate the JWT and ensure it was issued by the right Entra ID tenant -->
+          <validate-jwt header-name="Authorization" failed-validation-httpcode="403" failed-validation-error-message="Forbidden">
+              <openid-config url="https://login.microsoftonline.com/${var.entra_id_tenant_id}/v2.0/.well-known/openid-configuration" />
+              <issuers>
+                  <issuer>https://sts.windows.net/${var.entra_id_tenant_id}/</issuer>
+              </issuers>
+          </validate-jwt>
+        <!-- ++++++++++++++++Extract data from JWT++++++++++++++++ -->
+        <!-- Extract the Entra ID application id from the JWT -->
+        <set-variable name="appId" value="@(context.Request.Headers.GetValueOrDefault("Authorization",string.Empty).Split(' ').Last().AsJwt().Claims.GetValueOrDefault("appid", "none"))" />
+        <!-- Extract the user's UPN from the JWT -->
+        <set-variable name="jwt-user-id" value="@(context.Request.Headers.GetValueOrDefault("Authorization",string.Empty).Split(' ').Last().AsJwt().Claims.GetValueOrDefault("upn", "none"))" />
+        <!-- ++++++++++++++++Extract data from request headers++++++++++++++++ -->
+        <set-variable name="baggageMap" value="@{
+            var baggage = context.Request.Headers.GetValueOrDefault("baggage", "");
+            var map = new JObject();
+            foreach (var pair in baggage.Split(',').Select(kv => kv.Split('=')).Where(p => p.Length == 2))
+            {
+                map[pair[0].Trim()] = pair[1].Trim();
+            }
+            return map;
+        }" />
+        <!-- Extract the user_id from the baggage header -->
+        <set-variable name="baggage-user-id" value="@{
+            var map = (JObject)context.Variables["baggageMap"];
+            return map["user.id"]?.ToString() ?? "none";
+        }" />
+        <!-- Extract the Entra ID Agent Identity Blueprint ID -->
+        <set-variable name="baggage-entra-agent-blueprint-id" value="@{
+            var map = (JObject)context.Variables["baggageMap"];
+            return map["microsoft.a365.agent.blueprint.id"]?.ToString() ?? "none";
+        }" />
+        <!-- Extract the Entra ID Agent Identity ID -->
+        <set-variable name="baggage-entra-agent-id" value="@{
+            var map = (JObject)context.Variables["baggageMap"];
+            return map["gen_ai.agent.id"]?.ToString() ?? "none";
+        }" />
+        <!-- Extract the Agent ID from the x-ms-foundry-agent-id header. This is relevant for Foundry Prompt Agents -->
+        <set-variable name="x-ms-foundry-agent-id" value="@(context.Request.Headers.GetValueOrDefault("x-ms-foundry-agent-id", "none"))" />
+        <!-- Extract the project GUID from the x-ms-foundry-project-id header. This is relevant for Foundry Hosted Agents and Foundry Prompt Agents -->
+        <set-variable name="x-ms-foundry-project-id" value="@(context.Request.Headers.GetValueOrDefault("x-ms-foundry-project-id", "none"))" />
+        <!-- Extract the Foundry Project name from the "openai-project" header. This is only relevant for Foundry -->
+        <set-variable name="foundryprojectName" value="@(context.Request.Headers.GetValueOrDefault("openai-project", "none"))" />
+        <!-- Extract the deployment name from the uri path -->
+        <set-variable name="uriPath" value="@(context.Request.OriginalUrl.Path)" />
+        <set-variable name="deploymentName" value="@(System.Text.RegularExpressions.Regex.Match((string)context.Variables["uriPath"], "/deployments/([^/]+)").Groups[1].Value)" />
+        <!-- Configure tracing to capture data to enrich logs -->
+        <trace source="foundry-usage-data" severity="information">
+            <message>LLM Usage</message>
+            <metadata name="correlationId" value="@(context.RequestId.ToString())" />
+            <metadata name="appId" value="@((string)context.Variables["appId"])" />
+            <metadata name="entra-agent-blueprint-id" value="@((string)context.Variables["baggage-entra-agent-blueprint-id"])" />
+            <metadata name="entra-agent-id" value="@((string)context.Variables["baggage-entra-agent-id"])" />
+            <metadata name="traceUserId" value="@((string)context.Variables["baggage-user-id"])" />
+            <metadata name="foundry-agent-id" value="@((string)context.Variables["x-ms-foundry-agent-id"])" />
+            <metadata name="foundry-project-id" value="@((string)context.Variables["x-ms-foundry-project-id"])" />
+        </trace>
+          <choose>
+            <!-- If the request isn't coming from the Foundry Chat Playground or Foundry Agent -->
+            <when condition="@(context.Variables.GetValueOrDefault<string>("x-ms-foundry-project-id") == "none")">
+                <!-- Throttle token usage based on the appid -->
+                <llm-token-limit counter-key="@(context.Variables.GetValueOrDefault<string>("appId","none"))" estimate-prompt-tokens="true" tokens-per-minute="50000" remaining-tokens-header-name="x-apim-remaining-token" tokens-consumed-header-name="x-apim-tokens-consumed" />
+                <!-- Emit token metrics to Application Insights -->
+                <llm-emit-token-metric namespace="openai-metrics">
+                    <dimension name="model" value="@(context.Variables.GetValueOrDefault<string>("deploymentName","None"))" />
+                    <dimension name="appId" value="@(context.Variables.GetValueOrDefault<string>("appId", "none"))" />
+                </llm-emit-token-metric>
+            </when>
+            <!-- If the request is from the Foundry Chat Playground or Foundry Agent -->
+            <otherwise>
+                <choose>
+                    <!-- Throttle token usage based on the Foundry Project ID and Foundry Agent ID for Prompt Agents -->
+                    <when condition="@(context.Variables.GetValueOrDefault<string>("x-ms-foundry-agent-id") != "none")">
+                        <llm-token-limit counter-key="@($"{context.Variables.GetValueOrDefault<string>("x-ms-foundry-project-id")}_{context.Variables.GetValueOrDefault<string>("x-ms-foundry-agent-id")}")" estimate-prompt-tokens="true" tokens-per-minute="50000" remaining-tokens-header-name="x-apim-remaining-token" tokens-consumed-header-name="x-apim-tokens-consumed" />
+                    </when>
+                    <!-- Throttle token usage based on the Foundry Project ID and Hosted Agent ID for Hosted Agents -->
+                    <when condition="@(context.Variables.GetValueOrDefault<string>("x-ms-foundry-agent-id") == "none" && context.Variables.GetValueOrDefault<string>("entra-agent-blueprint-id") != "none" && context.Variables.GetValueOrDefault<string>("x-ms-foundry-project-id") != "none")">
+                        <llm-token-limit counter-key="@($"{context.Variables.GetValueOrDefault<string>("x-ms-foundry-project-id")}_{context.Variables.GetValueOrDefault<string>("entra-agent-blueprint-id")}")" estimate-prompt-tokens="true" tokens-per-minute="50000" remaining-tokens-header-name="x-apim-remaining-token" tokens-consumed-header-name="x-apim-tokens-consumed" />
+                    </when>
+                </choose>
+                <!-- Emit token metrics to Application Insights -->
+                <llm-emit-token-metric namespace="llm-metrics">
+                    <dimension name="model" value="@(context.Variables.GetValueOrDefault<string>("deploymentName","None"))" />
+                    <dimension name="projectId" value="@(context.Variables.GetValueOrDefault<string>("x-ms-foundry-project-id","00000000-0000-0000-0000-000000000000"))" />
+                </llm-emit-token-metric>
+            </otherwise>
+        </choose>
+          <choose>
+            <!-- If the request is from a Foundry Prompt Agent or Foundry Host Agent swap to use the APIM's UMI to save me from having to add permissions for the agent identities -->
+            <when condition="@((context.Variables.GetValueOrDefault<string>("x-ms-foundry-agent-id") != "none" || context.Variables.GetValueOrDefault<string>("entra-agent-blueprint-id") != "none") && context.Variables.GetValueOrDefault<string>("x-ms-foundry-project-id") != "none")">
+            <authentication-managed-identity resource="https://cognitiveservices.azure.com/" client-id="${azurerm_user_assigned_identity.umi_apim.client_id}" />
+            </when>
+          </choose>
+          <choose>
+            <!-- If the x-custom-foundry-project header is set to 1 -->
+            <when condition="@(context.Request.Headers.GetValueOrDefault("x-custom-foundry-project", "") == "1")">
+              <set-backend-service backend-id="${module.backend_pool_msfoundry_instances_anthropic_project1.name}" />
+            </when>
+            <!-- If the x-custom-foundry-project header is set to 2 -->
+            <when condition="@(context.Request.Headers.GetValueOrDefault("x-custom-foundry-project", "") == "2")">
+              <set-backend-service backend-id="${module.backend_pool_msfoundry_instances_anthropic_project2.name}" />
+            </when>
+            <otherwise>
+              <!-- If x-custom-foundry-project header isn't 1 or 2 send an error bad project message -->
+              <return-response>
+                <set-status code="400" reason="Bad Request" />
+                <set-header name="Content-Type" exists-action="override">
+                  <value>application/json</value>
+                </set-header>
+                <set-body>@("{\"error\": \"Invalid x-custom-foundry-project header value.\"}")</set-body>
+              </return-response>
+            </otherwise>
+          </choose>
       </inbound>
       <backend>
           <forward-request />
@@ -1801,30 +2590,31 @@ resource "azurerm_api_management_api_operation_policy" "hello_world_get_policy" 
 ########### since this is simply intended to demonstrate how a 3rd party gateway could work
 ###########
 
-## Create an API for the OpenAI Inferencing API that will be used to demonstrate the model gateway connection
+## Create an API for the OpenAI v1 API that will be used to demonstrate the model gateway connection
 ##
 resource "azurerm_api_management_api" "openai_model_gateway" {
   depends_on = [
     azurerm_api_management_custom_domain.apim_custom_domains,
-    module.backend_pool_msfoundry_instances_openai_classic
+    module.backend_pool_msfoundry_instances_openai_accounts_stateful,
+    module.backend_pool_msfoundry_instances_openai_accounts_stateless
   ]
 
   name                  = "openai-model-gateway"
   resource_group_name   = azurerm_resource_group.rg_apim.name
   api_management_name   = azurerm_api_management.apim.name
   revision              = "1"
-  display_name          = "Azure OpenAI Classic - Model Gateway"
+  display_name          = "Azure OpenAI v1 API for Model Gateway Pattern"
   path                  = "openai-model-gateway"
   api_type              = "http"
   protocols             = ["https"]
-  subscription_required = false
+  subscription_required = true
   import {
     content_format = "openapi+json"
-    content_value  = file("${path.module}/api-specs/2025-04-01-preview-aoai-inferencing.json")
+    content_value  = file("${path.module}/api-specs/azure-v1-v1-generated.json")
   }
 }
 
-## Create diagnostic setting for the OpenAI Inference API for Application Insights that will be used to demonstrate the model gateway connection
+## Create diagnostic setting for the OpenAI v1 APIfor Application Insights that will be used to demonstrate the model gateway connection
 ##
 resource "azapi_resource" "diag_ai_openai_model_gateway_appsinights" {
   depends_on = [
@@ -1851,7 +2641,7 @@ resource "azapi_resource" "diag_ai_openai_model_gateway_appsinights" {
   }
 }
 
-## Create diagnostic setting for the OpenAI original API for Azure Monitor that will be used to demonstrate the model gateway connection
+## Create diagnostic setting for the OpenAI v1 API for Azure Monitor that will be used to demonstrate the model gateway connection
 ##
 resource "azapi_resource" "diag_openai_model_gateway_api_monitor" {
   depends_on = [
@@ -1887,7 +2677,7 @@ resource "azapi_resource" "diag_openai_model_gateway_api_monitor" {
   }
 }
 
-## Create an API Management policy for the OpenAI original API that will be used to demonstrate the model gateway connection. 
+## Create an API Management policy for the OpenAI v1 API that will be used to demonstrate the model gateway connection. 
 ## This is a very basic policy
 resource "azurerm_api_management_api_policy" "apim_policy_openai_model_gateway" {
   depends_on = [
@@ -1901,8 +2691,161 @@ resource "azurerm_api_management_api_policy" "apim_policy_openai_model_gateway" 
     <policies>
       <inbound>
           <base />
-          <authentication-managed-identity resource="https://cognitiveservices.azure.com/" client-id="${azurerm_user_assigned_identity.umi_apim.client_id}" />
-          <set-backend-service backend-id="${module.backend_pool_msfoundry_instances_openai_classic.name}" />
+          <authentication-managed-identity resource="https://ai.azure.com/" client-id="${azurerm_user_assigned_identity.umi_apim.client_id}" />
+          <set-backend-service backend-id="${module.backend_pool_msfoundry_instances_openai_accounts_stateless.name}" />
+      </inbound>
+      <backend>
+          <forward-request />
+      </backend>
+      <outbound>
+          <base />
+      </outbound>
+  </policies>
+XML
+}
+
+## Create an API for the Anthropic API that will be used to demonstrate the model gateway connection
+##
+resource "azurerm_api_management_api" "anthropic_model_gateway" {
+  depends_on = [
+    azurerm_api_management_custom_domain.apim_custom_domains,
+    module.backend_pool_msfoundry_instances_anthropic_accounts
+  ]
+
+  name                  = "anthropic-model-gateway"
+  resource_group_name   = azurerm_resource_group.rg_apim.name
+  api_management_name   = azurerm_api_management.apim.name
+  revision              = "1"
+  display_name          = "Anthropic API for Model Gateway Pattern"
+  path                  = "anthropic-model-gateway"
+  api_type              = "http"
+  protocols             = ["https"]
+  subscription_required = true
+}
+
+## Create operations for the model gateway Anthropic API
+##
+resource "azurerm_api_management_api_operation" "anthropic_model_gateway_messages" {
+  depends_on = [
+    azurerm_api_management_api.anthropic_model_gateway
+  ]
+
+  operation_id        = "post-messages"
+  api_name            = azurerm_api_management_api.anthropic_model_gateway.name
+  api_management_name = azurerm_api_management.apim.name
+  resource_group_name = azurerm_resource_group.rg_apim.name
+  display_name        = "Create a Message"
+  method              = "POST"
+  url_template        = "/v1/messages"
+}
+
+resource "azurerm_api_management_api_operation" "anthropic_model_gateway_count_tokens" {
+  depends_on = [
+    azurerm_api_management_api.anthropic_model_gateway
+  ]
+
+  operation_id        = "post-messages-count-tokens"
+  api_name            = azurerm_api_management_api.anthropic_model_gateway.name
+  api_management_name = azurerm_api_management.apim.name
+  resource_group_name = azurerm_resource_group.rg_apim.name
+  display_name        = "Count Message Tokens"
+  method              = "POST"
+  url_template        = "/v1/messages/count_tokens"
+}
+
+resource "azurerm_api_management_api_operation" "anthropic_model_gateway_models" {
+  depends_on = [
+    azurerm_api_management_api.anthropic_model_gateway
+  ]
+
+  operation_id        = "get-models"
+  api_name            = azurerm_api_management_api.anthropic_model_gateway.name
+  api_management_name = azurerm_api_management.apim.name
+  resource_group_name = azurerm_resource_group.rg_apim.name
+  display_name        = "List Models"
+  method              = "GET"
+  url_template        = "/v1/models"
+}
+
+## Create diagnostic setting for the Anthropic API for Application Insights that will be used to demonstrate the model gateway connection
+##
+resource "azapi_resource" "diag_ai_anthropic_model_gateway_appsinights" {
+  depends_on = [
+    azurerm_api_management_api.anthropic_model_gateway
+  ]
+
+  type                      = "Microsoft.ApiManagement/service/apis/diagnostics@2025-09-01-preview"
+  name                      = "applicationinsights"
+  parent_id                 = azurerm_api_management_api.anthropic_model_gateway.id
+  schema_validation_enabled = false
+  body = {
+    properties = {
+      loggerId    = "${azurerm_api_management.apim.id}/loggers/logger-appinsights"
+      alwaysLog   = "allErrors"
+      verbosity   = "information"
+      logClientIp = true
+      httpCorrelationProtocol = "W3C"
+      metrics = true
+      sampling = {
+        percentage   = 100.0
+        samplingType = "fixed"
+      }
+    }
+  }
+}
+
+## Create diagnostic setting for the Anthropic API for Azure Monitor that will be used to demonstrate the model gateway connection
+##
+resource "azapi_resource" "diag_anthropic_model_gateway_api_monitor" {
+  depends_on = [
+    azurerm_api_management_api.anthropic_model_gateway
+  ]
+
+  type                      = "Microsoft.ApiManagement/service/apis/diagnostics@2025-09-01-preview"
+  name                      = "azuremonitor"
+  parent_id                 = azurerm_api_management_api.anthropic_model_gateway.id
+  schema_validation_enabled = false
+  body = {
+    properties = {
+      loggerId    = "${azurerm_api_management.apim.id}/loggers/azuremonitor"
+      alwaysLog   = "allErrors"
+      verbosity   = "information"
+      logClientIp = true
+      sampling = {
+        percentage   = 100.0
+        samplingType = "fixed"
+      }
+      largeLanguageModel = {
+        logs = "enabled"
+        requests = {
+          maxSizeInBytes = 262144
+          messages       = "all"
+        }
+        responses = {
+          maxSizeInBytes = 262144
+          messages       = "all"
+        }
+      }
+    }
+  }
+}
+
+## Create an API Management policy for the Anthropic API that will be used to demonstrate the model gateway connection. 
+## This is a very basic policy
+resource "azurerm_api_management_api_policy" "apim_policy_anthropic_model_gateway" {
+  depends_on = [
+    azurerm_api_management_api.anthropic_model_gateway
+  ]
+  api_name            = azurerm_api_management_api.anthropic_model_gateway.name
+  api_management_name = azurerm_api_management.apim.name
+  resource_group_name = azurerm_resource_group.rg_apim.name
+
+  xml_content = <<XML
+    <policies>
+      <inbound>
+          <base />
+          <authentication-managed-identity resource="https://ai.azure.com/" client-id="${azurerm_user_assigned_identity.umi_apim.client_id}" />
+          <set-backend-service backend-id="${module.backend_pool_msfoundry_instances_anthropic_accounts.name}" />
       </inbound>
       <backend>
           <forward-request />
@@ -1920,13 +2863,13 @@ XML
 
 ## Create an operation to support getting a specific deployment by name when using the Foundry APIM connection
 ##
-resource "azurerm_api_management_api_operation" "apim_operation_openai_original_get_deployment_by_name" {
+resource "azurerm_api_management_api_operation" "apim_operation_openai_get_deployment_by_name" {
   depends_on = [
-    azurerm_api_management_api.openai_original
+    azurerm_api_management_api.openai_account
   ]
 
   operation_id        = "get-deployment-by-name"
-  api_name            = azurerm_api_management_api.openai_original.name
+  api_name            = azurerm_api_management_api.openai_account.name
   api_management_name = azurerm_api_management.apim.name
   resource_group_name = azurerm_resource_group.rg_apim.name
   display_name        = "Get Deployment by Name"
@@ -1942,13 +2885,13 @@ resource "azurerm_api_management_api_operation" "apim_operation_openai_original_
 
 ## Create an policy for the get deployment by name operation to route to the Foundry APIM connection
 ##
-resource "azurerm_api_management_api_operation_policy" "apim_policy_openai_original_get_deployment_by_name" {
+resource "azurerm_api_management_api_operation_policy" "apim_policy_openai_get_deployment_by_name" {
   depends_on = [
-    azurerm_api_management_api_operation.apim_operation_openai_original_get_deployment_by_name,
+    azurerm_api_management_api_operation.apim_operation_openai_get_deployment_by_name,
   ]
 
-  api_name            = azurerm_api_management_api.openai_original.name
-  operation_id        = azurerm_api_management_api_operation.apim_operation_openai_original_get_deployment_by_name.operation_id
+  api_name            = azurerm_api_management_api.openai_account.name
+  operation_id        = azurerm_api_management_api_operation.apim_operation_openai_get_deployment_by_name.operation_id
   api_management_name = azurerm_api_management.apim.name
   resource_group_name = azurerm_resource_group.rg_apim.name
 
@@ -1975,13 +2918,13 @@ resource "azurerm_api_management_api_operation_policy" "apim_policy_openai_origi
 
 ## Create an operation to support enumerating deployments when using the Foundry APIM connection
 ##
-resource "azurerm_api_management_api_operation" "apim_operation_openai_original_list_deployments_by_name" {
+resource "azurerm_api_management_api_operation" "apim_operation_openai_list_deployments_by_name" {
   depends_on = [
-    azurerm_api_management_api_operation_policy.apim_policy_openai_original_get_deployment_by_name
+    azurerm_api_management_api_operation_policy.apim_policy_openai_get_deployment_by_name
   ]
 
   operation_id        = "list-deployments"
-  api_name            = azurerm_api_management_api.openai_original.name
+  api_name            = azurerm_api_management_api.openai_account.name
   api_management_name = azurerm_api_management.apim.name
   resource_group_name = azurerm_resource_group.rg_apim.name
   display_name        = "List Deployments"
@@ -1991,117 +2934,13 @@ resource "azurerm_api_management_api_operation" "apim_operation_openai_original_
 
 ## Create an policy for the list deployments operation to route to the Foundry APIM connection
 ##
-resource "azurerm_api_management_api_operation_policy" "apim_policy_openai_original_list_deployments_by_name" {
+resource "azurerm_api_management_api_operation_policy" "apim_policy_openai_list_deployments_by_name" {
   depends_on = [
-    azurerm_api_management_api_operation.apim_operation_openai_original_list_deployments_by_name
+    azurerm_api_management_api_operation.apim_operation_openai_list_deployments_by_name
   ]
 
-  api_name            = azurerm_api_management_api.openai_original.name
-  operation_id        = azurerm_api_management_api_operation.apim_operation_openai_original_list_deployments_by_name.operation_id
-  api_management_name = azurerm_api_management.apim.name
-  resource_group_name = azurerm_resource_group.rg_apim.name
-
-  xml_content = <<XML
-    <policies>
-      <inbound>
-        <authentication-managed-identity resource="https://management.azure.com/" client-id="${azurerm_user_assigned_identity.umi_apim.client_id}" />
-        <rewrite-uri template="/deployments?api-version=${local.ai_services_arm_api_version}" copy-unmatched-params="false" />
-        <!--Azure Resource Manager-->
-        <set-backend-service base-url="https://management.azure.com${azurerm_cognitive_account.ms_foundry_accounts[keys(local.ms_foundry_regions)[0]].id}" />
-      </inbound>
-      <backend>
-        <base />
-      </backend>
-      <outbound>
-        <base />
-      </outbound>
-      <on-error>
-        <base />
-      </on-error>
-    </policies>
-  XML
-}
-
-## Create an operation to support enumerating deployments when using the Foundry APIM connection
-##
-resource "azurerm_api_management_api_operation" "apim_operation_openai_v1_get_deployment_by_name" {
-  depends_on = [
-    azurerm_api_management_api.openai_v1
-  ]
-
-  operation_id        = "get-deployment-by-name"
-  api_name            = azurerm_api_management_api.openai_v1.name
-  api_management_name = azurerm_api_management.apim.name
-  resource_group_name = azurerm_resource_group.rg_apim.name
-  display_name        = "Get Deployment by Name"
-  method              = "GET"
-  url_template        = "/deployments/{deploymentName}"
-
-  template_parameter {
-    name     = "deploymentName"
-    required = true
-    type     = "string"
-  }
-}
-
-## Create an policy for the get deployment by name operation to route to the Foundry APIM connection
-##
-resource "azurerm_api_management_api_operation_policy" "apim_policy_openai_v1_get_deployment_by_name" {
-  depends_on = [
-    azurerm_api_management_api_operation.apim_operation_openai_v1_get_deployment_by_name
-  ]
-
-  api_name            = azurerm_api_management_api.openai_v1.name
-  operation_id        = azurerm_api_management_api_operation.apim_operation_openai_v1_get_deployment_by_name.operation_id
-  api_management_name = azurerm_api_management.apim.name
-  resource_group_name = azurerm_resource_group.rg_apim.name
-
-  xml_content = <<XML
-    <policies>
-      <inbound>
-        <authentication-managed-identity resource="https://management.azure.com/" client-id="${azurerm_user_assigned_identity.umi_apim.client_id}" />
-        <rewrite-uri template="/deployments/{deploymentName}?api-version=${local.ai_services_arm_api_version}" copy-unmatched-params="false" />
-        <!--Azure Resource Manager-->
-        <set-backend-service base-url="https://management.azure.com${azurerm_cognitive_account.ms_foundry_accounts[keys(local.ms_foundry_regions)[0]].id}" />
-      </inbound>
-      <backend>
-        <base />
-      </backend>
-      <outbound>
-        <base />
-      </outbound>
-      <on-error>
-        <base />
-      </on-error>
-    </policies>
-  XML
-}
-
-## Create an operation to support enumerating deployments when using the Foundry APIM connection
-##
-resource "azurerm_api_management_api_operation" "apim_operation_openai_v1_list_deployments_by_name" {
-  depends_on = [
-    azurerm_api_management_api_operation_policy.apim_policy_openai_v1_get_deployment_by_name
-  ]
-
-  operation_id        = "list-deployments"
-  api_name            = azurerm_api_management_api.openai_v1.name
-  api_management_name = azurerm_api_management.apim.name
-  resource_group_name = azurerm_resource_group.rg_apim.name
-  display_name        = "List Deployments"
-  method              = "GET"
-  url_template        = "/deployments"
-}
-
-## Create an policy for the list deployments operation to route to the Foundry APIM connection
-##
-resource "azurerm_api_management_api_operation_policy" "apim_policy_openai_v1_list_deployments_by_name" {
-  depends_on = [
-    azurerm_api_management_api_operation.apim_operation_openai_v1_list_deployments_by_name
-  ]
-
-  api_name            = azurerm_api_management_api.openai_v1.name
-  operation_id        = azurerm_api_management_api_operation.apim_operation_openai_v1_list_deployments_by_name.operation_id
+  api_name            = azurerm_api_management_api.openai_account.name
+  operation_id        = azurerm_api_management_api_operation.apim_operation_openai_list_deployments_by_name.operation_id
   api_management_name = azurerm_api_management.apim.name
   resource_group_name = azurerm_resource_group.rg_apim.name
 
@@ -2230,6 +3069,56 @@ resource "azurerm_api_management_api_operation_policy" "apim_policy_openai_model
   XML
 }
 
+## Create an operation to support enumerating deployments when using the Foundry APIM connection
+##
+resource "azurerm_api_management_api_operation" "apim_operation_anthropic_model_gateway_list_deployments_by_name" {
+  depends_on = [
+    azurerm_api_management_api.anthropic_model_gateway
+  ]
+
+  operation_id        = "list-deployments"
+  api_name            = azurerm_api_management_api.anthropic_model_gateway.name
+  api_management_name = azurerm_api_management.apim.name
+  resource_group_name = azurerm_resource_group.rg_apim.name
+  display_name        = "List Deployments"
+  method              = "GET"
+  url_template        = "/deployments"
+}
+
+## Create an policy for the list deployments operation to route to the Foundry APIM connection
+##
+resource "azurerm_api_management_api_operation_policy" "apim_policy_anthropic_model_gateway_list_deployments_by_name" {
+  depends_on = [
+    azurerm_api_management_api_operation.apim_operation_anthropic_model_gateway_list_deployments_by_name
+  ]
+
+  api_name            = azurerm_api_management_api.anthropic_model_gateway.name
+  operation_id        = azurerm_api_management_api_operation.apim_operation_anthropic_model_gateway_list_deployments_by_name.operation_id
+  api_management_name = azurerm_api_management.apim.name
+  resource_group_name = azurerm_resource_group.rg_apim.name
+
+  xml_content = <<XML
+    <policies>
+      <inbound>
+        <authentication-managed-identity resource="https://management.azure.com/" client-id="${azurerm_user_assigned_identity.umi_apim.client_id}" />
+        <rewrite-uri template="/deployments?api-version=${local.ai_services_arm_api_version}" copy-unmatched-params="false" />
+        <!--Azure Resource Manager-->
+        <set-backend-service base-url="https://management.azure.com${azurerm_cognitive_account.ms_foundry_accounts[keys(local.ms_foundry_regions)[0]].id}" />
+      </inbound>
+      <backend>
+        <base />
+      </backend>
+      <outbound>
+        <base />
+      </outbound>
+      <on-error>
+        <base />
+      </on-error>
+    </policies>
+  XML
+}
+
+
 ########### Create the resources necessary to have API Management act as an MCP Proxy for the Microsoft
 ########### Learn MCP Server
 ###########
@@ -2238,7 +3127,7 @@ resource "azurerm_api_management_api_operation_policy" "apim_policy_openai_model
 ##
 resource "azurerm_api_management_backend" "backend_mcp_server_microsoft_learn" {
   depends_on = [
-    azurerm_api_management_api_operation_policy.apim_policy_openai_model_gateway_list_deployments_by_name
+    azurerm_api_management_api_operation_policy.apim_policy_anthropic_model_gateway_list_deployments_by_name
   ]
 
   api_management_name = azurerm_api_management.apim.name
@@ -2281,11 +3170,52 @@ resource "azapi_resource" "mcp_server_existing_ms_learn" {
   }
 }
 
+## Create a policy for the Microsoft Learn MCP Server
+##
+resource "azurerm_api_management_api_policy" "apim_policy_mcp_server_existing_ms_learn" {
+  depends_on = [
+    azapi_resource.mcp_server_existing_ms_learn
+  ]
+
+  api_management_name = azurerm_api_management.apim.name
+  resource_group_name = azurerm_resource_group.rg_apim.name
+  api_name            = azapi_resource.mcp_server_existing_ms_learn.name
+
+  xml_content = <<XML
+    <policies>
+      <inbound>
+        <base />
+        <trace source="request-headers" severity="information">
+        <message>@{
+          var headers = string.Join(", ", context.Request.Headers.Select(h => $"{h.Key}={string.Join(";", h.Value)}"));
+          return $"Request Headers: {headers}";
+      }</message>
+        </trace>
+      </inbound>
+      <backend>
+        <base />
+      </backend>
+      <outbound>
+        <base />
+          <trace source="response-headers" severity="information">
+            <message>@{
+            var headers = string.Join(", ", context.Response.Headers.Select(h => $"{h.Key}={string.Join(";", h.Value)}"));
+            return $"Response Headers: {headers}";
+        }</message>
+        </trace>
+      </outbound>
+      <on-error>
+        <base />
+      </on-error>
+    </policies>
+  XML
+}
+
 ## Create diagnostic setting for the Microsoft Learn MCP Server for Application Insights
 ##
 resource "azapi_resource" "diag_mcp_server_existing_ms_learn_appsinights" {
   depends_on = [
-    azapi_resource.mcp_server_existing_ms_learn
+    azurerm_api_management_api_policy.apim_policy_mcp_server_existing_ms_learn
   ]
 
   type                      = "Microsoft.ApiManagement/service/apis/diagnostics@2024-05-01"
@@ -2448,9 +3378,9 @@ resource "azurerm_private_dns_a_record" "dns_a_record_apim_split_brain" {
 ###########
 ###########
 
-## Create Azure RBAC Role assignment granting the user the Azure OpenAI User role
-## on the Microsoft Foundry accounts. This can be used to demonstrate the OAuth On-Behalf-Of flow
-resource "azurerm_role_assignment" "user_perm_msfoundry_accounts_openai_user" {
+## Create Azure RBAC Role assignment granting the user the Foundry User role
+## on the Microsoft Foundry account and projects
+resource "azurerm_role_assignment" "user_perm_msfoundry_accounts_foundry_user" {
   depends_on = [
     azurerm_api_management.apim,
     azurerm_cognitive_account.ms_foundry_accounts
@@ -2460,5 +3390,31 @@ resource "azurerm_role_assignment" "user_perm_msfoundry_accounts_openai_user" {
 
   scope                = azurerm_cognitive_account.ms_foundry_accounts[each.key].id
   role_definition_name = "Cognitive Services OpenAI User"
+  principal_id         = var.user_object_id
+}
+
+resource "azurerm_role_assignment" "user_perm_msfoundry_project1_foundry_user" {
+  depends_on = [
+    azurerm_api_management.apim,
+    azapi_resource.ms_foundry_project1
+  ]
+
+  for_each = local.ms_foundry_regions
+
+  scope                = azapi_resource.ms_foundry_project1[each.key].id
+  role_definition_name = "Foundry User"
+  principal_id         = var.user_object_id
+}
+
+resource "azurerm_role_assignment" "user_perm_msfoundry_project2_foundry_user" {
+  depends_on = [
+    azurerm_api_management.apim,
+    azapi_resource.ms_foundry_project2
+  ]
+
+  for_each = local.ms_foundry_regions
+
+  scope                = azapi_resource.ms_foundry_project2[each.key].id
+  role_definition_name = "Foundry User"
   principal_id         = var.user_object_id
 }
