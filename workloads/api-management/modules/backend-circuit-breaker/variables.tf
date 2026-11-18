@@ -1,5 +1,10 @@
-variable "apim_id" {
-  description = "The resource id of the API Management instance"
+variable "apim_management_name" {
+  description = "The name of the API Management instance"
+  type        = string
+}
+
+variable "apim_resource_group_name" {
+  description = "The name of the resource group containing the API Management instance"
   type        = string
 }
 

@@ -19,6 +19,16 @@
 ## Updates
 
 ### 2026
+* **November 18th, 2026**
+  * Shifted models in backend Foundry from gpt-4.1/gpt-4.1-mini to gpt-5.4 and gpt-5.4.-mini.
+  * Swapped from GlobalStandard to DataZone Standard because capacity issues
+  * Swapped APIM Managed Identity from Cognitive Services OpenAI User to Foundry User to muck batch
+  * Removed OpenAI inferences backends since everything is pretty much v1 now
+  * Added pool that demonstrate APIM session affinity
+  * Added API and backends for Anthropic
+  * Added basic policy for MS Learn MCP Server backend
+  * Added backend to demonstrate openai endpoint, account endpoint, and project endpoints 
+  * Updated circuit breaker backend module to use azurerm
 * **August 29th, 20206**
   * Changed backend endpoints to point to services.ai.azure.com vs openai.azure.com
 * **August 6th, 2026**

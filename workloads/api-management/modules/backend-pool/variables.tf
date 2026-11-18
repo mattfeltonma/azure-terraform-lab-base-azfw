@@ -11,6 +11,12 @@ variable "backends" {
   }))
 }
 
+variable "session_affinity" {
+  description = "Set to true to use session affinity for the backend pool based on a session cookie"
+  type        = bool
+  default     = false
+}
+
 variable "pool_name" {
   description = "The name of the backend"
   type        = string

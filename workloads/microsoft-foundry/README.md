@@ -23,6 +23,9 @@ AI was used to help with the format of this README file so if there is an issue 
 - [Usage](#usage)
 
 ## Updates
+* **11/18/2026**
+  * Added WebIQ account resource
+  * Updated model gateway connections
 * **8/6/2026**
   * Updated azurerm to 5.0.1 and azapi to 2.11.0
   * Removed unused resources

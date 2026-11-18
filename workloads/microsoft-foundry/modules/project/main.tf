@@ -291,6 +291,11 @@ resource "azapi_resource" "conn_project_apim_ai_gateway_foundry_dynamic" {
       isSharedToAll = false
       metadata = {
         # Pay attention to case sensitivity with these metadata properties, it does matter
+        modelDiscovery = jsonencode({
+          listModelsEndpoint = "/deployments"
+          getModelEndpoint   = "/deployments/{deploymentName}"
+          deploymentProvider = "AzureOpenAI"
+        })
         deploymentInPath     = each.value.deployment_in_path
         inferenceAPIVersion  = each.value.inference_api_version
         deploymentAPIVersion = "2024-10-01"

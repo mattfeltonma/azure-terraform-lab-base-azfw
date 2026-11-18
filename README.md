@@ -33,6 +33,20 @@ Hope any bit of this code helps save you some time or learn something new!
 ## Updates
 
 ### 2026
+  * MS Foundry
+    * Added WebIQ resource
+    * Updated model gateway connection code
+  * API Management
+    * Shifted models in backend Foundry from gpt-4.1/gpt-4.1-mini to gpt-5.4 and gpt-5.4.-mini.
+    * Swapped from GlobalStandard to DataZone Standard because capacity issues
+    * Swapped APIM Managed Identity from Cognitive Services OpenAI User to Foundry User to muck batch
+    * Removed OpenAI inferences backends since everything is pretty much v1 now
+    * Added pool that demonstrate APIM session affinity
+    * Added API and backends for Anthropic
+    * Added basic policy for MS Learn MCP Server backend
+    * Added backend to demonstrate openai endpoint, account endpoint, and project endpoints 
+    * Updated circuit breaker backend module to use azurerm
+
 * **October 9, 2026**
   * Base lab
     * Added S2S VPN, Local Network Gateway

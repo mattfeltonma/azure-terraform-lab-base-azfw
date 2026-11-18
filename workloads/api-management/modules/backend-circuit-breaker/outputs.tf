@@ -1,10 +1,10 @@
 output "id" {
-  value       = azapi_resource.backend.id
+  value       = azurerm_api_management_backend.backend.id
   description = "The resource ID of the API Management backend with circuit breaker"
 }
 
 output "name" {
-  value       = azapi_resource.backend.name
+  value       = azurerm_api_management_backend.backend.name
   description = "The name of the API Management backend with circuit breaker"
 }
 
